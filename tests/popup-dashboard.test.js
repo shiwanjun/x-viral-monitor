@@ -84,6 +84,22 @@ describe('#45 popup tabs structure (mock A)', () => {
     expect(/id="lb-reset-pos"/.test(lb)).toBe(true);
   });
 
+  it('captures delegated-account GraphQL URLs for badge data', () => {
+    const re = /\/(?:i\/api\/)?graphql\//;
+    expect(re.test('https://x.com/i/api/graphql/abc/HomeTimeline')).toBe(true);
+    expect(re.test('https://api.x.com/graphql/abc/HomeTimeline')).toBe(true);
+    expect(contentJs).toMatch(/const GRAPHQL_RE = \/\\\/\(\?:i\\\/api\\\/\)\?graphql\\\//);
+  });
+
+  it('keeps recycled leaderboard jumps inside the current timeline', () => {
+    const jump = contentJs.match(/function jumpToLeaderboardTweet[\s\S]*?function renderLeaderboard/)?.[0] || '';
+    const find = contentJs.match(/function findArticleByTweetId[\s\S]*?function updateLinkGeometry/)?.[0] || '';
+    expect(contentJs).toContain('pageY: window.scrollY + article.getBoundingClientRect().top');
+    expect(jump).toContain('window.scrollTo({ top: meta.pageY');
+    expect(jump).not.toContain('window.location.assign');
+    expect(find).toContain('isLeaderboardArticleHidden(article)');
+  });
+
   it('About tab hosts Other features + theme toggle entry', () => {
     const about = html.match(/data-tab-panel="about"[\s\S]*?(?=<\/div>\s*<div id="xvm-toast")/)?.[0] || '';
     expect(/id="feat-copy-md"/.test(about)).toBe(true);
@@ -543,6 +559,7 @@ describe('#69/#72 user self-test polish', () => {
     expect(contentJs).toMatch(/document\.documentElement\.hasAttribute\(['"]data-xvm-rate-filter-on['"]\)/);
     expect(contentJs).toMatch(/['"]data-xvm-content-filter-hidden['"]/);
     expect(contentJs).toMatch(/function\s+isLeaderboardArticleHidden/);
+    expect(contentJs).toMatch(/article\.getClientRects\(\)\.length\s*===\s*0/);
     expect(contentJs).toMatch(/isLeaderboardArticleHidden\(article\)\)\s*continue/);
     expect(contentJs).toMatch(/setTimeout\(renderLeaderboard,\s*80\)/);
     expect(contentJs).toMatch(/if\s*\(!top\.length\)\s*\{[\s\S]*?list\.innerHTML\s*=\s*['"]['"][\s\S]*?el\.style\.display\s*=\s*['"]none['"]/);
@@ -731,11 +748,11 @@ describe('#45 i18n lock-step (content.js i18n() ↔ bridge CONTENT_MESSAGE_KEYS 
     expect(missingJa, `popup.html references data-i18n keys missing from _locales/ja: ${missingJa.join(', ')}`).toEqual([]);
   });
 
-  it('keeps package and extension versions in sync for v1.18.5', () => {
-    expect(manifest.version).toBe('1.18.5');
-    expect(pkg.version).toBe('1.18.5');
-    expect(packageLock.version).toBe('1.18.5');
-    expect(packageLock.packages?.['']?.version).toBe('1.18.5');
+  it('keeps package and extension versions in sync for v1.18.6', () => {
+    expect(manifest.version).toBe('1.18.6');
+    expect(pkg.version).toBe('1.18.6');
+    expect(packageLock.version).toBe('1.18.6');
+    expect(packageLock.packages?.['']?.version).toBe('1.18.6');
   });
 
   it('renders the popup footer version from the extension manifest', () => {

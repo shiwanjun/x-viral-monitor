@@ -232,7 +232,7 @@ window.addEventListener('message', (event) => {
 window.postMessage({ type: 'XVM_REQUEST_SETTINGS' }, '*');
 
 // === Request Interception (fetch + XHR) ===
-const GRAPHQL_RE = /\/i\/api\/graphql\//;
+const GRAPHQL_RE = /\/(?:i\/api\/)?graphql\//;
 const DEFAULT_GROK_COMMENT_PROMPT = '[推文内容]\n\n为我生成针对该推文的10条评论,每条评论用代码块包裹';
 const DEFAULT_GROK_PROMPT_TEMPLATES = [
   { id: 'default', name: '默认评论', prompt: DEFAULT_GROK_COMMENT_PROMPT },
@@ -2857,6 +2857,7 @@ function leaderboardCellForArticle(article) {
 // always-active marker so it remains hard.
 function isLeaderboardArticleHidden(article) {
   if (!article) return true;
+  if (article.getClientRects().length === 0) return true;
   if (article.hasAttribute('data-xvm-content-filter-hidden')) return true;
   const rateFilterOn = document.documentElement.hasAttribute('data-xvm-rate-filter-on');
   if (rateFilterOn && article.hasAttribute('data-xvm-rate-hidden')) return true;
@@ -2871,14 +2872,7 @@ function isArticleHiddenByXvmFilters(article) {
 
 function rememberLeaderboardItem(entry) {
   if (!entry?.id) return;
-  const prev = leaderboardItemMeta.get(entry.id) || {};
-  leaderboardItemMeta.set(entry.id, {
-    ...prev,
-    ...entry,
-    article: entry.article || prev.article || null,
-    permalink: entry.permalink || prev.permalink || '',
-    lastSeen: Date.now(),
-  });
+  leaderboardItemMeta.set(entry.id, entry);
 }
 
 function collectRanked() {
@@ -2904,8 +2898,7 @@ function collectRanked() {
     const entry = {
       id,
       article,
-      permalink: getTweetPermalinkFromArticle(article, id),
-      lastSeen: Date.now(),
+      pageY: window.scrollY + article.getBoundingClientRect().top,
       velocity,
       views: data.views || 0,
       handle,
@@ -2960,9 +2953,7 @@ function jumpToLeaderboardTweet(id, itemEl) {
   const meta = latest || leaderboardItemMeta.get(id);
   const article = latest?.article?.isConnected
     ? latest.article
-    : meta?.article?.isConnected
-      ? meta.article
-      : findArticleByTweetId(id);
+    : findArticleByTweetId(id);
 
   if (article) {
     if (linkState && linkState.tweetId === id) {
@@ -2979,13 +2970,15 @@ function jumpToLeaderboardTweet(id, itemEl) {
   }
 
   clearLink();
-  const permalink = meta?.permalink || '';
-  if (!permalink) {
-    showToast('无法定位该推文：页面已回收该条目且没有可用链接');
+  if (!Number.isFinite(meta?.pageY)) {
+    showToast('无法定位该推文：页面已回收该条目');
     return;
   }
-  pendingLeaderboardJump = { tweetId: id, itemEl, startedAt: Date.now() };
-  window.location.assign(permalink);
+  if (savedScrollY === null) {
+    savedScrollY = window.scrollY;
+    setBackButtonVisible(true);
+  }
+  window.scrollTo({ top: meta.pageY, behavior: 'smooth' });
   waitForLeaderboardTarget(id, itemEl);
 }
 
@@ -3065,6 +3058,7 @@ function ensureLinkSvg() {
 function findArticleByTweetId(tweetId) {
   const articles = document.querySelectorAll('article[data-testid="tweet"]');
   for (const article of articles) {
+    if (isLeaderboardArticleHidden(article)) continue;
     const id = getTweetIdFromArticle(article);
     if (id === tweetId) return article;
   }
