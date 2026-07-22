@@ -106,6 +106,32 @@ describe('bookmark timeline injection', () => {
     expect(storageApi.sanitizeFolderIds([ids[0], ids[0], 'not-an-id', ...ids])).toEqual(ids.slice(0, 20));
   });
 
+  it('deduplicates and bounds seen bookmark tweet ids per account', () => {
+    const storageApi = loadStorageApi();
+
+    expect(storageApi.mergeSeenTweetIds({
+      accountId: '123',
+      ids: ['90', '91'],
+    }, '123', ['91', '92', 'bad'], 3)).toEqual({
+      accountId: '123',
+      ids: ['90', '91', '92'],
+    });
+    expect(storageApi.mergeSeenTweetIds({
+      accountId: '999',
+      ids: ['90'],
+    }, '123', ['91'], 3)).toEqual({
+      accountId: '123',
+      ids: ['91'],
+    });
+    expect(storageApi.mergeSeenTweetIds({
+      accountId: '123',
+      ids: ['90', '91', '92'],
+    }, '123', ['93'], 3)).toEqual({
+      accountId: '123',
+      ids: ['91', '92', '93'],
+    });
+  });
+
   it('keeps a successful empty folder snapshot as an authoritative cache record', () => {
     const storageApi = loadStorageApi();
     const normalized = storageApi.normalizeCacheDocument({
@@ -181,6 +207,111 @@ describe('bookmark timeline injection', () => {
     expect(bridge).toContain('bookmarkTimelineInjectEvery');
   });
 
+  it('persists enable and folder selection while the other setting is still empty', () => {
+    // Given
+    const start = bridge.indexOf("  if (type === 'XVM_BOOKMARK_TIMELINE_INJECT_SAVE') {");
+    const end = bridge.indexOf("\n  if (type === 'XVM_BOOKMARK_FOLDER_MUTATION'", start);
+    const saved = {};
+    const cleared = [];
+    const chrome = {
+      storage: {
+        local: {
+          set(values, callback) { Object.assign(saved, values); callback?.(); },
+        },
+        sync: {
+          remove(_keys, callback) { callback(); },
+          get(defaults, callback) { callback(defaults); },
+        },
+      },
+    };
+    const handle = Function(
+      'chrome',
+      'safeChromeCall',
+      'currentBookmarkTimelineAccountId',
+      'clearBookmarkTimelineStorage',
+      'pruneBookmarkTimelineCache',
+      'pushSettings',
+      'STORAGE_DEFAULTS',
+      'BOOKMARK_TIMELINE_SETTINGS_KEY',
+      'globalThis',
+      `return function handle(data) { const type = data.type; const event = { data }; ${bridge.slice(start, end)} };`,
+    )(
+      chrome,
+      (callback) => callback(),
+      () => '123',
+      (callback) => { cleared.push(true); callback?.(); },
+      (_scope, callback) => callback?.(),
+      () => {},
+      {},
+      'bookmarkTimelineSettings',
+      { __xvmBookmarkTimelineStorage: loadStorageApi() },
+    );
+
+    // When / Then: enabling first must stay enabled while no folder is selected yet.
+    handle({ type: 'XVM_BOOKMARK_TIMELINE_INJECT_SAVE', enabled: true, folderIds: [], every: 20 });
+    expect(saved.bookmarkTimelineSettings).toEqual({
+      accountId: '123', enabled: true, folderIds: [], every: 20,
+    });
+
+    // When / Then: selecting a folder first must stay selected while disabled.
+    handle({ type: 'XVM_BOOKMARK_TIMELINE_INJECT_SAVE', enabled: false, folderIds: ['1000'], every: 20 });
+    expect(saved.bookmarkTimelineSettings).toEqual({
+      accountId: '123', enabled: false, folderIds: ['1000'], every: 20,
+    });
+    expect(cleared).toEqual([]);
+  });
+
+  it('clears inactive bookmark cache without deleting partial settings', () => {
+    // Given
+    const start = bridge.indexOf('function clearBookmarkTimelineCache(');
+    const end = bridge.indexOf('\nfunction runBookmarkTimelineStorageTask(', start);
+    const local = {
+      bookmarkTimelineSettings: { accountId: '123', enabled: false, folderIds: ['1000'], every: 20 },
+      bookmarkTimelineCache: { accountId: '123', folders: {} },
+      bookmarkTimelineAutoAttemptAt: { accountId: '123', folders: {} },
+    };
+    const chrome = {
+      storage: {
+        local: {
+          get(defaults, callback) { callback({ ...defaults, ...local }); },
+          remove(keys, callback) {
+            for (const key of keys) delete local[key];
+            callback?.();
+          },
+        },
+      },
+    };
+    const withScope = Function(
+      'chrome',
+      'window',
+      'currentBookmarkTimelineAccountId',
+      'BOOKMARK_TIMELINE_CACHE_KEY',
+      'BOOKMARK_TIMELINE_SETTINGS_KEY',
+      'BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY',
+      'BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY',
+      'globalThis',
+      `${bridge.slice(start, end)}; return withBookmarkTimelineScope;`,
+    )(
+      chrome,
+      { postMessage() {} },
+      () => '123',
+      'bookmarkTimelineCache',
+      'bookmarkTimelineSettings',
+      'bookmarkTimelineAutoAttemptAt',
+      'bookmarkTimelineManualAttemptAt',
+      { __xvmBookmarkTimelineStorage: loadStorageApi() },
+    );
+
+    // When
+    withScope(() => {});
+
+    // Then
+    expect(local.bookmarkTimelineSettings).toEqual({
+      accountId: '123', enabled: false, folderIds: ['1000'], every: 20,
+    });
+    expect(local.bookmarkTimelineCache).toBeUndefined();
+  });
+
   it('builds BookmarkFolderTimeline requests like Xillot', () => {
     expect(bridge).toContain("OP_BOOKMARK_FOLDER_TIMELINE = { name: 'BookmarkFolderTimeline'");
     expect(bridge).toContain('oKopHt25pa6yhDn1ek7Qng');
@@ -236,20 +367,34 @@ describe('bookmark timeline injection', () => {
       },
     });
 
-    const patched = injectBookmarkTimelineEntries(homeTimeline(['1', '2', '3']), cache, {
+    const patched = injectBookmarkTimelineEntries(homeTimeline(['1', '2', '3', '4', '5']), cache, {
       enabled: true,
       folderIds: ['folder-a'],
-      every: 2,
+      every: 5,
     });
 
     const entries = patched.data.home.home_timeline_urt.instructions[0].entries;
     expect(entries.map((entry) => entry.content.itemContent.tweet_results.result.rest_id))
-      .toEqual(['1', '2', '90', '3']);
-    expect(entries[2].entryId).toMatch(/^xvm-bookmark-folder-a-90-/);
-    expect(entries[2].content.entryType).toBe('TimelineTimelineItem');
-    expect(entries[2].content.itemContent.itemType).toBe('TimelineTweet');
-    expect(BigInt(entries[1].sortIndex)).toBeGreaterThan(BigInt(entries[2].sortIndex));
-    expect(BigInt(entries[2].sortIndex)).toBeGreaterThan(BigInt(entries[3].sortIndex));
+      .toEqual(['1', '2', '3', '4', '5', '90']);
+    expect(entries[5].entryId).toMatch(/^xvm-bookmark-folder-a-90-/);
+    expect(entries[5].content.entryType).toBe('TimelineTimelineItem');
+    expect(entries[5].content.itemContent.itemType).toBe('TimelineTweet');
+    expect(BigInt(entries[4].sortIndex)).toBeGreaterThan(BigInt(entries[5].sortIndex));
+  });
+
+  it('clamps bookmark insertion intervals below five', () => {
+    const { injectBookmarkTimelineEntries } = loadApi();
+    const cache = new Map([['folder-a', [tweetEntry('90')]]]);
+
+    const patched = injectBookmarkTimelineEntries(homeTimeline(['1', '2', '3', '4']), cache, {
+      enabled: true,
+      folderIds: ['folder-a'],
+      every: 1,
+    });
+
+    const ids = patched.data.home.home_timeline_urt.instructions[0].entries
+      .map((entry) => entry.content.itemContent.tweet_results.result.rest_id);
+    expect(ids).toEqual(['1', '2', '3', '4']);
   });
 
   it('caches tweets across every paginated page in a { pages: [...] } payload', () => {
@@ -368,15 +513,31 @@ describe('bookmark timeline injection', () => {
     const cache = new Map();
     cache.set('folder-a', [tweetEntry('2'), tweetEntry('90')]);
 
-    const patched = injectBookmarkTimelineEntries(homeTimeline(['1', '2']), cache, {
+    const patched = injectBookmarkTimelineEntries(homeTimeline(['1', '2', '3', '4', '5']), cache, {
       enabled: true,
       folderIds: ['folder-a'],
-      every: 1,
+      every: 5,
     });
 
     const ids = patched.data.home.home_timeline_urt.instructions[0].entries
       .map((entry) => entry.content.itemContent.tweet_results.result.rest_id);
-    expect(ids).toEqual(['1', '90', '2']);
+    expect(ids).toEqual(['1', '2', '3', '4', '5', '90']);
+  });
+
+  it('skips bookmark entries already inserted earlier', () => {
+    const { injectBookmarkTimelineEntries } = loadApi();
+    const cache = new Map([['folder-a', [tweetEntry('90'), tweetEntry('91')]]]);
+
+    const patched = injectBookmarkTimelineEntries(homeTimeline(['1', '2', '3', '4', '5']), cache, {
+      enabled: true,
+      folderIds: ['folder-a'],
+      every: 5,
+      excludedTweetIds: ['90'],
+    });
+
+    const ids = patched.data.home.home_timeline_urt.instructions[0].entries
+      .map((entry) => entry.content.itemContent.tweet_results.result.rest_id);
+    expect(ids).toEqual(['1', '2', '3', '4', '5', '91']);
   });
 
   it('targets the home timeline entries instead of earlier unrelated entry arrays', () => {
@@ -384,20 +545,20 @@ describe('bookmark timeline injection', () => {
     const cache = new Map([['folder-a', [tweetEntry('90')]]]);
     const timeline = {
       unrelated: { entries: [tweetEntry('999')] },
-      ...homeTimeline(['1', '2']),
+      ...homeTimeline(['1', '2', '3', '4', '5']),
     };
 
     const patched = injectBookmarkTimelineEntries(timeline, cache, {
       enabled: true,
       folderIds: ['folder-a'],
-      every: 1,
+      every: 5,
     });
 
     expect(patched.unrelated.entries.map((entry) => entry.content.itemContent.tweet_results.result.rest_id))
       .toEqual(['999']);
     expect(patched.data.home.home_timeline_urt.instructions[0].entries
       .map((entry) => entry.content.itemContent.tweet_results.result.rest_id))
-      .toEqual(['1', '90', '2']);
+      .toEqual(['1', '2', '3', '4', '5', '90']);
   });
 
   it('does not inject anything until at least one folder is selected', () => {

@@ -269,6 +269,7 @@ const BOOKMARK_TIMELINE_QID_CACHE_KEY = 'xvm_bookmark_timeline_query_id';
 // whenever an x.com tab is open (no need to manually open each folder).
 const BOOKMARK_TIMELINE_CACHE_KEY = 'bookmarkTimelineCache';
 const BOOKMARK_TIMELINE_SETTINGS_KEY = 'bookmarkTimelineSettings';
+const BOOKMARK_TIMELINE_SEEN_KEY = 'bookmarkTimelineSeen';
 const BOOKMARK_TIMELINE_SYNC_MIGRATED_KEY = 'bookmarkTimelineSyncSettingsRemoved';
 const BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY = 'bookmarkTimelineAutoAttemptAt';
 const BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY = 'bookmarkTimelineManualAttemptAt';
@@ -442,6 +443,7 @@ async function getLocalizedMessages(languagePref) {
 
 async function pushSettings(raw) {
   const localBookmarkSettings = await readBookmarkTimelineSettings();
+  const bookmarkTimelineSeenTweetIds = await readBookmarkTimelineSeenTweetIds(localBookmarkSettings.accountId);
   window.postMessage({
     type: 'XVM_SETTINGS_UPDATE',
     thresholds: normalizeThresholds(raw),
@@ -454,6 +456,7 @@ async function pushSettings(raw) {
       localBookmarkSettings.folderIds,
     ) || [],
     bookmarkTimelineInjectEvery: localBookmarkSettings.every,
+    bookmarkTimelineSeenTweetIds,
     showBookmarkCount: raw?.showBookmarkCount !== false,
     leaderboardEdgeHideEnabled: raw?.leaderboardEdgeHideEnabled !== false,
     leaderboardCount: normalizeLeaderboardCount(raw?.leaderboardCount),
@@ -752,20 +755,36 @@ function readBookmarkTimelineSettings() {
         folderIds: valid
           ? (globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(record.folderIds) || [])
           : [],
-        every: valid ? Math.max(1, Math.min(100, Number.parseInt(record.every, 10) || 20)) : 20,
+        every: valid ? Math.max(5, Math.min(100, Number.parseInt(record.every, 10) || 20)) : 20,
       });
     });
   });
 }
 
-function clearBookmarkTimelineStorage(callback) {
+function readBookmarkTimelineSeenTweetIds(accountId = currentBookmarkTimelineAccountId()) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ [BOOKMARK_TIMELINE_SEEN_KEY]: null }, (items) => {
+      const record = items[BOOKMARK_TIMELINE_SEEN_KEY];
+      resolve(record?.accountId === accountId
+        ? (globalThis.__xvmBookmarkTimelineStorage?.sanitizeTweetIds?.(record.ids) || [])
+        : []);
+    });
+  });
+}
+
+function clearBookmarkTimelineCache(callback) {
   window.postMessage({ type: 'XVM_BOOKMARK_TIMELINE_CACHE_RESET' }, '*');
   chrome.storage.local.remove([
     BOOKMARK_TIMELINE_CACHE_KEY,
-    BOOKMARK_TIMELINE_SETTINGS_KEY,
     BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY,
     BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY,
   ], callback);
+}
+
+function clearBookmarkTimelineStorage(callback) {
+  clearBookmarkTimelineCache(() => {
+    chrome.storage.local.remove([BOOKMARK_TIMELINE_SETTINGS_KEY, BOOKMARK_TIMELINE_SEEN_KEY], callback);
+  });
 }
 
 function withBookmarkTimelineScope(callback) {
@@ -775,7 +794,7 @@ function withBookmarkTimelineScope(callback) {
     const settings = items[BOOKMARK_TIMELINE_SETTINGS_KEY];
     const folderIds = globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(settings?.folderIds) || [];
     if (settings?.enabled !== true || !folderIds.length) {
-      clearBookmarkTimelineStorage(() => callback(null));
+      clearBookmarkTimelineCache(() => callback(null));
       return;
     }
     const decision = globalThis.__xvmBookmarkTimelineStorage?.resolveScope?.(
@@ -826,8 +845,15 @@ function persistBookmarkTimelineFolder(folderId, entries, refreshedAt) {
   return runBookmarkTimelineStorageTask(() => new Promise((resolve) => {
     safeChromeCall(() => withBookmarkTimelineScope((scope) => {
       if (!scope || !scope.folderIds.includes(id)) { resolve(); return; }
-      const sanitized = globalThis.__xvmBookmarkTimelineStorage?.sanitizeEntries?.(entries) || [];
-      chrome.storage.local.get({ [BOOKMARK_TIMELINE_CACHE_KEY]: {} }, (items) => {
+      chrome.storage.local.get({
+        [BOOKMARK_TIMELINE_CACHE_KEY]: {},
+        [BOOKMARK_TIMELINE_SEEN_KEY]: null,
+      }, (items) => {
+        const seen = new Set(items[BOOKMARK_TIMELINE_SEEN_KEY]?.accountId === scope.accountId
+          ? (globalThis.__xvmBookmarkTimelineStorage?.sanitizeTweetIds?.(items[BOOKMARK_TIMELINE_SEEN_KEY].ids) || [])
+          : []);
+        const sanitized = (globalThis.__xvmBookmarkTimelineStorage?.sanitizeEntries?.(entries) || [])
+          .filter((entry) => !seen.has(String(globalThis.__xvmBookmarkTimelineStorage?.getTweetId?.(entry) || '')));
         const current = globalThis.__xvmBookmarkTimelineStorage?.normalizeCacheDocument?.(
           items[BOOKMARK_TIMELINE_CACHE_KEY],
           scope.accountId,
@@ -1041,11 +1067,10 @@ window.addEventListener('message', (event) => {
       bookmarkTimelineInjectFolderIds: globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(
         event.data.folderIds,
       ) || [],
-      bookmarkTimelineInjectEvery: Math.max(1, Math.min(100, Number.parseInt(event.data.every, 10) || 20)),
+      bookmarkTimelineInjectEvery: Math.max(5, Math.min(100, Number.parseInt(event.data.every, 10) || 20)),
     };
     safeChromeCall(() => {
       const accountId = currentBookmarkTimelineAccountId();
-      const active = patch.featureBookmarkTimelineInject && patch.bookmarkTimelineInjectFolderIds.length && accountId;
       const persistSettings = () => {
         chrome.storage.sync.remove([
           'featureBookmarkTimelineInject',
@@ -1057,11 +1082,11 @@ window.addEventListener('message', (event) => {
           });
         });
       };
-      if (active) {
+      if (accountId) {
         chrome.storage.local.set({
           [BOOKMARK_TIMELINE_SETTINGS_KEY]: {
             accountId,
-            enabled: true,
+            enabled: patch.featureBookmarkTimelineInject,
             folderIds: patch.bookmarkTimelineInjectFolderIds,
             every: patch.bookmarkTimelineInjectEvery,
           },
@@ -1074,6 +1099,24 @@ window.addEventListener('message', (event) => {
       } else {
         clearBookmarkTimelineStorage(persistSettings);
       }
+    });
+    return;
+  }
+
+  if (type === 'XVM_BOOKMARK_TIMELINE_SEEN') {
+    safeChromeCall(() => {
+      const accountId = currentBookmarkTimelineAccountId();
+      if (!accountId) return;
+      const ids = globalThis.__xvmBookmarkTimelineStorage?.sanitizeTweetIds?.(event.data.tweetIds) || [];
+      if (!ids.length) return;
+      chrome.storage.local.get({ [BOOKMARK_TIMELINE_SEEN_KEY]: null }, (items) => {
+        const record = globalThis.__xvmBookmarkTimelineStorage?.mergeSeenTweetIds?.(
+          items[BOOKMARK_TIMELINE_SEEN_KEY],
+          accountId,
+          ids,
+        ) || { accountId, ids };
+        chrome.storage.local.set({ [BOOKMARK_TIMELINE_SEEN_KEY]: record });
+      });
     });
     return;
   }

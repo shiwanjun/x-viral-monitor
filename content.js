@@ -87,6 +87,7 @@ const bookmarkTimelineFolderRefreshedAt = new Map();
 // folder likely holds more than we fetched, so the badge shows "N+".
 const BOOKMARK_TIMELINE_FETCH_CAP = 120;
 const bookmarkTimelineInsertedTweetIds = new Set();
+const bookmarkTimelineSeenTweetIds = new Set();
 let bookmarkTimelineFolders = [];
 let bookmarkTimelineDialog = null;
 let pendingReleaseNotesVersion = '';
@@ -182,6 +183,8 @@ window.addEventListener('message', (event) => {
     if (capped && capped.length > BOOKMARK_TIMELINE_FETCH_CAP) {
       bookmarkTimelineEntryCache.set(folderId, capped.slice(0, BOOKMARK_TIMELINE_FETCH_CAP));
     }
+    const fresh = bookmarkTimelineEntryCache.get(folderId);
+    if (fresh) bookmarkTimelineEntryCache.set(folderId, filterSeenBookmarkTimelineEntries(fresh));
     const refreshedAt = Number(event.data.refreshedAt) || Date.now();
     bookmarkTimelineFolderStatus.delete(folderId);
     bookmarkTimelineFolderRefreshedAt.set(folderId, refreshedAt);
@@ -195,11 +198,12 @@ window.addEventListener('message', (event) => {
     for (const [folderId, record] of Object.entries(folders)) {
       const id = String(folderId || '');
       const entries = Array.isArray(record?.entries) ? record.entries : [];
+      const fresh = filterSeenBookmarkTimelineEntries(entries);
       // Don't clobber a fresher in-memory cache built this session.
-      if (!id || !entries.length || bookmarkTimelineEntryCache.has(id)) continue;
-      bookmarkTimelineEntryCache.set(id, entries);
+      if (!id || !fresh.length || bookmarkTimelineEntryCache.has(id)) continue;
+      bookmarkTimelineEntryCache.set(id, fresh);
       if (record.refreshedAt) bookmarkTimelineFolderRefreshedAt.set(id, Number(record.refreshedAt) || 0);
-      loaded += entries.length;
+      loaded += fresh.length;
     }
     debugBookmarkTimeline('hydrate cache from storage', { folders: Object.keys(folders), loaded });
     if (loaded) renderBookmarkTimelineSettings();
@@ -284,7 +288,13 @@ window.addEventListener('message', (event) => {
   }
   bookmarkTimelineInjectEnabled = nextBookmarkTimelineEnabled;
   bookmarkTimelineInjectFolderIds = nextBookmarkTimelineFolderIds;
-  bookmarkTimelineInjectEvery = Math.max(1, Math.min(100, Number.parseInt(event.data.bookmarkTimelineInjectEvery, 10) || 20));
+  bookmarkTimelineInjectEvery = Math.max(5, Math.min(100, Number.parseInt(event.data.bookmarkTimelineInjectEvery, 10) || 20));
+  bookmarkTimelineSeenTweetIds.clear();
+  for (const id of Array.isArray(event.data.bookmarkTimelineSeenTweetIds) ? event.data.bookmarkTimelineSeenTweetIds : []) {
+    const tid = String(id || '');
+    if (tid) bookmarkTimelineSeenTweetIds.add(tid);
+  }
+  dropSeenBookmarkTimelineCacheEntries(Array.from(bookmarkTimelineSeenTweetIds));
   renderBookmarkTimelineSettings();
   installLeaderboardThemeSync();
   scheduleReleaseNotesModal();
@@ -533,7 +543,29 @@ function rememberBookmarkTimelineEntries(json) {
     }
     bookmarkTimelineEntryCache.set(folderId, merged.slice(0, BOOKMARK_TIMELINE_FETCH_CAP));
   }
+  const fresh = bookmarkTimelineEntryCache.get(folderId);
+  if (fresh) bookmarkTimelineEntryCache.set(folderId, filterSeenBookmarkTimelineEntries(fresh));
   debugBookmarkTimeline('cache bookmark folder response', { folderId, count, cachedFolders: Array.from(bookmarkTimelineEntryCache.keys()) });
+}
+
+function filterSeenBookmarkTimelineEntries(entries) {
+  if (!bookmarkTimelineSeenTweetIds.size) return entries;
+  return entries.filter((entry) => {
+    const id = window.__xvmBookmarkTimelineInject?._getTweetId?.(entry);
+    return id && !bookmarkTimelineSeenTweetIds.has(String(id));
+  });
+}
+
+function dropSeenBookmarkTimelineCacheEntries(tweetIds) {
+  const seen = new Set((Array.isArray(tweetIds) ? tweetIds : []).map(String).filter(Boolean));
+  if (!seen.size) return;
+  for (const [folderId, entries] of bookmarkTimelineEntryCache.entries()) {
+    const fresh = entries.filter((entry) => {
+      const id = window.__xvmBookmarkTimelineInject?._getTweetId?.(entry);
+      return id && !seen.has(String(id));
+    });
+    bookmarkTimelineEntryCache.set(folderId, fresh);
+  }
 }
 
 function maybeInjectBookmarkTimeline(url, json) {
@@ -548,6 +580,7 @@ function maybeInjectBookmarkTimeline(url, json) {
     enabled: true,
     folderIds: bookmarkTimelineInjectFolderIds,
     every: bookmarkTimelineInjectEvery,
+    excludedTweetIds: Array.from(bookmarkTimelineSeenTweetIds),
   });
   const after = countBookmarkTimelineHomeEntries(patched || json);
   const inserted = after - before;
@@ -565,11 +598,20 @@ function maybeInjectBookmarkTimeline(url, json) {
 
 function rememberInsertedBookmarkTimelineTweets(json) {
   const arrays = window.__xvmBookmarkTimelineInject?._findEntryArrays?.(json) || [];
+  const freshIds = [];
   for (const entry of arrays.flat()) {
     if (!String(entry?.entryId || '').startsWith('xvm-bookmark-')) continue;
     const id = window.__xvmBookmarkTimelineInject?._getTweetId?.(entry);
-    if (id) bookmarkTimelineInsertedTweetIds.add(String(id));
+    if (!id) continue;
+    const tid = String(id);
+    bookmarkTimelineInsertedTweetIds.add(tid);
+    if (bookmarkTimelineSeenTweetIds.has(tid)) continue;
+    bookmarkTimelineSeenTweetIds.add(tid);
+    freshIds.push(tid);
   }
+  if (!freshIds.length) return;
+  dropSeenBookmarkTimelineCacheEntries(freshIds);
+  window.postMessage({ type: 'XVM_BOOKMARK_TIMELINE_SEEN', tweetIds: freshIds }, '*');
 }
 
 function countBookmarkTimelineHomeEntries(json) {
@@ -1847,11 +1889,7 @@ function showBookmarkTimelineSettings() {
       </label>
       <label class="xvm-bti-row">
         <span><b>插入频率</b><small>每浏览多少条时间线推文插入 1 条</small></span>
-        <select class="xvm-bti-every">
-          <option value="10">10 条</option>
-          <option value="20">20 条</option>
-          <option value="30">30 条</option>
-        </select>
+        <input class="xvm-bti-every" type="number" min="5" max="100" step="1" inputmode="numeric">
       </label>
       <div class="xvm-bti-section-title">书签文件夹</div>
       <div class="xvm-bti-folders"></div>
@@ -1875,7 +1913,7 @@ function showBookmarkTimelineSettings() {
     renderBookmarkTimelineSettings();
   });
   backdrop.querySelector('.xvm-bti-every')?.addEventListener('change', (ev) => {
-    bookmarkTimelineInjectEvery = Math.max(1, Number.parseInt(ev.target.value, 10) || 20);
+    bookmarkTimelineInjectEvery = Math.max(5, Math.min(100, Number.parseInt(ev.target.value, 10) || 20));
     saveBookmarkTimelineSettings();
     renderBookmarkTimelineSettings();
   });
