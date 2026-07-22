@@ -78,6 +78,14 @@ let bookmarkTimelineInjectEnabled = false;
 let bookmarkTimelineInjectFolderIds = [];
 let bookmarkTimelineInjectEvery = 20;
 const bookmarkTimelineEntryCache = new Map();
+// folderId -> 'loading' | 'error' (absent = idle). Drives the per-folder status
+// badge in the settings dialog.
+const bookmarkTimelineFolderStatus = new Map();
+// folderId -> last successful refresh timestamp (ms), for the "updated N ago" hint.
+const bookmarkTimelineFolderRefreshedAt = new Map();
+// Max entries bridge.js paginates/persists per folder. Reaching it means the
+// folder likely holds more than we fetched, so the badge shows "N+".
+const BOOKMARK_TIMELINE_FETCH_CAP = 120;
 const bookmarkTimelineInsertedTweetIds = new Set();
 let bookmarkTimelineFolders = [];
 let bookmarkTimelineDialog = null;
@@ -156,16 +164,60 @@ window.addEventListener('message', (event) => {
     renderBookmarkTimelineSettings();
     return;
   }
+  if (event.data?.type === 'XVM_BOOKMARK_TIMELINE_CACHE_START') {
+    const folderId = String(event.data.folderId || '');
+    if (folderId) {
+      bookmarkTimelineFolderStatus.set(folderId, 'loading');
+      renderBookmarkTimelineSettings();
+    }
+    return;
+  }
   if (event.data?.type === 'XVM_BOOKMARK_TIMELINE_CACHE_UPDATE') {
     const folderId = String(event.data.folderId || '');
+    if (!bookmarkTimelineInjectEnabled || !bookmarkTimelineInjectFolderIds.includes(folderId)) return;
+    bookmarkTimelineEntryCache.delete(folderId);
     const count = window.__xvmBookmarkTimelineInject?.cacheBookmarkTimelineEntries(bookmarkTimelineEntryCache, folderId, event.data.json) || 0;
+    // Keep the last page's overflow from inflating the count past the cap.
+    const capped = bookmarkTimelineEntryCache.get(folderId);
+    if (capped && capped.length > BOOKMARK_TIMELINE_FETCH_CAP) {
+      bookmarkTimelineEntryCache.set(folderId, capped.slice(0, BOOKMARK_TIMELINE_FETCH_CAP));
+    }
+    const refreshedAt = Number(event.data.refreshedAt) || Date.now();
+    bookmarkTimelineFolderStatus.delete(folderId);
+    bookmarkTimelineFolderRefreshedAt.set(folderId, refreshedAt);
     debugBookmarkTimeline('direct refresh cache update', { folderId, count });
     renderBookmarkTimelineSettings();
     return;
   }
+  if (event.data?.type === 'XVM_BOOKMARK_TIMELINE_CACHE_HYDRATE') {
+    const folders = event.data.folders && typeof event.data.folders === 'object' ? event.data.folders : {};
+    let loaded = 0;
+    for (const [folderId, record] of Object.entries(folders)) {
+      const id = String(folderId || '');
+      const entries = Array.isArray(record?.entries) ? record.entries : [];
+      // Don't clobber a fresher in-memory cache built this session.
+      if (!id || !entries.length || bookmarkTimelineEntryCache.has(id)) continue;
+      bookmarkTimelineEntryCache.set(id, entries);
+      if (record.refreshedAt) bookmarkTimelineFolderRefreshedAt.set(id, Number(record.refreshedAt) || 0);
+      loaded += entries.length;
+    }
+    debugBookmarkTimeline('hydrate cache from storage', { folders: Object.keys(folders), loaded });
+    if (loaded) renderBookmarkTimelineSettings();
+    return;
+  }
   if (event.data?.type === 'XVM_BOOKMARK_TIMELINE_CACHE_ERROR') {
-    debugBookmarkTimeline('direct refresh cache error', { folderId: event.data.folderId, error: event.data.error });
-    showToast(`书签内容刷新失败：${event.data.error || '未知错误'}`);
+    const folderId = String(event.data.folderId || '');
+    if (folderId) bookmarkTimelineFolderStatus.set(folderId, 'error');
+    debugBookmarkTimeline('direct refresh cache error', { folderId, error: event.data.error });
+    renderBookmarkTimelineSettings();
+    if (!event.data.background) showToast(`书签内容刷新失败：${event.data.error || '未知错误'}`);
+    return;
+  }
+  if (event.data?.type === 'XVM_BOOKMARK_TIMELINE_CACHE_RESET') {
+    bookmarkTimelineEntryCache.clear();
+    bookmarkTimelineFolderRefreshedAt.clear();
+    bookmarkTimelineFolderStatus.clear();
+    renderBookmarkTimelineSettings();
     return;
   }
   if (event.data?.type !== 'XVM_SETTINGS_UPDATE') return;
@@ -219,10 +271,19 @@ window.addEventListener('message', (event) => {
 
   copyAsMarkdownEnabled = event.data.featureCopyAsMarkdown !== false;
   starChartEnabled = event.data.featureStarChart !== false;
-  bookmarkTimelineInjectEnabled = event.data.featureBookmarkTimelineInject === true;
-  bookmarkTimelineInjectFolderIds = Array.isArray(event.data.bookmarkTimelineInjectFolderIds)
+  const nextBookmarkTimelineEnabled = event.data.featureBookmarkTimelineInject === true;
+  const nextBookmarkTimelineFolderIds = Array.isArray(event.data.bookmarkTimelineInjectFolderIds)
     ? event.data.bookmarkTimelineInjectFolderIds.map(String).filter(Boolean)
     : [];
+  for (const folderId of bookmarkTimelineEntryCache.keys()) {
+    if (!nextBookmarkTimelineEnabled || !nextBookmarkTimelineFolderIds.includes(folderId)) {
+      bookmarkTimelineEntryCache.delete(folderId);
+      bookmarkTimelineFolderRefreshedAt.delete(folderId);
+      bookmarkTimelineFolderStatus.delete(folderId);
+    }
+  }
+  bookmarkTimelineInjectEnabled = nextBookmarkTimelineEnabled;
+  bookmarkTimelineInjectFolderIds = nextBookmarkTimelineFolderIds;
   bookmarkTimelineInjectEvery = Math.max(1, Math.min(100, Number.parseInt(event.data.bookmarkTimelineInjectEvery, 10) || 20));
   renderBookmarkTimelineSettings();
   installLeaderboardThemeSync();
@@ -454,7 +515,24 @@ function rememberBookmarkTimelineEntries(json) {
     debugBookmarkTimeline('cache skipped: folder not selected', { folderId, selected: bookmarkTimelineInjectFolderIds });
     return;
   }
-  const count = window.__xvmBookmarkTimelineInject?.cacheBookmarkTimelineEntries(bookmarkTimelineEntryCache, folderId, json) || 0;
+  const inject = window.__xvmBookmarkTimelineInject;
+  // Browsing a folder page yields only one ~20-tweet page. Merge it into the
+  // existing (possibly fully-paginated) cache instead of replacing, so a casual
+  // visit can't shrink what the background refresh already gathered.
+  const prev = bookmarkTimelineEntryCache.get(folderId) || [];
+  const count = inject?.cacheBookmarkTimelineEntries(bookmarkTimelineEntryCache, folderId, json) || 0;
+  if (count && prev.length && typeof inject?._getTweetId === 'function') {
+    const fresh = bookmarkTimelineEntryCache.get(folderId) || [];
+    const seen = new Set();
+    const merged = [];
+    for (const entry of [...fresh, ...prev]) {
+      const tid = inject._getTweetId(entry);
+      if (!tid || seen.has(tid)) continue;
+      seen.add(tid);
+      merged.push(entry);
+    }
+    bookmarkTimelineEntryCache.set(folderId, merged.slice(0, BOOKMARK_TIMELINE_FETCH_CAP));
+  }
   debugBookmarkTimeline('cache bookmark folder response', { folderId, count, cachedFolders: Array.from(bookmarkTimelineEntryCache.keys()) });
 }
 
@@ -513,8 +591,11 @@ function scanForTweets(obj) {
   if (!obj || typeof obj !== 'object') return;
   let found = false;
 
-  if (obj.tweet_results?.result) {
-    const data = extractTweetData(obj.tweet_results.result);
+  const result = obj.tweet_results?.result
+    || obj.tweetResult?.result
+    || obj.tweetResults?.result;
+  if (result) {
+    const data = extractTweetData(result);
     if (data) {
       tweetDataStore.set(data.id, data);
       found = true;
@@ -526,7 +607,6 @@ function scanForTweets(obj) {
     for (const item of obj) scanForTweets(item);
   } else {
     for (const key of Object.keys(obj)) {
-      if (key === 'tweet_results') continue; // already handled above
       const val = obj[key];
       if (val && typeof val === 'object') scanForTweets(val);
     }
@@ -539,11 +619,6 @@ function extractTweetData(result) {
   const tweet = result.tweet || result;
   const legacy = tweet.legacy;
   if (!legacy) return null;
-
-  const rtResult = legacy.retweeted_status_result?.result;
-  if (rtResult) {
-    return extractTweetData(rtResult);
-  }
 
   const viewCount = parseInt(tweet.views?.count, 10);
   if (!viewCount || tweet.views?.state !== 'EnabledWithCount') return null;
@@ -1039,6 +1114,48 @@ function computeScore(data) {
   };
 }
 
+function getTweetDataForArticle(article, tweetId) {
+  const cached = tweetDataStore.get(tweetId);
+  if (cached) return cached;
+  if (!article.parentElement?.closest('article[data-testid="tweet"]')) return null;
+
+  const own = (selector) => Array.from(article.querySelectorAll(selector))
+    .find((node) => node.closest('article[data-testid="tweet"]') === article);
+  const readCount = (element) => {
+    const match = String(element?.getAttribute('aria-label') || '').match(/\d[\d.,\s\u00a0\u202f]*/);
+    return match ? Number.parseInt(match[0].replace(/\D/g, ''), 10) || 0 : 0;
+  };
+  const time = own('time[datetime]');
+  const analytics = own(`a[href*="/status/${tweetId}/analytics"]`);
+  if (!time || !analytics) return null;
+
+  const group = own('[role="group"]');
+  const groupCounts = String(group?.getAttribute('aria-label') || '')
+    .match(/\d[\d.,\s\u00a0\u202f]*/g)
+    ?.map((value) => Number.parseInt(value.replace(/\D/g, ''), 10) || 0) || [];
+  const statusLink = own(`a[href*="/status/${tweetId}"]`);
+  const screenName = statusLink?.getAttribute('href')?.match(/^\/([^/]+)\/status\//)?.[1] || '';
+  const data = {
+    id: tweetId,
+    screenName,
+    inReplyToStatusId: '',
+    inReplyToScreenName: '',
+    views: readCount(analytics),
+    likes: readCount(own('button[data-testid="like"], button[data-testid="unlike"]')),
+    retweets: readCount(own('button[data-testid="retweet"]')),
+    replies: readCount(own('button[data-testid="reply"]')),
+    bookmarks: groupCounts.length >= 5 ? groupCounts[groupCounts.length - 2] : 0,
+    createdAt: time.getAttribute('datetime'),
+    text: own('[data-testid="tweetText"]')?.textContent || '',
+    urlMap: {},
+    articleMd: '',
+    articleTitle: '',
+  };
+  if (!data.views || !data.createdAt) return null;
+  tweetDataStore.set(tweetId, data);
+  return data;
+}
+
 // === Tooltip Container (fixed, appended to body) ===
 let tooltipEl = null;
 let tooltipGlobalDismissBound = false;
@@ -1081,20 +1198,22 @@ function renderBadges() {
   for (const article of articles) {
     const tweetId = getTweetIdFromArticle(article);
     if (!tweetId) continue;
-    const data = tweetDataStore.get(tweetId);
+    const data = getTweetDataForArticle(article, tweetId);
     if (!data) continue;
 
     if (article.hasAttribute('data-xvm-scored')) continue;
 
-    // Find the header row: the flex-row ancestor of caret that also contains User-Name
-    const caretBtn = article.querySelector('[data-testid="caret"]');
-    if (!caretBtn) continue;
+    const caretBtn = Array.from(article.querySelectorAll('[data-testid="caret"]'))
+      .find((node) => node.closest('article[data-testid="tweet"]') === article);
+    const userName = Array.from(article.querySelectorAll('[data-testid="User-Name"]'))
+      .find((node) => node.closest('article[data-testid="tweet"]') === article);
+    if (!userName) continue;
     let headerRow = null;
-    let el = caretBtn.parentElement;
+    let el = (caretBtn || userName).parentElement;
     while (el && el !== article) {
       const cs = getComputedStyle(el);
       if (cs.display === 'flex' && cs.flexDirection === 'row'
-        && el.querySelector('[data-testid="User-Name"]')) {
+        && el.contains(userName) && (caretBtn || el.children.length > 1)) {
         headerRow = el;
         break;
       }
@@ -1643,31 +1762,71 @@ function renderBookmarkTimelineSettings() {
   const count = bookmarkTimelineDialog.querySelector('.xvm-bti-count');
   if (enabled) enabled.checked = bookmarkTimelineInjectEnabled;
   if (every) every.value = String(bookmarkTimelineInjectEvery);
+  const selected = new Set(bookmarkTimelineInjectFolderIds.map(String));
   if (count) {
     const selectedCount = bookmarkTimelineInjectFolderIds.length;
     const cachedCount = bookmarkTimelineInjectFolderIds.reduce(
       (sum, id) => sum + (bookmarkTimelineEntryCache.get(String(id))?.length || 0),
       0,
     );
-    count.textContent = selectedCount
-      ? `已选 ${selectedCount} 个文件夹，已缓存 ${cachedCount} 条`
-      : '未选择文件夹';
+    const loading = bookmarkTimelineInjectFolderIds.some((id) => bookmarkTimelineFolderStatus.get(String(id)) === 'loading');
+    const parts = [];
+    if (!selectedCount) {
+      parts.push('未选择文件夹');
+    } else {
+      parts.push(`已选 ${selectedCount} 个文件夹`);
+      parts.push(loading ? '缓存中…' : `已缓存 ${cachedCount} 条`);
+      const updated = bookmarkTimelineInjectFolderIds.reduce(
+        (max, id) => Math.max(max, bookmarkTimelineFolderRefreshedAt.get(String(id)) || 0),
+        0,
+      );
+      if (!loading && updated) parts.push(`${formatBookmarkTimelineAgo(updated)}更新`);
+    }
+    count.textContent = parts.join(' · ');
   }
   if (!list) return;
   if (!bookmarkTimelineFolders.length) {
     list.innerHTML = '<div class="xvm-bti-empty">还没有文件夹列表，点刷新或先开启书签文件夹功能。</div>';
     return;
   }
-  const selected = new Set(bookmarkTimelineInjectFolderIds.map(String));
   list.innerHTML = bookmarkTimelineFolders.map((folder) => {
     const id = String(folder.id || '');
     const name = String(folder.name || id || '未命名文件夹');
+    const isSelected = selected.has(id);
+    const cached = bookmarkTimelineEntryCache.get(id)?.length || 0;
+    const status = bookmarkTimelineFolderStatus.get(id);
+    let badgeClass = 'xvm-bti-folder-count';
+    let badgeText = '';
+    if (status === 'loading') {
+      badgeClass += ' is-loading';
+      badgeText = '缓存中…';
+    } else if (status === 'error') {
+      badgeClass += ' is-error';
+      badgeText = '刷新失败';
+    } else if (cached) {
+      badgeText = cached >= BOOKMARK_TIMELINE_FETCH_CAP ? `${BOOKMARK_TIMELINE_FETCH_CAP}+ 条` : `${cached} 条`;
+    } else if (isSelected && bookmarkTimelineInjectEnabled) {
+      badgeClass += ' is-empty';
+      badgeText = '待缓存';
+    }
+    const badge = badgeText ? `<span class="${badgeClass}">${badgeText}</span>` : '';
     return `
       <label class="xvm-bti-folder">
-        <input type="checkbox" value="${escapeHtml(id)}" ${selected.has(id) ? 'checked' : ''}>
-        <span>${escapeHtml(name)}</span>
+        <input type="checkbox" value="${escapeHtml(id)}" ${isSelected ? 'checked' : ''}>
+        <span class="xvm-bti-folder-name">${escapeHtml(name)}</span>
+        ${badge}
       </label>`;
   }).join('');
+}
+
+function formatBookmarkTimelineAgo(ts) {
+  const diff = Date.now() - (Number(ts) || 0);
+  if (diff < 60 * 1000) return '刚刚';
+  const mins = Math.floor(diff / (60 * 1000));
+  if (mins < 60) return `${mins} 分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return `${Math.floor(hours / 24)} 天前`;
 }
 
 function showBookmarkTimelineSettings() {
@@ -2883,7 +3042,7 @@ function collectRanked() {
     if (isLeaderboardArticleHidden(article)) continue;
     const id = getTweetIdFromArticle(article);
     if (!id || seen.has(id)) continue;
-    const data = tweetDataStore.get(id);
+    const data = getTweetDataForArticle(article, id);
     if (!data) continue;
     seen.add(id);
     const { velocity } = computeScore(data);
@@ -3172,7 +3331,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 function getTweetIdFromArticle(article) {
-  const links = article.querySelectorAll('a[href*="/status/"]');
+  const links = Array.from(article.querySelectorAll('a[href*="/status/"]'))
+    .filter((link) => link.closest('article[data-testid="tweet"]') === article);
   for (const link of links) {
     const match = link.getAttribute('href').match(/\/status\/(\d+)(?:[/?#]|$)/);
     if (match) {
@@ -3180,7 +3340,7 @@ function getTweetIdFromArticle(article) {
       if (tweetDataStore.has(id)) return id;
     }
   }
-  const firstLink = article.querySelector('a[href*="/status/"]');
+  const firstLink = links[0];
   if (!firstLink) return null;
   const match = firstLink.getAttribute('href').match(/\/status\/(\d+)/);
   return match ? match[1] : null;

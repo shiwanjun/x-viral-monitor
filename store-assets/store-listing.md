@@ -1,11 +1,11 @@
 # Chrome Web Store Listing
 
 ## Short Description (132 chars max)
-Spot viral tweets, read long screenshots smoothly, draft Grok replies, and visualize boosters — all on X. No data collection.
+Spot viral tweets, read long screenshots, draft replies, and visualize boosters on X—with local processing and opt-in AI.
 
 ## Detailed Description
 
-X Viral Monitor turns the X (Twitter) timeline into a control panel for spotting, reading, and engaging with content — without sending your data anywhere.
+X Viral Monitor turns the X (Twitter) timeline into a control panel for spotting, reading, and engaging with content. Core timeline analysis stays local; optional AI content is sent only to the provider you configure when you request it.
 
 ⸻ VELOCITY BADGES ⸻
 • Real-time views/hour badge on every tweet
@@ -19,7 +19,7 @@ X Viral Monitor turns the X (Twitter) timeline into a control panel for spotting
 • Reorderable columns
 
 ⸻ ENHANCED PHOTO VIEWER ⸻
-• Wheel-zoom, drag-pan, double-click toggle, +/- /0 hotkeys in X's lightbox
+• Pinch/Ctrl-wheel zoom, two-finger/drag pan, double-click toggle, +/- /0 hotkeys in X's lightbox
 • NEW: Long-image reading mode — tall screenshots scroll vertically at a 900px reading width with auto quality upgrade to 4096px, instead of being squashed
 
 ⸻ COPY AS MARKDOWN ⸻
@@ -35,12 +35,12 @@ X Viral Monitor turns the X (Twitter) timeline into a control panel for spotting
 • Editable prompt template, optional temporary chat mode (won't pollute Grok history)
 
 HOW IT WORKS
-The extension hooks into X's existing GraphQL responses and same-origin endpoints — no third-party servers, no analytics, no tracking. All processing happens locally in your browser.
+Core timeline analysis runs locally. Network access is limited to X, GitHub-hosted rule updates, Pro license validation, and an AI provider only when you configure and use one. No analytics or tracking.
 
 PRIVACY
-✓ Only reads data from x.com / pro.x.com pages you're already viewing
-✓ No third-party network requests, no analytics, no tracking pixels
-✓ Stores only your own settings + a local Star Chart cache (chrome.storage)
+✓ Bookmark-folder timeline is opt-in and refreshes only selected folders from X
+✓ No analytics or tracking pixels; optional AI requests go directly to your configured provider
+✓ Selected bookmark tweets may be cached locally for up to 24 hours; never synced or sent to XVM servers
 ✓ Open source: https://github.com/Icy-Cat/x-viral-monitor
 
 COMPATIBILITY

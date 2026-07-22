@@ -23,6 +23,19 @@ const pkg = JSON.parse(readFileSync(resolve(repo, 'package.json'), 'utf8'));
 const packageLock = JSON.parse(readFileSync(resolve(repo, 'package-lock.json'), 'utf8'));
 const buildDistJs = readFileSync(resolve(repo, 'scripts/build-dist.mjs'), 'utf8');
 
+function contrastRatio(foreground, background) {
+  const luminance = (hex) => {
+    const channels = hex.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16) / 255);
+    const [red, green, blue] = channels.map((channel) =>
+      channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+    );
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  const lighter = Math.max(luminance(foreground), luminance(background));
+  const darker = Math.min(luminance(foreground), luminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 describe('#45 popup tabs structure (mock A)', () => {
   it('body declares data-tab default "filter" + data-tier "free" + data-theme "light"', () => {
     expect(/<body[^>]*data-tab="filter"/.test(html)).toBe(true);
@@ -600,6 +613,19 @@ describe('#69/#72 user self-test polish', () => {
     expect(/\.xvm-lb\[data-theme="dark"\]\s+\.xvm-lb-red\s+\.xvm-lb-vel\s*\{[\s\S]*?color:\s*#ff6b4a/.test(stylesCss)).toBe(true);
   });
 
+  it('keeps compact light-theme leaderboard labels at accessible contrast', () => {
+    const rankColor = stylesCss.match(/\.xvm-lb-rank\s*\{[\s\S]*?color:\s*(#[0-9a-f]{6})/i)?.[1];
+    const greenVelocity = stylesCss.match(/\.xvm-lb-green\s+\.xvm-lb-vel\s*\{\s*color:\s*(#[0-9a-f]{6})/i)?.[1];
+
+    expect(contrastRatio(rankColor, '#fffcf6')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(greenVelocity, '#fffcf6')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps the compact green velocity badge at accessible contrast', () => {
+    const greenBadge = stylesCss.match(/\.xvm-badge--green\s*\{\s*color:\s*(#[0-9a-f]{6})/i)?.[1];
+    expect(contrastRatio(greenBadge, '#c5e8d2')).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('keeps the floating leaderboard list at the configured height when few tweets remain', () => {
     expect(/\.xvm-lb-list\s*\{[\s\S]*?height:\s*300px/.test(stylesCss)).toBe(true);
     expect(/\.xvm-lb-list\s*\{[\s\S]*?min-height:\s*120px/.test(stylesCss)).toBe(true);
@@ -748,11 +774,11 @@ describe('#45 i18n lock-step (content.js i18n() ↔ bridge CONTENT_MESSAGE_KEYS 
     expect(missingJa, `popup.html references data-i18n keys missing from _locales/ja: ${missingJa.join(', ')}`).toEqual([]);
   });
 
-  it('keeps package and extension versions in sync for v1.18.6', () => {
-    expect(manifest.version).toBe('1.18.6');
-    expect(pkg.version).toBe('1.18.6');
-    expect(packageLock.version).toBe('1.18.6');
-    expect(packageLock.packages?.['']?.version).toBe('1.18.6');
+  it('keeps package and extension versions in sync for v1.18.7', () => {
+    expect(manifest.version).toBe('1.18.7');
+    expect(pkg.version).toBe('1.18.7');
+    expect(packageLock.version).toBe('1.18.7');
+    expect(packageLock.packages?.['']?.version).toBe('1.18.7');
   });
 
   it('renders the popup footer version from the extension manifest', () => {

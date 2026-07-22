@@ -7,6 +7,22 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added independent velocity badges and leaderboard navigation for tweets embedded inside X Articles.
+- Added an optional, account-isolated local cache for selected bookmark folders, with bounded retention and background refresh backoff.
+
+### Fixed
+
+- Fixed reposts using the quoted/original post's velocity instead of the repost's own metrics.
+- Fixed bookmark-folder refresh failures repeatedly appearing as extension warnings across X tabs.
+- Fixed partial, empty, and concurrent bookmark-folder refreshes from publishing stale or incomplete cache snapshots.
+
+### Changed
+
+- Updated the image viewer for Mac trackpads: pinch/Ctrl-wheel zooms at the pointer, two-finger scrolling pans enlarged images, and continuous gestures no longer lag behind CSS transitions.
+- Updated Chrome Web Store privacy disclosures for optional AI providers, license/rule-update services, and device-local bookmark caching.
+
 ---
 
 ## [1.7.15] - 2026-06-03

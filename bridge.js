@@ -264,6 +264,24 @@ const STORAGE_DEFAULTS = { ...DEFAULT_THRESHOLDS, ...DEFAULT_FEATURES };
 const RELEASE_NOTES_SEEN_KEY = 'xvm_release_notes_seen_version';
 const RELEASE_NOTES_AUTO_VERSIONS = new Set(['1.18.0']);
 const BOOKMARK_TIMELINE_QID_CACHE_KEY = 'xvm_bookmark_timeline_query_id';
+// Persisted per-folder cache of injected bookmark entries so the timeline can be
+// hydrated without a network round-trip, and auto-refreshed in the background
+// whenever an x.com tab is open (no need to manually open each folder).
+const BOOKMARK_TIMELINE_CACHE_KEY = 'bookmarkTimelineCache';
+const BOOKMARK_TIMELINE_SETTINGS_KEY = 'bookmarkTimelineSettings';
+const BOOKMARK_TIMELINE_SYNC_MIGRATED_KEY = 'bookmarkTimelineSyncSettingsRemoved';
+const BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY = 'bookmarkTimelineAutoAttemptAt';
+const BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY = 'bookmarkTimelineManualAttemptAt';
+const BOOKMARK_TIMELINE_AUTO_TTL_MS = 30 * 60 * 1000;
+const BOOKMARK_TIMELINE_AUTO_LOCK = 'xvm-bookmark-timeline-auto-refresh';
+const BOOKMARK_TIMELINE_STORAGE_LOCK = 'xvm-bookmark-timeline-storage';
+const BOOKMARK_TIMELINE_MANUAL_LOCK = 'xvm-bookmark-timeline-manual-refresh';
+const BOOKMARK_TIMELINE_MANUAL_TTL_MS = 30 * 1000;
+const BOOKMARK_TIMELINE_MAX_ENTRIES_PER_FOLDER = 120;
+// X returns ~20 tweets per BookmarkFolderTimeline page regardless of count, so we
+// must follow the bottom cursor to gather a folder's full contents (runaway guard).
+const BOOKMARK_TIMELINE_MAX_PAGES = 10;
+let bookmarkTimelineAutoTimer = null;
 const X_BEARER = 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
 const OP_LIST = { name: 'BookmarkFoldersSlice', qid: 'i78YDd0Tza-dV4SYs58kRg' };
 const OP_BOOKMARK_FOLDER_TIMELINE = { name: 'BookmarkFolderTimeline', qid: 'oKopHt25pa6yhDn1ek7Qng' };
@@ -423,6 +441,7 @@ async function getLocalizedMessages(languagePref) {
 }
 
 async function pushSettings(raw) {
+  const localBookmarkSettings = await readBookmarkTimelineSettings();
   window.postMessage({
     type: 'XVM_SETTINGS_UPDATE',
     thresholds: normalizeThresholds(raw),
@@ -430,11 +449,11 @@ async function pushSettings(raw) {
     featureCopyAsMarkdown: raw?.featureCopyAsMarkdown !== false,
     featureStarChart: raw?.featureStarChart !== false,
     featureBookmarkFolders: !!raw?.featureBookmarkFolders,
-    featureBookmarkTimelineInject: !!raw?.featureBookmarkTimelineInject,
-    bookmarkTimelineInjectFolderIds: Array.isArray(raw?.bookmarkTimelineInjectFolderIds)
-      ? raw.bookmarkTimelineInjectFolderIds.map(String).filter(Boolean)
-      : [],
-    bookmarkTimelineInjectEvery: Math.max(1, Math.min(100, Number.parseInt(raw?.bookmarkTimelineInjectEvery, 10) || 20)),
+    featureBookmarkTimelineInject: localBookmarkSettings.enabled,
+    bookmarkTimelineInjectFolderIds: globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(
+      localBookmarkSettings.folderIds,
+    ) || [],
+    bookmarkTimelineInjectEvery: localBookmarkSettings.every,
     showBookmarkCount: raw?.showBookmarkCount !== false,
     leaderboardEdgeHideEnabled: raw?.leaderboardEdgeHideEnabled !== false,
     leaderboardCount: normalizeLeaderboardCount(raw?.leaderboardCount),
@@ -571,10 +590,43 @@ async function discoverBookmarkFolderTimelineQueryId() {
   return null;
 }
 
-async function fetchBookmarkTimelineFolderJson(id) {
+// Walk one BookmarkFolderTimeline page: count the tweet entries and pull the
+// bottom/show-more cursor so we can page through the whole folder. Mirrors the
+// envelope variants X uses (bookmark_collection_timeline / bookmark_timeline_v2 /
+// bookmark_timeline).
+function extractBookmarkTimelinePage(json) {
+  const timeline = json?.data?.bookmark_collection_timeline?.timeline
+    || json?.data?.bookmark_timeline_v2?.timeline
+    || json?.data?.bookmark_timeline?.timeline;
+  const valid = !!timeline && Array.isArray(timeline.instructions);
+  const instructions = Array.isArray(timeline?.instructions) ? timeline.instructions : [];
+  let tweetCount = 0;
+  let nextCursor = null;
+  for (const inst of instructions) {
+    for (const entry of inst?.entries || []) {
+      const content = entry?.content;
+      const type = content?.entryType || content?.__typename;
+      if (type === 'TimelineTimelineCursor') {
+        if (content.cursorType === 'Bottom' || content.cursorType === 'ShowMore') nextCursor = content.value;
+        continue;
+      }
+      if (typeof entry?.entryId === 'string' && (entry.entryId.startsWith('cursor-bottom-') || entry.entryId.startsWith('cursor-showMore-'))) {
+        nextCursor = content?.value || content?.itemContent?.value || nextCursor;
+        continue;
+      }
+      if (content?.itemContent?.tweet_results?.result) { tweetCount += 1; continue; }
+      for (const item of content?.items || []) {
+        if (item?.item?.itemContent?.tweet_results?.result) tweetCount += 1;
+      }
+    }
+  }
+  return { valid, tweetCount, nextCursor };
+}
+
+async function fetchBookmarkTimelineFolderJson(id, cursor = '') {
   const ct0 = document.cookie.match(/ct0=([^;]+)/)?.[1];
   if (!ct0) throw new Error('missing ct0');
-  const url = buildBookmarkFolderTimelineUrl(id);
+  const url = buildBookmarkFolderTimelineUrl(id, cursor);
   const path = new URL(url, location.origin).pathname;
   const txId = await requestBookmarkTimelineTxId(path);
   const headers = {
@@ -598,38 +650,253 @@ async function fetchBookmarkTimelineFolderJson(id) {
 async function refreshBookmarkTimelineFolder(folderId, retryWithFreshQueryId = true) {
   const id = String(folderId || '').trim();
   if (!id) return;
-  let { res, json } = await fetchBookmarkTimelineFolderJson(id);
-  if (res.status === 404 && retryWithFreshQueryId) {
-    console.warn('[XVM] BookmarkFolderTimeline 404, discovering fresh queryId');
-    const qid = await discoverBookmarkFolderTimelineQueryId();
-    if (qid) {
-      ({ res, json } = await fetchBookmarkTimelineFolderJson(id));
-      console.warn('[XVM] BookmarkFolderTimeline retryWithFreshQueryId status', res.status, qid);
+  window.postMessage({ type: 'XVM_BOOKMARK_TIMELINE_CACHE_START', folderId: id }, '*');
+
+  const pages = [];
+  let cursor = '';
+  let total = 0;
+  let triedFreshQid = false;
+  for (let i = 0; i < BOOKMARK_TIMELINE_MAX_PAGES && total < BOOKMARK_TIMELINE_MAX_ENTRIES_PER_FOLDER; i++) {
+    let { res, json } = await fetchBookmarkTimelineFolderJson(id, cursor);
+    if (res.status === 404 && retryWithFreshQueryId && !triedFreshQid) {
+      triedFreshQid = true;
+      console.warn('[XVM] BookmarkFolderTimeline 404, discovering fresh queryId');
+      const qid = await discoverBookmarkFolderTimelineQueryId();
+      if (qid) {
+        ({ res, json } = await fetchBookmarkTimelineFolderJson(id, cursor));
+        console.warn('[XVM] BookmarkFolderTimeline retryWithFreshQueryId status', res.status, qid);
+      }
     }
+    if (!res.ok) throw new Error(`BookmarkFolderTimeline HTTP ${res.status}`);
+    if (!json || typeof json !== 'object' || Array.isArray(json) || json.errors?.length) {
+      throw new Error('BookmarkFolderTimeline invalid response');
+    }
+    const { valid, tweetCount, nextCursor } = extractBookmarkTimelinePage(json);
+    if (!valid) throw new Error('BookmarkFolderTimeline invalid timeline');
+    pages.push(json);
+    total += tweetCount;
+    // Stop when the folder is exhausted (no cursor / repeated cursor / empty page).
+    if (!nextCursor || nextCursor === cursor || tweetCount === 0) break;
+    cursor = nextCursor;
   }
-  if (!res.ok) throw new Error(`BookmarkFolderTimeline HTTP ${res.status}`);
+
+  // Post every page at once; findEntryArrays recurses into { pages: [...] } and
+  // cacheBookmarkTimelineEntries dedupes across all of them in one replace.
+  const refreshedAt = Date.now();
+  const entries = globalThis.__xvmBookmarkTimelineStorage?.extractEntries?.({ pages }) || [];
+  await persistBookmarkTimelineFolder(id, entries, refreshedAt);
   window.postMessage({
     type: 'XVM_BOOKMARK_TIMELINE_CACHE_UPDATE',
     folderId: id,
-    json,
-    refreshedAt: Date.now(),
+    json: { pages },
+    refreshedAt,
   }, '*');
 }
 
-async function refreshBookmarkTimelineFolders(folderIds) {
-  const ids = Array.isArray(folderIds) ? folderIds.map(String).filter(Boolean) : [];
+async function refreshBookmarkTimelineFolders(folderIds, background = false) {
+  const ids = globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(folderIds) || [];
   for (const id of ids) {
     try {
       await refreshBookmarkTimelineFolder(id);
     } catch (err) {
-      console.warn('[XVM] BookmarkFolderTimeline refresh failed', id, err);
+      console[background ? 'debug' : 'warn']('[XVM] BookmarkFolderTimeline refresh failed', id, err);
       window.postMessage({
         type: 'XVM_BOOKMARK_TIMELINE_CACHE_ERROR',
         folderId: id,
         error: err?.message || String(err),
+        background,
       }, '*');
     }
   }
+}
+
+function hydrateBookmarkTimelineCacheToPage(cache) {
+  const folders = cache && typeof cache === 'object' ? cache : {};
+  const payload = {};
+  for (const [folderId, record] of Object.entries(folders)) {
+    if (Array.isArray(record?.entries) && record.entries.length) {
+      payload[folderId] = { entries: record.entries, refreshedAt: record.refreshedAt || 0 };
+    }
+  }
+  if (Object.keys(payload).length) {
+    window.postMessage({ type: 'XVM_BOOKMARK_TIMELINE_CACHE_HYDRATE', folders: payload }, '*');
+  }
+}
+
+function currentBookmarkTimelineAccountId() {
+  return globalThis.__xvmBookmarkTimelineStorage?.accountIdFromCookie?.(document.cookie) || '';
+}
+
+function removeLegacySyncedBookmarkTimelineSettings(callback) {
+  chrome.storage.local.get({ [BOOKMARK_TIMELINE_SYNC_MIGRATED_KEY]: false }, (items) => {
+    if (items[BOOKMARK_TIMELINE_SYNC_MIGRATED_KEY]) { callback?.(); return; }
+    chrome.storage.sync.remove([
+      'featureBookmarkTimelineInject',
+      'bookmarkTimelineInjectFolderIds',
+      'bookmarkTimelineInjectEvery',
+    ], () => {
+      chrome.storage.local.set({ [BOOKMARK_TIMELINE_SYNC_MIGRATED_KEY]: true }, callback);
+    });
+  });
+}
+
+function readBookmarkTimelineSettings() {
+  return new Promise((resolve) => {
+    const accountId = currentBookmarkTimelineAccountId();
+    chrome.storage.local.get({ [BOOKMARK_TIMELINE_SETTINGS_KEY]: null }, (items) => {
+      const record = items[BOOKMARK_TIMELINE_SETTINGS_KEY];
+      const valid = accountId && record?.accountId === accountId;
+      resolve({
+        accountId,
+        enabled: valid && record.enabled === true,
+        folderIds: valid
+          ? (globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(record.folderIds) || [])
+          : [],
+        every: valid ? Math.max(1, Math.min(100, Number.parseInt(record.every, 10) || 20)) : 20,
+      });
+    });
+  });
+}
+
+function clearBookmarkTimelineStorage(callback) {
+  window.postMessage({ type: 'XVM_BOOKMARK_TIMELINE_CACHE_RESET' }, '*');
+  chrome.storage.local.remove([
+    BOOKMARK_TIMELINE_CACHE_KEY,
+    BOOKMARK_TIMELINE_SETTINGS_KEY,
+    BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY,
+    BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY,
+  ], callback);
+}
+
+function withBookmarkTimelineScope(callback) {
+  const accountId = currentBookmarkTimelineAccountId();
+  if (!accountId) { callback(null); return; }
+  chrome.storage.local.get({ [BOOKMARK_TIMELINE_SETTINGS_KEY]: null }, (items) => {
+    const settings = items[BOOKMARK_TIMELINE_SETTINGS_KEY];
+    const folderIds = globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(settings?.folderIds) || [];
+    if (settings?.enabled !== true || !folderIds.length) {
+      clearBookmarkTimelineStorage(() => callback(null));
+      return;
+    }
+    const decision = globalThis.__xvmBookmarkTimelineStorage?.resolveScope?.(
+      accountId,
+      settings.accountId,
+      settings.enabled === true,
+      folderIds,
+    );
+    if (decision?.action === 'reset') {
+      clearBookmarkTimelineStorage(() => callback(null));
+      return;
+    }
+    callback(decision?.scope || null);
+  });
+}
+
+function runBookmarkTimelineStorageTask(task) {
+  if (navigator.locks?.request) return navigator.locks.request(BOOKMARK_TIMELINE_STORAGE_LOCK, task);
+  return task();
+}
+
+function pruneBookmarkTimelineCache(scope, callback) {
+  return runBookmarkTimelineStorageTask(() => new Promise((resolve) => {
+    chrome.storage.local.get({ [BOOKMARK_TIMELINE_CACHE_KEY]: {} }, (items) => {
+      const cache = globalThis.__xvmBookmarkTimelineStorage?.normalizeCacheDocument?.(
+        items[BOOKMARK_TIMELINE_CACHE_KEY],
+        scope.accountId,
+        scope.folderIds,
+      ) || { accountId: scope.accountId, folders: {} };
+      chrome.storage.local.set({ [BOOKMARK_TIMELINE_CACHE_KEY]: cache }, () => {
+        callback?.(cache.folders);
+        resolve(cache.folders);
+      });
+    });
+  }));
+}
+
+function hydrateConfiguredBookmarkTimelineCache() {
+  safeChromeCall(() => withBookmarkTimelineScope((scope) => {
+    if (!scope) return;
+    pruneBookmarkTimelineCache(scope, hydrateBookmarkTimelineCacheToPage);
+  }));
+}
+
+function persistBookmarkTimelineFolder(folderId, entries, refreshedAt) {
+  const id = String(folderId || '').trim();
+  if (!id || !Array.isArray(entries)) return Promise.resolve();
+  return runBookmarkTimelineStorageTask(() => new Promise((resolve) => {
+    safeChromeCall(() => withBookmarkTimelineScope((scope) => {
+      if (!scope || !scope.folderIds.includes(id)) { resolve(); return; }
+      const sanitized = globalThis.__xvmBookmarkTimelineStorage?.sanitizeEntries?.(entries) || [];
+      chrome.storage.local.get({ [BOOKMARK_TIMELINE_CACHE_KEY]: {} }, (items) => {
+        const current = globalThis.__xvmBookmarkTimelineStorage?.normalizeCacheDocument?.(
+          items[BOOKMARK_TIMELINE_CACHE_KEY],
+          scope.accountId,
+          scope.folderIds,
+        ) || { accountId: scope.accountId, folders: {} };
+        const cache = globalThis.__xvmBookmarkTimelineStorage?.normalizeCacheDocument?.({
+          accountId: scope.accountId,
+          folders: {
+            ...current.folders,
+            [id]: { entries: sanitized, refreshedAt: Number(refreshedAt) || Date.now() },
+          },
+        }, scope.accountId, scope.folderIds) || { accountId: scope.accountId, folders: {} };
+        chrome.storage.local.set({ [BOOKMARK_TIMELINE_CACHE_KEY]: cache }, () => {
+          if (chrome.runtime?.lastError) {
+            console.warn('[XVM] persist bookmark timeline cache failed', chrome.runtime.lastError.message);
+          }
+          resolve();
+        });
+      });
+    }));
+  }));
+}
+
+// Background refresh of every selected folder that is missing or stale. Runs on
+// page load, on a timer, and whenever the selection changes — so the user never
+// has to open a folder manually to prime its cache.
+function autoRefreshBookmarkTimeline(force = false) {
+  const run = () => new Promise((resolve) => safeChromeCall(() => {
+    withBookmarkTimelineScope((scope) => {
+      if (!scope) { resolve(); return; }
+      pruneBookmarkTimelineCache(scope, () => chrome.storage.local.get({
+        [BOOKMARK_TIMELINE_CACHE_KEY]: {},
+        [BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY]: {},
+      }, (items) => {
+        const cache = globalThis.__xvmBookmarkTimelineStorage?.normalizeCacheDocument?.(
+          items[BOOKMARK_TIMELINE_CACHE_KEY],
+          scope.accountId,
+          scope.folderIds,
+        ) || { accountId: scope.accountId, folders: {} };
+        const rawAttempts = items[BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY];
+        const attempts = rawAttempts?.accountId === scope.accountId && rawAttempts?.folders
+          ? rawAttempts.folders
+          : {};
+        const now = Date.now();
+        const stale = scope.folderIds.filter((id) => force || now - Math.max(
+          Number(cache.folders?.[id]?.refreshedAt) || 0,
+          Number(attempts[id]) || 0,
+        ) > BOOKMARK_TIMELINE_AUTO_TTL_MS);
+        if (!stale.length) { resolve(); return; }
+        const nextAttempts = { ...attempts };
+        for (const id of stale) nextAttempts[id] = now;
+        chrome.storage.local.set({
+          [BOOKMARK_TIMELINE_AUTO_ATTEMPT_KEY]: { accountId: scope.accountId, folders: nextAttempts },
+        }, () => {
+          refreshBookmarkTimelineFolders(stale, true).finally(resolve);
+        });
+      }));
+    });
+  }));
+  if (navigator.locks?.request) {
+    return navigator.locks.request(BOOKMARK_TIMELINE_AUTO_LOCK, { ifAvailable: true },
+      (lock) => lock ? run() : undefined);
+  }
+  return run();
+}
+
+function ensureBookmarkTimelineAutoTimer() {
+  if (bookmarkTimelineAutoTimer) return;
+  bookmarkTimelineAutoTimer = setInterval(() => autoRefreshBookmarkTimeline(false), BOOKMARK_TIMELINE_AUTO_TTL_MS);
 }
 
 function pushReleaseNotesIfNeeded() {
@@ -672,8 +939,10 @@ safeChromeCall(() => {
 });
 
 safeChromeCall(() => {
-  chrome.storage.sync.get(STORAGE_DEFAULTS, (items) => {
-    pushSettings(items);
+  removeLegacySyncedBookmarkTimelineSettings(() => {
+    chrome.storage.sync.get(STORAGE_DEFAULTS, (items) => {
+      pushSettings(items);
+    });
   });
 });
 
@@ -708,6 +977,7 @@ window.addEventListener('message', (event) => {
         if (cache?.folders) pushFolders(cache.folders, cache.cachedAt || 0);
       });
     });
+    hydrateConfiguredBookmarkTimelineCache();
     return;
   }
 
@@ -724,7 +994,31 @@ window.addEventListener('message', (event) => {
   }
 
   if (type === 'XVM_BOOKMARK_TIMELINE_REFRESH') {
-    refreshBookmarkTimelineFolders(event.data.folderIds);
+    safeChromeCall(() => withBookmarkTimelineScope((scope) => {
+      if (!scope) return;
+      const requested = globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(event.data.folderIds) || [];
+      const selected = requested.filter((id) => scope.folderIds.includes(id));
+      if (!selected.length) return;
+      const run = () => new Promise((resolve) => {
+        chrome.storage.local.get({ [BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY]: null }, (items) => {
+          const attempt = items[BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY];
+          const now = Date.now();
+          if (attempt?.accountId === scope.accountId && now - Number(attempt.at || 0) < BOOKMARK_TIMELINE_MANUAL_TTL_MS) {
+            resolve();
+            return;
+          }
+          chrome.storage.local.set({
+            [BOOKMARK_TIMELINE_MANUAL_ATTEMPT_KEY]: { accountId: scope.accountId, at: now },
+          }, () => refreshBookmarkTimelineFolders(selected).finally(resolve));
+        });
+      });
+      if (navigator.locks?.request) {
+        navigator.locks.request(BOOKMARK_TIMELINE_MANUAL_LOCK, { ifAvailable: true },
+          (lock) => lock ? run() : undefined);
+      } else {
+        run();
+      }
+    }));
     return;
   }
 
@@ -744,17 +1038,42 @@ window.addEventListener('message', (event) => {
   if (type === 'XVM_BOOKMARK_TIMELINE_INJECT_SAVE') {
     const patch = {
       featureBookmarkTimelineInject: event.data.enabled === true,
-      bookmarkTimelineInjectFolderIds: Array.isArray(event.data.folderIds)
-        ? event.data.folderIds.map(String).filter(Boolean)
-        : [],
+      bookmarkTimelineInjectFolderIds: globalThis.__xvmBookmarkTimelineStorage?.sanitizeFolderIds?.(
+        event.data.folderIds,
+      ) || [],
       bookmarkTimelineInjectEvery: Math.max(1, Math.min(100, Number.parseInt(event.data.every, 10) || 20)),
     };
     safeChromeCall(() => {
-      chrome.storage.sync.set(patch, () => {
-        chrome.storage.sync.get(STORAGE_DEFAULTS, (items) => {
-          pushSettings(items);
+      const accountId = currentBookmarkTimelineAccountId();
+      const active = patch.featureBookmarkTimelineInject && patch.bookmarkTimelineInjectFolderIds.length && accountId;
+      const persistSettings = () => {
+        chrome.storage.sync.remove([
+          'featureBookmarkTimelineInject',
+          'bookmarkTimelineInjectFolderIds',
+          'bookmarkTimelineInjectEvery',
+        ], () => {
+          chrome.storage.sync.get(STORAGE_DEFAULTS, (items) => {
+            pushSettings(items);
+          });
         });
-      });
+      };
+      if (active) {
+        chrome.storage.local.set({
+          [BOOKMARK_TIMELINE_SETTINGS_KEY]: {
+            accountId,
+            enabled: true,
+            folderIds: patch.bookmarkTimelineInjectFolderIds,
+            every: patch.bookmarkTimelineInjectEvery,
+          },
+        }, () => {
+          pruneBookmarkTimelineCache({
+            accountId,
+            folderIds: patch.bookmarkTimelineInjectFolderIds,
+          }, persistSettings);
+        });
+      } else {
+        clearBookmarkTimelineStorage(persistSettings);
+      }
     });
     return;
   }
@@ -1068,6 +1387,10 @@ safeChromeCall(() => {
           ...changes.bookmarkFolderMutation.newValue,
         }, '*');
       }
+      if (changes[BOOKMARK_TIMELINE_SETTINGS_KEY]) {
+        chrome.storage.sync.get(STORAGE_DEFAULTS, (items) => pushSettings(items));
+        autoRefreshBookmarkTimeline(false);
+      }
       return;
     }
 
@@ -1089,6 +1412,11 @@ safeChromeCall(() => {
       });
       if (changes.featureBookmarkFolders?.newValue === true) {
         refreshFolders();
+      }
+      if (bookmarkTimelineInjectTouched) {
+        // Selection or the master toggle changed: prime any newly-selected
+        // folder in the background (stale/missing folders fetch, fresh ones skip).
+        autoRefreshBookmarkTimeline(false);
       }
       if (grokTouched) {
         chrome.storage.sync.get({
@@ -1210,3 +1538,22 @@ safeChromeCall(() => {
     if (stale) setTimeout(refreshFolders, 500);
   });
 });
+
+// Hydrate the persisted bookmark-timeline cache into the page, then kick off the
+// background auto-refresh loop so selected folders stay primed while any x.com
+// tab is open — the user no longer has to open each folder to cache it.
+safeChromeCall(() => {
+  hydrateConfiguredBookmarkTimelineCache();
+  setTimeout(() => autoRefreshBookmarkTimeline(false), 1500);
+  ensureBookmarkTimelineAutoTimer();
+});
+
+let bookmarkTimelineObservedAccountId = currentBookmarkTimelineAccountId();
+setInterval(() => {
+  const accountId = currentBookmarkTimelineAccountId();
+  if (!accountId) return;
+  if (bookmarkTimelineObservedAccountId && bookmarkTimelineObservedAccountId !== accountId) {
+    safeChromeCall(() => clearBookmarkTimelineStorage());
+  }
+  bookmarkTimelineObservedAccountId = accountId;
+}, 5000);

@@ -15,11 +15,11 @@ Augment the X (Twitter) timeline reading and engagement experience: surface twee
 ```
 chrome.storage is used to persist user preferences and cache data locally in the browser. Specifically:
 
-• chrome.storage.sync — user-configurable thresholds (Trending / Viral views-per-hour), badge style, leaderboard column order, Grok prompt template, feature on/off toggles. These follow the user across devices.
+• chrome.storage.sync — user-configurable thresholds (Trending / Viral views-per-hour), badge style, leaderboard column order, Grok prompt template, and general feature toggles. These follow the user across devices; bookmark-folder selection does not.
 
-• chrome.storage.local — Star Chart query template cache (so the visualization survives X's API rotations) and short-lived Star Chart result cache. Local-only; never synced or transmitted.
+• chrome.storage.local — Star Chart query template/result caches and, only when bookmark-folder timeline injection is enabled, its device-specific toggle/folder selection, a cache of tweet entries from those folders, and the numeric X account ID used to prevent cross-account cache mixing. The bookmark cache is limited to 2 MB and 120 entries per folder, expires after 24 hours, and is cleared on disable, deselection, or X account change. It is never synced or transmitted to XVM servers.
 
-No personal data, browsing history, or tweet content is stored. Only user settings and X API metadata.
+No browsing history or login credentials are stored. Cached bookmark tweet entries remain on the device and exist only to render the user-selected folders in the X timeline.
 ```
 
 ### 需请求主机权限的理由 (justification for host access)
@@ -43,9 +43,9 @@ The extension also requests host permissions for user-configured AI providers, G
 
 ## 数据使用声明 - 收集的数据类型
 
-以下数据类型均**未勾选**（不收集、不上传）：
+数据类型勾选状态如下：
 
-- [ ] 个人身份信息
+- [x] 个人身份信息（仅本地保存用于书签缓存隔离的 X 数字账号 ID）
 - [ ] 健康信息
 - [ ] 财务和付款信息
 - [ ] 身份验证信息
@@ -53,9 +53,9 @@ The extension also requests host permissions for user-configured AI providers, G
 - [ ] 位置
 - [ ] 网络记录
 - [ ] 用户活动
-- [ ] 网站内容
+- [x] 网站内容（仅在本机处理；包含用户主动启用后短期缓存的所选书签推文）
 
-> 说明：扩展确实**读取** X 页面上的推文指标（views/likes/RT 等）和 Star Chart 的转发者公开列表，但这些数据仅在用户本地浏览器中处理与展示，从不离开用户设备，因此不构成 Chrome Web Store 隐私表中定义的"收集"。
+> 说明：扩展会**读取** X 页面上的推文指标（views/likes/RT 等）和 Star Chart 的转发者公开列表；用户主动开启书签文件夹时间线后，还会在本机短期缓存所选文件夹的推文条目。只有用户主动配置并使用外部 AI 回复服务时，相关提示词与推文正文会直连发送给该服务商；书签缓存不会发送到 XVM 或第三方服务器。
 
 ## 数据使用声明 - 合规承诺
 
@@ -71,4 +71,4 @@ The extension also requests host permissions for user-configured AI providers, G
 https://github.com/Icy-Cat/x-viral-monitor/blob/main/store-assets/privacy-policy.md
 ```
 
-> 当前 `store-assets/privacy-policy.md` 仍是旧版本（只描述了徽章功能），需要同步更新到反映 Star Chart / Grok / 图片查看器等新功能。或者改用一个独立托管的页面 URL。
+> `store-assets/privacy-policy.md` 已同步覆盖流速徽章、星图、回复服务、图片查看器和可选书签文件夹缓存。
