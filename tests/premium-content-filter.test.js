@@ -456,6 +456,32 @@ describe('#123 XVM content filter v1', () => {
     expect(api._debug.classify(resourceOk).hide).toBe(false);
   });
 
+  it('catches 同城纯曰线下 display-name funnels without hiding normal local activity names', () => {
+    const api = loadDebug();
+    api.updateSettings({ enabled: true, level: 'standard', whitelistFollowing: false });
+
+    const positives = [
+      'Sample User👗同城纯曰线下👗',
+      '某用户A 同城纯日线下',
+      '同城💗纯曰💗线下',
+    ];
+    for (const name of positives) {
+      const r = api._debug.classify({ id: 'p', content: '普通回复', urls: [], author: { handle: 'spam_name_offline', name, bio: '', location: '' } });
+      expect(r.hide, `expected HIDE for name: ${name}`).toBe(true);
+      expect(r.matches.some((m) => m.id === 'adult-name-offline-high')).toBe(true);
+    }
+
+    const negatives = [
+      '普通用户 同城线下活动',
+      '同城纯线下读书会',
+      '同城线下摄影约拍',
+    ];
+    for (const name of negatives) {
+      const r = api._debug.classify({ id: 'n', content: '普通回复', urls: [], author: { handle: 'normal_user', name, bio: '', location: '' } });
+      expect(r.hide, `expected PASS for name: ${name}`).toBe(false);
+    }
+  });
+
   it('covers page-name funnels and short symbol spam in standard mode', () => {
     const api = loadDebug();
     api.updateSettings({ enabled: true, level: 'standard', whitelistFollowing: false });
