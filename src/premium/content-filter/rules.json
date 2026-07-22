@@ -23,6 +23,7 @@
       "adult-bio-funnel-platform-high",
       "adult-bio-profile-template-high",
       "adult-bio-offline-match-high",
+      "spam-foxlink-invite-url-high",
       "adult-content-page-funnel-high"
     ],
     "strict": [
@@ -44,6 +45,7 @@
       "adult-bio-funnel-platform-high",
       "adult-bio-profile-template-high",
       "adult-bio-offline-match-high",
+      "spam-foxlink-invite-url-high",
       "adult-content-page-funnel-high",
       "adult-bio-medium",
       "spam-private-chat-medium",
@@ -182,6 +184,13 @@
       "type": "regex",
       "field": "bio",
       "value": "(全网[独首]?[创发家].{0,16}(线下|社交|约|匹配)|线下.{0,4}社交.{0,4}匹配|线下.{0,4}约[pP社]|社交.{0,4}匹配.{0,4}平台|一至五线|覆盖.{0,8}一至五线|免费约[pP]|附近.{0,4}速配|资源.{0,4}牵线|靠谱.{0,2}中介|资源.{0,2}对接.{0,4}附近|无.{0,2}App.{0,12}(中介|牵线|约|资源))",
+      "severity": "high"
+    },
+    {
+      "id": "spam-foxlink-invite-url-high",
+      "type": "regex",
+      "field": "url",
+      "value": "https?://(www\\.)?foxlink\\.top/invite(?:/|[?#]|$)",
       "severity": "high"
     },
     {

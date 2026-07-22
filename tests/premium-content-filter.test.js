@@ -708,6 +708,31 @@ describe('#123 XVM content filter v1', () => {
     }
   });
 
+  it('catches foxlink invite URL funnels without blocking the whole domain', () => {
+    const api = loadDebug();
+    api.updateSettings({ enabled: true, level: 'standard', whitelistFollowing: false });
+
+    const positives = [
+      'https://foxlink.top/invite/',
+      'https://foxlink.top/invite/sample-code',
+      'https://www.foxlink.top/invite/?from=tco',
+    ];
+    for (const url of positives) {
+      const r = api._debug.classify({ id: 'p', content: '看看这个', urls: [url], author: { handle: 'a', name: 'N', bio: '', location: '' } });
+      expect(r.hide, `expected HIDE for URL: ${url}`).toBe(true);
+      expect(r.matches.some((m) => m.id === 'spam-foxlink-invite-url-high')).toBe(true);
+    }
+
+    const negatives = [
+      'https://foxlink.top/about',
+      'https://example.com/invite/sample-code',
+    ];
+    for (const url of negatives) {
+      const r = api._debug.classify({ id: 'n', content: '普通链接', urls: [url], author: { handle: 'a', name: 'N', bio: '', location: '' } });
+      expect(r.hide, `expected PASS for URL: ${url}`).toBe(false);
+    }
+  });
+
   it('catches 🔞 + 性癖 / 盗图死全家 / 全网仅此一号 bio templates', () => {
     const api = loadDebug();
     api.updateSettings({ enabled: true, level: 'standard', whitelistFollowing: false });
