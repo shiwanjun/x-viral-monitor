@@ -1243,7 +1243,11 @@ function renderBadges() {
     const data = getTweetDataForArticle(article, tweetId);
     if (!data) continue;
 
-    if (article.hasAttribute('data-xvm-scored')) continue;
+    if (article.hasAttribute('data-xvm-scored')) {
+      if (article.getAttribute('data-xvm-scored-id') === tweetId) continue;
+      article.querySelectorAll(':scope .xvm-badge').forEach((badge) => badge.remove());
+      article.removeAttribute('data-xvm-scored');
+    }
 
     const caretBtn = Array.from(article.querySelectorAll('[data-testid="caret"]'))
       .find((node) => node.closest('article[data-testid="tweet"]') === article);
@@ -1265,6 +1269,7 @@ function renderBadges() {
 
     // Only mark scored after we confirmed headerRow is valid
     article.setAttribute('data-xvm-scored', '1');
+    article.setAttribute('data-xvm-scored-id', tweetId);
 
     const { velocity, score } = computeScore(data);
     // 🌱 normal | 🚀 trending | 🔥 viral
@@ -3369,19 +3374,20 @@ document.addEventListener('keydown', (e) => {
 });
 
 function getTweetIdFromArticle(article) {
+  const ownLinks = (selector) => Array.from(article.querySelectorAll(selector))
+    .filter((link) => link.closest('article[data-testid="tweet"]') === article);
+  const idFromLink = (link) => link?.getAttribute('href')?.match(/\/status\/(\d+)(?:[/?#]|$)/)?.[1] || null;
+  const analyticsLink = ownLinks('a[href*="/status/"][href*="/analytics"]')[0];
+  const analyticsId = idFromLink(analyticsLink);
+  if (analyticsId) return analyticsId;
   const links = Array.from(article.querySelectorAll('a[href*="/status/"]'))
     .filter((link) => link.closest('article[data-testid="tweet"]') === article);
   for (const link of links) {
-    const match = link.getAttribute('href').match(/\/status\/(\d+)(?:[/?#]|$)/);
-    if (match) {
-      const id = match[1];
-      if (tweetDataStore.has(id)) return id;
-    }
+    const id = idFromLink(link);
+    if (id && tweetDataStore.has(id)) return id;
   }
   const firstLink = links[0];
-  if (!firstLink) return null;
-  const match = firstLink.getAttribute('href').match(/\/status\/(\d+)/);
-  return match ? match[1] : null;
+  return idFromLink(firstLink);
 }
 
 // Periodic re-render for tweets whose data arrived after DOM render

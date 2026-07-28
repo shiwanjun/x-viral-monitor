@@ -255,3 +255,113 @@ it('finds the nested tweet article instead of its outer article container', () =
   // Then
   expect(article).toBe(nestedArticle);
 });
+
+it('prefers the outer tweet analytics link over a quoted tweet status link', () => {
+  // Given
+  const tweetDataStore = new Map([
+    ['2081751375822856669', {}],
+    ['2080000000000000000', {}],
+  ]);
+  const article = {};
+  const quotedStatusLink = {
+    getAttribute: () => '/quoted/status/2080000000000000000',
+    closest: () => article,
+  };
+  const outerAnalyticsLink = {
+    getAttribute: () => '/ai_xiaomu/status/2081751375822856669/analytics',
+    closest: () => article,
+  };
+  article.querySelectorAll = (selector) => {
+    if (selector === 'a[href*="/status/"][href*="/analytics"]') return [outerAnalyticsLink];
+    if (selector === 'a[href*="/status/"]') return [quotedStatusLink, outerAnalyticsLink];
+    return [];
+  };
+  const getTweetIdFromArticle = Function(
+    'tweetDataStore',
+    `${getTweetIdFromArticleSource}; return getTweetIdFromArticle;`,
+  )(tweetDataStore);
+
+  // When
+  const tweetId = getTweetIdFromArticle(article);
+
+  // Then
+  expect(tweetId).toBe('2081751375822856669');
+});
+
+it('replaces a stale velocity badge when a reused article now resolves to another tweet id', () => {
+  // Given
+  const staleBadge = { removeCalled: false, remove() { this.removeCalled = true; } };
+  const insertedBadges = [];
+  const article = {
+    attributes: new Map([
+      ['data-xvm-scored', '1'],
+      ['data-xvm-scored-id', '2080000000000000000'],
+    ]),
+    hasAttribute(name) { return this.attributes.has(name); },
+    getAttribute(name) { return this.attributes.get(name) || null; },
+    setAttribute(name, value) { this.attributes.set(name, value); },
+    removeAttribute(name) { this.attributes.delete(name); },
+    querySelector: (selector) => selector === '[data-testid="caret"]' ? null : null,
+    querySelectorAll(selector) {
+      if (selector === ':scope .xvm-badge') return [staleBadge];
+      if (selector === '[data-testid="User-Name"]') return [userName];
+      return [];
+    },
+  };
+  const emptyHeaderSlot = {};
+  const headerRow = {
+    children: [{}, emptyHeaderSlot],
+    lastElementChild: emptyHeaderSlot,
+    parentElement: article,
+    contains: (node) => node === userName,
+    insertBefore: (badge) => { insertedBadges.push(badge); },
+  };
+  const userName = {
+    parentElement: headerRow,
+    closest: () => article,
+  };
+  const document = {
+    querySelectorAll: () => [article],
+    createElement: () => ({ dataset: {}, addEventListener() {} }),
+  };
+  const tweetDataStore = new Map([['2081751375822856669', {
+    views: 1200,
+    likes: 1,
+    retweets: 2,
+    replies: 3,
+    bookmarks: 4,
+    createdAt: 'Mon Jul 27 00:00:00 +0000 2026',
+  }]]);
+  const renderBadges = Function(
+    'document',
+    'tweetDataStore',
+    'getComputedStyle',
+    `
+      const velocityThresholds = { trending: 1000, viral: 10000 };
+      const leaderboardEnabled = false;
+      const getTweetIdFromArticle = () => '2081751375822856669';
+      const getTweetDataForArticle = (_article, id) => tweetDataStore.get(id);
+      const computeScore = () => ({ velocity: 12, score: 10 });
+      const formatVelocity = String;
+      const i18n = (key) => key;
+      const getTooltip = () => ({ contains: () => false, style: {} });
+      const hideTooltip = () => {};
+      const renderBookmarkTimelineBadges = () => {};
+      const renderBookmarkCounts = () => {};
+      const renderLeaderboard = () => {};
+      ${renderBadgesSource}
+      return renderBadges;
+    `,
+  )(document, tweetDataStore, (node) => ({
+    display: node === headerRow ? 'flex' : 'block',
+    flexDirection: node === headerRow ? 'row' : 'column',
+  }));
+
+  // When
+  renderBadges();
+
+  // Then
+  expect(staleBadge.removeCalled).toBe(true);
+  expect(article.getAttribute('data-xvm-scored-id')).toBe('2081751375822856669');
+  expect(insertedBadges).toHaveLength(1);
+});
