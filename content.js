@@ -4169,7 +4169,14 @@ function insertTextIntoReply(editable, text) {
   }
 }
 
+// Bumped whenever the candidate panel is dismissed (pick / ✕ / Escape) or a
+// new generation starts. An in-flight run compares its own epoch against this
+// and bails out — otherwise its streaming onProgress keeps re-creating the
+// panel after the user already picked a comment.
+let grokGenEpoch = 0;
+
 function closeGrokOptions() {
+  grokGenEpoch += 1;
   document.querySelectorAll('.xvm-grok-options').forEach((el) => el.remove());
 }
 
@@ -4466,8 +4473,15 @@ async function handleGrokGenerate(btn, editable, promptTemplate = null) {
 
   btn.disabled = true;
   setGrokButtonLabel(btn, '生成中', true);
+  const epoch = ++grokGenEpoch;
   try {
     const tpl = promptTemplate || getSelectedGrokPromptTemplate(kind);
+    // Returning false from onProgress tells the reader to abort the stream.
+    const onProgress = (running) => {
+      if (epoch !== grokGenEpoch) return false;
+      showGrokOptions(running, editable, { streaming: true, anchor: btn });
+      return true;
+    };
     showGrokOptions([], editable, { streaming: true, anchor: btn });
     const comments = aiProvider === 'x-grok'
       ? await (async () => {
@@ -4478,21 +4492,19 @@ async function handleGrokGenerate(btn, editable, promptTemplate = null) {
           tweetText,
           promptTemplate: tpl?.prompt || tpl,
           temporaryChat: grokTemporaryChat,
-          onProgress: (running) => {
-            showGrokOptions(running, editable, { streaming: true, anchor: btn });
-          },
+          onProgress,
         });
       })()
       : await requestExternalAiGeneration({
         tweetText,
         promptTemplate: tpl?.prompt || tpl,
         kind,
-      }, (running) => {
-        showGrokOptions(running, editable, { streaming: true, anchor: btn });
-      });
+      }, onProgress);
+    if (epoch !== grokGenEpoch) return;
     showGrokOptions(comments, editable, { streaming: false, anchor: btn });
   } catch (err) {
     console.debug('[XVM-AI] generation failed', err);
+    if (epoch !== grokGenEpoch) return;
     closeGrokOptions();
     showGrokErrorToast(err?.message || 'AI 生成失败');
   } finally {
@@ -4572,6 +4584,9 @@ function injectGrokReplyButtons(root = document) {
 //                                  on a nested reply.
 let grokLastReplyThreadOg = null;
 document.addEventListener('click', (e) => {
+  // Sending the reply ends the job for that tweet: drop the panel and stop
+  // any still-streaming generation instead of letting it repopulate.
+  if (e.target.closest?.(GROK_SUBMIT_SELECTOR)) closeGrokOptions();
   const replyBtn = e.target.closest?.('[data-testid="reply"]');
   if (!replyBtn) return;
   const article = replyBtn.closest('article[data-testid="tweet"]');

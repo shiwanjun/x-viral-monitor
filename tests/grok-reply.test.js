@@ -25,6 +25,7 @@ function loadGrok(opts = {}) {
     document: { cookie: '' },
     navigator: { language: 'zh-CN' },
     crypto: { randomUUID: () => 'test-uuid' },
+    TextDecoder,
     btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     atob: (s) => Buffer.from(s, 'base64').toString('binary'),
     console,
@@ -205,5 +206,40 @@ describe('generate', () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0].init.headers['x-client-transaction-id']).toBe('captured-valid-tx-id');
+  });
+
+  it('stops reading the stream once onProgress returns false', async () => {
+    const chunks = ['```\n第一条\n```\n', '```\n第二条\n```\n', '```\n第三条\n```\n']
+      .map((s) => new TextEncoder().encode(`${ndjsonOf(s)}\n`));
+    let read = 0;
+    let cancelled = false;
+    const apiStream = loadGrok({
+      capturedTxId: 'captured-valid-tx-id',
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: {
+          getReader: () => ({
+            read: async () => (read < chunks.length
+              ? { done: false, value: chunks[read++] }
+              : { done: true }),
+            cancel: async () => { cancelled = true; },
+          }),
+        },
+      }),
+      xct: { generateTxId: async () => { throw new Error('unused'); }, reset() {} },
+    });
+
+    const seen = [];
+    await apiStream.generate({
+      tweetText: 'tweet',
+      promptTemplate: '[推文内容]',
+      onProgress: (running) => { seen.push(running.length); return false; },
+    });
+
+    expect(seen).toEqual([1]);
+    expect(read).toBe(1);
+    expect(cancelled).toBe(true);
   });
 });
