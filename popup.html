@@ -115,7 +115,7 @@
       cursor: pointer;
     }
     .language-toggle {
-      width: 28px; height: 28px; padding: 0;
+      height: 28px; padding: 0 7px; gap: 3px;
       border-radius: 999px; border: 1px solid var(--border-hi);
       background: var(--surface); color: var(--text-2);
       display: inline-flex; align-items: center; justify-content: center;
@@ -123,6 +123,10 @@
       font-size: 10px; font-weight: 800;
       letter-spacing: 0;
     }
+    .language-toggle svg { width: 13px; height: 13px; }
+    /* Auto = following the browser locale: same code, dimmed, so the label
+       always answers "what language am I reading" while still marking auto. */
+    .language-toggle[data-language-pref="auto"] .language-toggle-text { opacity: .55; }
     .theme-toggle:hover { color: var(--text); border-color: var(--accent); }
     .language-toggle:hover { color: var(--text); border-color: var(--accent); }
     .theme-toggle svg { width: 14px; height: 14px; }
@@ -699,6 +703,7 @@
     <symbol id="icon-sun"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
     <symbol id="icon-moon"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
     <symbol id="icon-monitor"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+    <symbol id="icon-globe"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></symbol>
   </svg>
 
   <div class="popup">
@@ -712,7 +717,8 @@
       </div>
       <span id="tier-chip">FREE</span>
       <button type="button" id="language-toggle" class="language-toggle" aria-label="Language" title="Language">
-        <span class="language-toggle-text">A</span>
+        <svg class="ico-globe"><use href="#icon-globe"/></svg>
+        <span class="language-toggle-text">EN</span>
       </button>
       <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
         <svg class="ico-sun"><use href="#icon-sun"/></svg>
@@ -972,7 +978,7 @@
 
       <p class="footer-line">
         <a href="https://github.com/Icy-Cat/x-viral-monitor" target="_blank" rel="noopener">github.com/Icy-Cat/x-viral-monitor</a>
-        · <a href="https://x.com/intent/follow?screen_name=lngkximo" target="_blank" rel="noopener">X @lngkximo</a>
+        · <a href="https://x.com/intent/follow?screen_name=icycat" target="_blank" rel="noopener">X @icycat</a>
         · v<span id="popup-version"></span>
       </p>
     </section>

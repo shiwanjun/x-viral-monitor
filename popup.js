@@ -7,7 +7,6 @@ const LANGUAGE_LABELS = {
   ja: '日本語',
 };
 const LANGUAGE_TOGGLE_TEXT = {
-  auto: 'A',
   zh_CN: '中',
   en: 'EN',
   ja: '日',
@@ -437,7 +436,9 @@ function updateLanguageToggle(language) {
   if (!languageToggle) return;
   const normalized = normalizeLanguage(language);
   const label = getLanguageDisplayName(normalized);
-  languageToggle.querySelector('.language-toggle-text').textContent = LANGUAGE_TOGGLE_TEXT[normalized] || LANGUAGE_TOGGLE_TEXT.auto;
+  const effective = getEffectiveLanguageId(normalized);
+  languageToggle.querySelector('.language-toggle-text').textContent = LANGUAGE_TOGGLE_TEXT[effective] || LANGUAGE_TOGGLE_TEXT.en;
+  languageToggle.dataset.languagePref = normalized;
   languageToggle.title = `${tr('languageLabel')}: ${label}`;
   languageToggle.setAttribute('aria-label', `${tr('languageLabel')}: ${label}`);
 }

@@ -234,7 +234,7 @@ describe('#45 popup tabs structure (mock A)', () => {
   it('About footer links to the project and maintainer X profile', () => {
     const about = html.match(/data-tab-panel="about"[\s\S]*?(?=<\/div>\s*<div id="xvm-toast")/)?.[0] || '';
     expect(/https:\/\/github\.com\/Icy-Cat\/x-viral-monitor/.test(about)).toBe(true);
-    expect(/https:\/\/x\.com\/intent\/follow\?screen_name=lngkximo/.test(about)).toBe(true);
+    expect(/https:\/\/x\.com\/intent\/follow\?screen_name=icycat/.test(about)).toBe(true);
   });
 
   it('keeps all legacy IDs popup.js / popup-rate-filter.js / popup-pro.js depend on', () => {
@@ -774,11 +774,11 @@ describe('#45 i18n lock-step (content.js i18n() ↔ bridge CONTENT_MESSAGE_KEYS 
     expect(missingJa, `popup.html references data-i18n keys missing from _locales/ja: ${missingJa.join(', ')}`).toEqual([]);
   });
 
-  it('keeps package and extension versions in sync for v1.18.9', () => {
-    expect(manifest.version).toBe('1.18.9');
-    expect(pkg.version).toBe('1.18.9');
-    expect(packageLock.version).toBe('1.18.9');
-    expect(packageLock.packages?.['']?.version).toBe('1.18.9');
+  it('keeps package and extension versions in sync for v1.18.10', () => {
+    expect(manifest.version).toBe('1.18.10');
+    expect(pkg.version).toBe('1.18.10');
+    expect(packageLock.version).toBe('1.18.10');
+    expect(packageLock.packages?.['']?.version).toBe('1.18.10');
   });
 
   it('renders the popup footer version from the extension manifest', () => {
