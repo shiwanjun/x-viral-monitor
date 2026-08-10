@@ -526,8 +526,8 @@
       .xvm-cf-summary{margin:8px 0;padding:9px 12px;border:1px solid rgba(251,146,60,.35);border-radius:10px;background:rgba(251,146,60,.10);color:inherit;font:13px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;-webkit-user-select:none;user-select:none}
       .xvm-cf-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
       .xvm-cf-summary strong{font-weight:700}
-      .xvm-cf-copy{display:none;flex:0 0 auto;border:1px solid rgba(251,146,60,.42);border-radius:999px;background:rgba(255,255,255,.65);color:inherit;padding:3px 9px;font:12px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}
-      .xvm-cf-summary[data-open="1"] .xvm-cf-copy{display:inline-flex}
+      .xvm-cf-copy{visibility:hidden;display:inline-flex;flex:0 0 auto;border:1px solid rgba(251,146,60,.42);border-radius:999px;background:rgba(255,255,255,.65);color:inherit;padding:3px 9px;font:12px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}
+      .xvm-cf-summary[data-open="1"] .xvm-cf-copy{visibility:visible}
       .xvm-cf-list{display:none;margin-top:8px;max-height:240px;overflow:auto}
       .xvm-cf-summary[data-open="1"] .xvm-cf-list{display:block}
       .xvm-cf-item{display:grid;grid-template-columns:28px 1fr;gap:8px;padding:7px 0;border-top:1px solid rgba(148,163,184,.25)}
