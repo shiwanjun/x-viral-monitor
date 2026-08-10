@@ -763,8 +763,9 @@ describe('#123 XVM content filter v1', () => {
     const api = loadDebug();
     api.updateSettings({ enabled: true, level: 'standard', whitelistFollowing: false });
 
-    // Name family: 测评/推荐/机场 co-occurring with vpn.
-    const nameHits = ['某某测评VPN工具', 'VPN优惠情报站', '机场测评vpn分享'];
+    // Name family: 测评/推荐/机场 co-occurring with vpn, plus the
+    // 节点订阅 jargon variant that never says "vpn" at all.
+    const nameHits = ['某某测评VPN工具', 'VPN优惠情报站', '机场测评vpn分享', 'FoxLink银狐节点订阅', '某某节点订阅'];
     for (const name of nameHits) {
       const r = api._debug.classify({ id: 'p', content: '普通附和回复', urls: [], author: { handle: 'spam_vpn_1', name, bio: '', location: '' } });
       expect(r.hide, `expected HIDE for name: ${name}`).toBe(true);
@@ -776,6 +777,8 @@ describe('#123 XVM content filter v1', () => {
       '作为经常更新内容的博主，稳定网络真的很重要，这款我一直在用👇',
       '科学上网必备，注册就能用',
       '翻墙工具测评，vpn优惠汇总',
+      '想流畅上网的话，可以试试我一直在用的这款 VPN👇',
+      '这款节点很稳',
     ];
     for (const bio of bioHits) {
       const r = api._debug.classify({ id: 'p', content: '普通附和回复', urls: [], author: { handle: 'spam_vpn_2', name: '普通名字', bio, location: '' } });
@@ -797,6 +800,9 @@ describe('#123 XVM content filter v1', () => {
       { name: '网络工程师', bio: '研究网络协议，稳定第一', urls: [] },
       { name: '普通用户', bio: '这款键盘我一直在用，手感很好', urls: [] },
       { name: '普通用户', bio: '', urls: ['https://fl1.messenger.com/a'] },
+      { name: '播客订阅推荐官', bio: '', urls: [] },
+      { name: '普通用户', bio: '区块链节点运维工程师', urls: [] },
+      { name: '普通用户', bio: '订阅我的newsletter', urls: [] },
     ];
     for (const t of negatives) {
       const r = api._debug.classify({ id: 'n', content: '普通附和回复', urls: t.urls, author: { handle: 'normal_u', name: t.name, bio: t.bio, location: '' } });
