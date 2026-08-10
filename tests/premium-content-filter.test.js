@@ -759,6 +759,73 @@ describe('#123 XVM content filter v1', () => {
     }
   });
 
+  it('catches VPN promo accounts via name / bio pitch / affiliate URL', () => {
+    const api = loadDebug();
+    api.updateSettings({ enabled: true, level: 'standard', whitelistFollowing: false });
+
+    // Name family: 测评/推荐/机场 co-occurring with vpn.
+    const nameHits = ['某某测评VPN工具', 'VPN优惠情报站', '机场测评vpn分享'];
+    for (const name of nameHits) {
+      const r = api._debug.classify({ id: 'p', content: '普通附和回复', urls: [], author: { handle: 'spam_vpn_1', name, bio: '', location: '' } });
+      expect(r.hide, `expected HIDE for name: ${name}`).toBe(true);
+      expect(r.matches.some((m) => m.id === 'vpn-promo-name-high')).toBe(true);
+    }
+
+    // Bio family: 稳定网络/科学上网 pitch + 这款我一直在用👇 funnel.
+    const bioHits = [
+      '作为经常更新内容的博主，稳定网络真的很重要，这款我一直在用👇',
+      '科学上网必备，注册就能用',
+      '翻墙工具测评，vpn优惠汇总',
+    ];
+    for (const bio of bioHits) {
+      const r = api._debug.classify({ id: 'p', content: '普通附和回复', urls: [], author: { handle: 'spam_vpn_2', name: '普通名字', bio, location: '' } });
+      expect(r.hide, `expected HIDE for bio: ${bio.slice(0, 30)}`).toBe(true);
+      expect(r.matches.some((m) => m.id === 'vpn-promo-bio-high')).toBe(true);
+    }
+
+    // Affiliate shortlink in profile/bio urls.
+    for (const url of ['https://fl1.me/2', 'https://www.fl1.me']) {
+      const r = api._debug.classify({ id: 'p', content: '普通附和回复', urls: [url], author: { handle: 'spam_vpn_3', name: '普通名字', bio: '', location: '' } });
+      expect(r.hide, `expected HIDE for url: ${url}`).toBe(true);
+      expect(r.matches.some((m) => m.id === 'vpn-affiliate-url-high')).toBe(true);
+    }
+
+    // Negatives: airport/网络 mentions in normal identities must pass.
+    const negatives = [
+      { name: '常驻机场的旅行者', bio: '', urls: [] },
+      { name: '普通用户', bio: '在机场工作，准点很重要', urls: [] },
+      { name: '网络工程师', bio: '研究网络协议，稳定第一', urls: [] },
+      { name: '普通用户', bio: '这款键盘我一直在用，手感很好', urls: [] },
+      { name: '普通用户', bio: '', urls: ['https://fl1.messenger.com/a'] },
+    ];
+    for (const t of negatives) {
+      const r = api._debug.classify({ id: 'n', content: '普通附和回复', urls: t.urls, author: { handle: 'normal_u', name: t.name, bio: t.bio, location: '' } });
+      expect(r.hide, `expected PASS for ${JSON.stringify(t).slice(0, 60)}`).toBe(false);
+    }
+  });
+
+  it('extracts profile_bio entity urls from the new user schema', () => {
+    const api = loadDebug();
+    const tweet = api._debug.extractTweet({
+      tweet: {
+        legacy: { id_str: '100002', full_text: '普通附和回复', entities: {} },
+        core: {
+          user_results: {
+            result: {
+              rest_id: 'u1',
+              core: { name: '普通名字', screen_name: 'spam_vpn_4' },
+              profile_bio: {
+                description: '这款我一直在用👇',
+                entities: { url: { urls: [{ expanded_url: 'https://fl1.me/2', url: 'https://t.co/x' }] }, description: {} },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(tweet.urls).toContain('https://fl1.me/2');
+  });
+
   it('catches 🔞 + 性癖 / 盗图死全家 / 全网仅此一号 bio templates', () => {
     const api = loadDebug();
     api.updateSettings({ enabled: true, level: 'standard', whitelistFollowing: false });

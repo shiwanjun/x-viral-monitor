@@ -201,7 +201,7 @@
     if (rt) return extractTweet(rt);
     const user = tweet.core?.user_results?.result || {};
     const userLegacy = user.legacy || {};
-    const urls = extractUrls(legacy, userLegacy);
+    const urls = extractUrls(legacy, userLegacy, user);
     return {
       id: legacy.id_str,
       content: legacy.full_text || '',
@@ -222,7 +222,7 @@
     };
   }
 
-  function extractUrls(legacy, userLegacy) {
+  function extractUrls(legacy, userLegacy, user) {
     const out = [];
     const add = (u) => {
       for (const k of ['expanded_url', 'url', 'display_url']) {
@@ -233,6 +233,11 @@
     for (const u of legacy?.entities?.media || []) add(u);
     for (const u of userLegacy?.entities?.url?.urls || []) add(u);
     for (const u of userLegacy?.entities?.description?.urls || []) add(u);
+    // New user schema (no `legacy` on the User object) keeps the profile
+    // website + bio links under profile_bio.entities — where link-funnel
+    // spam accounts put their affiliate URL.
+    for (const u of user?.profile_bio?.entities?.url?.urls || []) add(u);
+    for (const u of user?.profile_bio?.entities?.description?.urls || []) add(u);
     return [...new Set(out)].filter(Boolean);
   }
 

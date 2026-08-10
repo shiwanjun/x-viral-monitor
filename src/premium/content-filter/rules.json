@@ -24,7 +24,10 @@
       "adult-bio-profile-template-high",
       "adult-bio-offline-match-high",
       "spam-foxlink-invite-url-high",
-      "adult-content-page-funnel-high"
+      "adult-content-page-funnel-high",
+      "vpn-promo-name-high",
+      "vpn-promo-bio-high",
+      "vpn-affiliate-url-high"
     ],
     "strict": [
       "hard-telegram-group-funnel",
@@ -49,7 +52,10 @@
       "adult-content-page-funnel-high",
       "adult-bio-medium",
       "spam-private-chat-medium",
-      "spam-marketing-medium"
+      "spam-marketing-medium",
+      "vpn-promo-name-high",
+      "vpn-promo-bio-high",
+      "vpn-affiliate-url-high"
     ]
   },
   "rules": [
@@ -227,6 +233,27 @@
       "field": "content",
       "value": "(合约带单|百倍币|稳赚|暴富密码|充值返利)",
       "severity": "low"
+    },
+    {
+      "id": "vpn-promo-name-high",
+      "type": "regex",
+      "field": "name",
+      "value": "(测评|评测|推荐|优惠|折扣|梯子|机场|加速)[^,，]{0,6}vpn|vpn[^,，]{0,8}(测评|评测|推荐|工具|优惠|折扣|梯子|机场|加速)",
+      "severity": "high"
+    },
+    {
+      "id": "vpn-promo-bio-high",
+      "type": "regex",
+      "field": "bio",
+      "value": "(稳定(的)?网络|科学上网|翻墙|梯子|vpn)[^。]{0,20}(重要|必备|刚需|一直在用|推荐|测评|优惠)|这款[^。]{0,10}一直在用[^。]{0,6}[👇⬇]",
+      "severity": "high"
+    },
+    {
+      "id": "vpn-affiliate-url-high",
+      "type": "regex",
+      "field": "url",
+      "value": "https?://(www\\.)?fl1\\.me(/|[?#]|$)",
+      "severity": "high"
     }
   ]
 }
