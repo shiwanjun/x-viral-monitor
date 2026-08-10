@@ -4864,3 +4864,219 @@ function startMenuObserver() {
 }
 if (document.body) startMenuObserver();
 else document.addEventListener('DOMContentLoaded', startMenuObserver);
+
+// ---------------------------------------------------------------------------
+// Back-navigation scroll-restore guard.
+//
+// X restores the reading position after a back-navigation with a retry loop
+// of relative scrollBy deltas checked against an anchor tweet. When an XVM
+// filter (content filter / rate filter) has collapsed reply cells on the
+// conversation page, X's anchor check never passes: a delta issued while the
+// timeline is still mounting gets clamped, is re-issued at full size, and
+// both eventually stick — the page lands thousands of pixels past where the
+// user was (verified live: saved y≈1900 → X settles at ≈4534, viewport in
+// the "Discover more" section). X's loop is not fixable from outside, so we
+// record the true position ourselves and correct once X settles wrong.
+(() => {
+  // Any XVM hide marker, whichever filter set it. Their presence is what
+  // breaks X's restore, so it also gates when this guard is allowed to act.
+  const HIDE_SEL = '[data-xvm-content-filter-hidden], [data-xvm-rate-hidden]';
+  const saved = new Map(); // statusId -> {y, anchorId, anchorTop}
+  let watch = null; // active post-back correction, at most one
+  let recScheduled = false;
+
+  const statusId = () => (window.location.pathname.match(/\/status\/(\d+)/) || [])[1] || null;
+
+  // X's restore stays broken for the whole conversation once any reply was
+  // collapsed — even when the virtualizer has since unmounted every marked
+  // cell (long threads, reading far from the filtered cluster). Remember
+  // per-status that hides were seen so the guard doesn't go inert (or worse,
+  // erase a good record) just because no marker is mounted right now.
+  const hadHides = new Set();
+  function pageHasHides(id) {
+    if (document.querySelector(HIDE_SEL)) {
+      if (id) hadHides.add(id);
+      return true;
+    }
+    return id ? hadHides.has(id) : false;
+  }
+
+  // Best signal: the tweet the user is about to click into. Captured at
+  // pointerdown — before X's pre-navigation scrollIntoView churn can pollute
+  // scroll-event samples — so the back-correction can put that exact tweet
+  // back at the exact offset it was clicked at.
+  document.addEventListener('pointerdown', (e) => {
+    if (watch) return;
+    const id = statusId();
+    if (!id) return;
+    const art = e.target?.closest?.('article[data-testid="tweet"]');
+    if (!art || art.closest('[role="dialog"]')) return;
+    if (art.matches(HIDE_SEL) || art.closest(HIDE_SEL)) return;
+    if (!pageHasHides(id)) return;
+    const tid = getTweetIdFromArticle(art);
+    if (!tid) return;
+    saved.set(id, {
+      y: Math.round(window.scrollY),
+      anchorId: tid,
+      anchorTop: Math.round(art.getBoundingClientRect().top),
+      // Shields this entry from scroll-sample overwrites while X's
+      // pre-navigation scrollIntoView churn fires right after the click.
+      clickTs: performance.now(),
+    });
+  }, true);
+
+  // Fallback signal: continuously record the reading position while on a
+  // conversation page that has filtered cells. rAF-throttled; paused while a
+  // correction runs so X's broken restore can't overwrite the good value.
+  function record() {
+    if (recScheduled || watch) return;
+    recScheduled = true;
+    requestAnimationFrame(() => {
+      recScheduled = false;
+      if (watch) return;
+      const id = statusId();
+      if (!id) return;
+      if (!pageHasHides(id)) {
+        saved.delete(id);
+        return;
+      }
+      // A fresh click capture is more precise than any scroll sample — and
+      // the scroll events X fires while navigating away (scrollIntoView on
+      // the clicked tweet, scroll-to-top for the next page) would corrupt
+      // it. Let it stand until it's clearly stale.
+      const prev = saved.get(id);
+      if (prev && prev.clickTs !== undefined && performance.now() - prev.clickTs < 2000) return;
+      // Anchor = topmost visible tweet: survives layout changes that make a
+      // raw scrollY stale (cells collapsing/expanding above the viewport).
+      let anchorId = null;
+      let anchorTop = 0;
+      let best = Infinity;
+      for (const art of document.querySelectorAll('article[data-testid="tweet"]')) {
+        // A filtered article may be transiently visible right now (hides
+        // re-apply a frame behind X's renders) but collapsed by the time we
+        // correct against it — never anchor on one.
+        if (art.matches(HIDE_SEL) || art.closest(HIDE_SEL)) continue;
+        const r = art.getBoundingClientRect();
+        if (!r.height || r.bottom <= 0 || r.top >= best) continue;
+        const tid = getTweetIdFromArticle(art);
+        if (!tid) continue;
+        best = r.top;
+        anchorId = tid;
+        anchorTop = Math.round(r.top);
+      }
+      saved.set(id, { y: Math.round(window.scrollY), anchorId, anchorTop });
+    });
+  }
+  window.addEventListener('scroll', record, { passive: true });
+
+  function findAnchorArticle(anchorId) {
+    if (!anchorId) return null;
+    for (const art of document.querySelectorAll('article[data-testid="tweet"]')) {
+      if (getTweetIdFromArticle(art) !== anchorId) continue;
+      // Collapsed (hidden) articles report a zero rect — useless as a
+      // scroll reference; the caller falls back to the raw saved offset.
+      return art.getBoundingClientRect().height > 0 ? art : null;
+    }
+    return null;
+  }
+
+  // Veil: X restores to the wrong spot visibly, then our correction moves
+  // the page again — two visible jumps. Masking the content column (via a
+  // style rule, because X recreates <main> on back-navigation, so inline
+  // styles on the old node would be lost) from popstate until the
+  // correction lands turns that into one seamless fade-in at the right
+  // position, matching X's own skeleton-transition feel.
+  let veilTimer = 0;
+  function veilOn() {
+    if (document.getElementById('xvm-restore-veil')) return;
+    const s = document.createElement('style');
+    s.id = 'xvm-restore-veil';
+    s.textContent = 'main[role="main"]{opacity:0!important}';
+    document.documentElement.appendChild(s);
+    // Never leave the page masked if the watch dies without finishing.
+    clearTimeout(veilTimer);
+    veilTimer = setTimeout(veilOff, 2500);
+  }
+  function veilOff() {
+    clearTimeout(veilTimer);
+    const s = document.getElementById('xvm-restore-veil');
+    if (!s) return;
+    // Swapping the rule to a transition (instead of removing it) animates
+    // opacity 0 → 1 on whatever <main> exists by now.
+    s.textContent = 'main[role="main"]{transition:opacity .12s ease}';
+    setTimeout(() => s.remove(), 200);
+  }
+
+  window.addEventListener('popstate', () => {
+    const id = statusId();
+    const want = id && saved.get(id);
+    if (!want) return;
+    veilOn();
+    const state = { id };
+    watch = state;
+    const t0 = performance.now();
+    let lastY = window.scrollY;
+    let lastMove = t0;
+    let corrected = false;
+    const finish = () => {
+      if (watch === state) watch = null;
+      veilOff();
+      for (const ev of USER_EVENTS) window.removeEventListener(ev, onUserInput);
+    };
+    // The user taking over scrolling outranks any correction — but the
+    // macOS two-finger swipe-back gesture keeps emitting inertial wheel
+    // events (deltaX-dominant) for up to ~1s AFTER the navigation lands,
+    // and those must not count as the user scrolling the restored page.
+    const USER_EVENTS = ['wheel', 'touchstart', 'mousedown', 'keydown'];
+    const onUserInput = (e) => {
+      if (e.type === 'wheel' && Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      finish();
+    };
+    for (const ev of USER_EVENTS) window.addEventListener(ev, onUserInput, { passive: true });
+    const step = () => {
+      if (watch !== state) return;
+      const now = performance.now();
+      const y = window.scrollY;
+      if (Math.abs(y - lastY) > 1) {
+        lastY = y;
+        lastMove = now;
+      }
+      if (now - t0 > 6000) return finish();
+      // Wait for X's own restore to go quiet before judging it, so we never
+      // fight a scroll animation in progress. Kept tight (X settles within
+      // ~200ms of popstate in live traces): the sooner we correct, the less
+      // chance the user starts scrolling to find their place — which
+      // rightfully cancels the correction.
+      if (now - t0 > 250 && now - lastMove > 220) {
+        if (!corrected) {
+          // Anchor-first: when the recorded tweet is mounted, judge (and
+          // fix) by its on-screen delta — X can be wrong by <200px of raw
+          // scrollY and still show the wrong content. The raw offset is
+          // only a fallback for when the anchor is virtualized out.
+          const art = findAnchorArticle(want.anchorId);
+          if (art) {
+            const d = art.getBoundingClientRect().top - want.anchorTop;
+            if (Math.abs(d) <= 24) return finish();
+            corrected = true;
+            window.scrollTo(0, Math.round(y + d));
+          } else {
+            if (Math.abs(y - want.y) <= 200) return finish();
+            corrected = true;
+            // Coarse jump to the saved offset — mounts the right timeline
+            // region — then the next quiet period fine-tunes on the anchor.
+            window.scrollTo(0, want.y);
+          }
+          lastY = window.scrollY;
+          lastMove = now;
+        } else {
+          const art = findAnchorArticle(want.anchorId);
+          const d = art ? art.getBoundingClientRect().top - want.anchorTop : 0;
+          if (Math.abs(d) > 4) window.scrollTo(0, Math.round(window.scrollY + d));
+          return finish();
+        }
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+})();
