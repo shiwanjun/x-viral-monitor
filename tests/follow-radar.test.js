@@ -31,6 +31,8 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain("pill: pillFor(h, 'timeline')");
       expect(radarSrc).toContain('authorizationToken(window.__xvmNet?.getBearer?.() || FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE.authorization)');
       expect(radarSrc).toContain('absorbFromCell(cell, article)');
+      expect(radarSrc).toContain('net.onResponse(/graphql/i');
+      expect(radarSrc).toContain('const subscribeRetry = setInterval');
     });
 
     it('将胶囊插入推文右上角菜单前，并为取关历史增加会员门控', () => {
@@ -39,6 +41,7 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('style.flexDirection === \'row\'');
       expect(radarSrc).toContain('isFollowHistoryMember()');
       expect(radarSrc).toContain('el.style.display = pill ? \'\' : \'none\'');
+      expect(radarSrc).toContain("surface === 'profile' ? ' xvm-fr-user-pill' : ''");
     });
 
     it('document_start 时 body 尚未创建也不会让雷达初始化崩溃', () => {
@@ -65,6 +68,8 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain("/i/api/1.1/users/show.json");
       expect(radarSrc).toContain('host.insertBefore(pill, actionButton)');
       expect(radarSrc).toContain('lookupProfileCounts(batch)');
+      expect(radarSrc).toContain('PROFILE_LOOKUP_COOLDOWN_MS');
+      expect(radarSrc).toContain('function ingestProfileRow(row');
       expect(radarSrc).toContain('关注了你|follows you');
       expect(radarSrc).toContain("const owner = card.closest('[data-testid=\"UserCell\"]') || card");
     });

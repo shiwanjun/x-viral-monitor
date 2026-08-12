@@ -51,6 +51,7 @@
   };
   const TIMELINE_REFRESH_COOLDOWN_MS = 2500;
   const TIMELINE_REFRESH_BATCH = 30;
+  const PROFILE_LOOKUP_COOLDOWN_MS = 5 * 60 * 1000;
   // Toggle verbose console logging from the page console:
   //   localStorage.setItem('xvmFrDebug', '1')
   const FR_DEBUG = (() => { try { return localStorage.getItem('xvmFrDebug') === '1'; } catch (_) { return false; } })();
@@ -72,6 +73,7 @@
   let timelineRefreshPending = new Set();
   let relationshipLookupPending = new Map();
   let profileLookupPending = new Set();
+  let profileLookupAttemptedAt = new Map();
 
   // ─── i18n (XVM_SETTINGS_UPDATE broadcast, same as starchart.js) ─────
   window.addEventListener('message', (ev) => {
@@ -122,7 +124,11 @@
       const surface = el.getAttribute('data-xvm-fr-surface') || 'timeline';
       const pill = pillFor(h, surface);
       el.style.display = pill ? '' : 'none';
-      el.className = `xvm-fr-pill ${pill ? pill.cls : 'xvm-fr-rate'}`;
+      // Keep the surface marker. Dropping xvm-fr-user-pill here made the next
+      // MutationObserver pass believe the profile-card pill was missing and
+      // append another capsule every ~600 ms.
+      const surfaceClass = surface === 'profile' ? ' xvm-fr-user-pill' : '';
+      el.className = `xvm-fr-pill${surfaceClass} ${pill ? pill.cls : 'xvm-fr-rate'}`;
       el.textContent = pill ? pill.label : '';
       if (pill?.title) el.setAttribute('title', pill.title);
     }
@@ -262,14 +268,7 @@
           authorization: auth, 'x-csrf-token': getCsrf(),
           'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
         } });
-        if (!res.ok) continue;
-        const row = await res.json();
-        const fc = Number(row?.followers_count);
-        const fd = Number(row?.friends_count);
-        recordUser({ handle: L.normalizeHandle(row?.screen_name || handle), id: row?.id_str || row?.id, name: row?.name,
-          fc: Number.isFinite(fc) ? fc : undefined, fd: Number.isFinite(fd) ? fd : undefined,
-          f: typeof row?.following === 'boolean' ? (row.following ? 1 : 0) : undefined,
-          b: typeof row?.followed_by === 'boolean' ? (row.followed_by ? 1 : 0) : undefined });
+        if (res.ok) ingestProfileRow(await res.json(), handle);
       } catch (_) {}
       await sleep(120);
     }
@@ -281,15 +280,21 @@
     const net = window.__xvmNet;
     if (net?.onResponse) {
       dbg('subscribing via __xvmNet');
-      net.onResponse(/graphql/, async ({ url, response, source }) => {
+      // X's operation names and URLs are case-sensitive but the path may
+      // contain /graphql or /GraphQL across builds. Keep the matcher tolerant
+      // so the initial HomeTimeline payload (which already contains user
+      // public counts) is never skipped before the active fallback runs.
+      net.onResponse(/graphql/i, async ({ url, response, source }) => {
         try {
           const json = source === 'fetch' ? await response.clone().json() : await response.json();
           ingest(json, url);
         } catch (_) {}
       });
     } else {
-      // Fallback: if __xvmNet isn't ready (load-order race), hook fetch
-      // ourselves. This is a one-shot; once __xvmNet appears we don't switch.
+      // Fallback: if __xvmNet isn't ready (load-order race), hook fetch and
+      // subscribe again as soon as the shared net hook appears. The old
+      // one-shot behaviour permanently missed XHR GraphQL traffic whenever
+      // radar.js happened to execute before x-net-hook.js was ready.
       dbg('__xvmNet unavailable — installing own fetch hook');
       const origFetch = window.fetch;
       window.fetch = async function (...args) {
@@ -303,6 +308,19 @@
         } catch (_) {}
         return res;
       };
+      let retries = 0;
+      const subscribeRetry = setInterval(() => {
+        retries++;
+        if (window.__xvmNet?.onResponse) {
+          clearInterval(subscribeRetry);
+          window.__xvmNet.onResponse(/graphql/i, async ({ url, response, source }) => {
+            try {
+              const json = source === 'fetch' ? await response.clone().json() : await response.json();
+              ingest(json, url);
+            } catch (_) {}
+          });
+        } else if (retries >= 20) clearInterval(subscribeRetry);
+      }, 100);
     }
   }
 
@@ -504,14 +522,44 @@
   }
 
   function queueProfileLookup(handles) {
+    const now = Date.now();
     for (const handle of handles || []) {
-      const rec = state.users[L.normalizeHandle(handle)];
-      if (!rec || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd))) profileLookupPending.add(handle);
+      const h = L.normalizeHandle(handle);
+      if (!h) continue;
+      const rec = state.users[h];
+      const lastAttempt = profileLookupAttemptedAt.get(h) || 0;
+      if ((!rec || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd)))
+        && now - lastAttempt >= PROFILE_LOOKUP_COOLDOWN_MS) profileLookupPending.add(h);
     }
     if (!profileLookupPending.size) return;
     const batch = [...profileLookupPending].slice(0, TIMELINE_REFRESH_BATCH);
-    batch.forEach((handle) => profileLookupPending.delete(handle));
+    batch.forEach((handle) => {
+      profileLookupPending.delete(handle);
+      profileLookupAttemptedAt.set(handle, now);
+    });
     lookupProfileCounts(batch).catch(() => {});
+  }
+
+  function ingestProfileRow(row, fallbackHandle = '') {
+    if (!row || typeof row !== 'object') return false;
+    const result = row?.data?.user?.result || row?.data?.user_result_by_screen_name?.result || row?.result || row;
+    const legacy = result?.legacy || row?.legacy || row;
+    const core = result?.core || row?.core || {};
+    const handle = L.normalizeHandle(core?.screen_name || legacy?.screen_name || row?.screen_name || fallbackHandle);
+    if (!handle) return false;
+    const fc = Number(legacy?.followers_count ?? result?.public_metrics?.followers_count ?? row?.followers_count);
+    const fd = Number(legacy?.friends_count ?? result?.public_metrics?.following_count ?? row?.friends_count);
+    const f = result?.relationship_perspectives?.following ?? legacy?.following ?? row?.following;
+    const b = result?.relationship_perspectives?.followed_by ?? legacy?.followed_by ?? row?.followed_by;
+    return recordUser({
+      handle,
+      id: result?.rest_id || legacy?.id_str || row?.id_str || row?.id,
+      name: core?.name || legacy?.name || row?.name,
+      fc: Number.isFinite(fc) ? fc : undefined,
+      fd: Number.isFinite(fd) ? fd : undefined,
+      f: typeof f === 'boolean' ? (f ? 1 : 0) : undefined,
+      b: typeof b === 'boolean' ? (b ? 1 : 0) : undefined,
+    });
   }
 
   // ─── Active GraphQL calls ───────────────────────────────────────────
@@ -864,6 +912,7 @@
     scanFollowing: () => scanList('following'),
     scanFollowers: () => scanList('followers'),
     refreshHandles,
+    ingestProfileRow,
     applyToTimeline,
     abort: () => { scanControl.active = false; },
     getStatus: () => ({ status: statusText, busy: scanControl.active }),
