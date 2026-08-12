@@ -1410,6 +1410,8 @@
     }
 
     const EXTENSION_ID = 'bionhgeckdccebiialhfkdaniblofbmf';
+    // Local unpacked builds use a different stable Chrome ID. It is accepted
+    // only when the Worker explicitly returns it in EXTENSION_IDS.
     let extensionIds = [EXTENSION_ID];
     let handoffInFlight = null;
 

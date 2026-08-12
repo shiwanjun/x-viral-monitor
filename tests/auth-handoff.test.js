@@ -27,6 +27,7 @@ describe('website-to-extension auth handoff', () => {
     expect(worker).toMatch(/\/api\/extension-handoff\/exchange/);
     expect(worker).toMatch(/\/api\/extension-handoff\/config/);
     expect(worker).toMatch(/serializeSignedCookie/);
+    expect(read('worker/wrangler.auth.toml')).toMatch(/lfhpokjhhnpphhdadnaclbailchgkfnn/);
   });
 
   it('permits incoming extension messages only from the official website', () => {

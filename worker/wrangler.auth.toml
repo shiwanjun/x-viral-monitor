@@ -34,8 +34,8 @@ routes = [
 [vars]
 BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "test"
-ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,https://x.jieyiai.dev"
-EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf"
+ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
+EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
 
 [assets]
 directory = "../docs"
@@ -62,8 +62,8 @@ routes = [
 [env.test.vars]
 BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "test"
-ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,https://x.jieyiai.dev"
-EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf"
+ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
+EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
 
 [[env.test.d1_databases]]
 binding = "DB"
@@ -82,8 +82,8 @@ routes = [
 [env.production.vars]
 BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "prod"
-ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,https://x.jieyiai.dev"
-EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf"
+ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
+EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
 
 [[env.production.d1_databases]]
 binding = "DB"
