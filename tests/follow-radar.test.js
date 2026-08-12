@@ -54,6 +54,13 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain("label: `${tt('frRate', '关注率')} ${shortRate}`");
     });
 
+    it('会扫描用户卡片页面并复用关系胶囊', () => {
+      expect(radarSrc).toContain('querySelectorAll(\'[data-testid="UserCell"]\')');
+      expect(radarSrc).toContain('function applyToUserCards()');
+      expect(radarSrc).toContain("pillFor(handle, 'profile')");
+      expect(radarSrc).toContain('applyToUserCards();');
+    });
+
     it('不再把关系胶囊渲染到流速榜', () => {
       const contentSrc = readFileSync(resolve(repo, 'content.js'), 'utf8');
       expect(contentSrc).toContain('Follow relationship capsules belong to the timeline tweet header');
@@ -203,6 +210,17 @@ describe('follow-radar logic', () => {
         data: { user: { result: { legacy: { screen_name: 'alice', following: true, followed_by: false } } } },
       });
       expect(users).toEqual([expect.objectContaining({ handle: 'alice', f: 1, b: 0, fc: undefined, fd: undefined })]);
+    });
+
+    it('extracts public metrics counts used by the homepage ratio capsule', () => {
+      const users = L.extractUsers({
+        result: {
+          rest_id: '42',
+          core: { screen_name: 'alice' },
+          legacy: { public_metrics: { followers_count: 100, following_count: 25 } },
+        },
+      });
+      expect(users[0]).toMatchObject({ handle: 'alice', fc: 100, fd: 25 });
     });
 
     it('extracts from timeline user_results and core wrappers', () => {

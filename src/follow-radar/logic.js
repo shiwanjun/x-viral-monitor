@@ -112,6 +112,9 @@
     function boolField(obj, key) {
       return obj && typeof obj[key] === 'boolean' ? obj[key] : undefined;
     }
+    function firstNumber(...values) {
+      return values.find((value) => typeof value === 'number' && Number.isFinite(value));
+    }
     function relationshipField(node, legacy, core, key) {
       const candidates = [
         node?.relationship_perspectives,
@@ -166,8 +169,18 @@
             // Some timeline payloads no longer include public counts.  They
             // still include the relationship flags, so do not discard those
             // users just because the optional ratio data is absent.
-            fc: typeof legacy.followers_count === 'number' ? legacy.followers_count : undefined,
-            fd: typeof legacy.friends_count === 'number' ? legacy.friends_count : undefined,
+            fc: firstNumber(
+              legacy.followers_count,
+              legacy.public_metrics?.followers_count,
+              node.public_metrics?.followers_count,
+              node.followers_count,
+            ),
+            fd: firstNumber(
+              legacy.friends_count,
+              legacy.public_metrics?.following_count,
+              node.public_metrics?.following_count,
+              node.friends_count,
+            ),
           });
         }
         return; // consume the legacy subtree

@@ -118,7 +118,8 @@
       const h = el.getAttribute('data-xvm-fr-handle');
       if (!h) continue;
       interactive.push(h);
-      const pill = pillFor(h, 'timeline');
+      const surface = el.getAttribute('data-xvm-fr-surface') || 'timeline';
+      const pill = pillFor(h, surface);
       el.style.display = pill ? '' : 'none';
       el.className = `xvm-fr-pill ${pill ? pill.cls : 'xvm-fr-rate'}`;
       el.textContent = pill ? pill.label : '';
@@ -357,6 +358,7 @@
     if (caret && anchor?.parentElement === host && pill.parentElement !== host) host.insertBefore(pill, anchor);
     else if (!pill.parentElement) host.appendChild(pill);
     pill.setAttribute('data-xvm-fr-handle', handle);
+    pill.setAttribute('data-xvm-fr-surface', 'timeline');
     const data = pillFor(handle, 'timeline');
     if (!data) {
       pill.style.display = 'none';
@@ -373,7 +375,7 @@
   function applyToTimeline() {
     const articles = document.querySelectorAll('article[data-testid="tweet"]');
     if (!settings.enabled || !settings.timeline) {
-      document.querySelectorAll('.xvm-fr-pill').forEach((pill) => { pill.style.display = 'none'; });
+      document.querySelectorAll('article[data-testid="tweet"] .xvm-fr-pill').forEach((pill) => { pill.style.display = 'none'; });
       return;
     }
     let anyShown = false;
@@ -390,6 +392,55 @@
     scheduleTimelineRefresh(visibleHandles);
     if (articles.length) dbg('applyToTimeline:', articles.length, 'articles,', withData, 'with pill data,', Object.keys(state.users).length, 'users cached');
     return anyShown;
+  }
+
+  // ─── User cards on profile/followers/following/search pages ─────────
+  function userCardHandle(card) {
+    const nameBlock = card.querySelector('[data-testid="User-Name"]');
+    if (!nameBlock) return null;
+    for (const span of nameBlock.querySelectorAll('span')) {
+      const text = (span.textContent || '').trim();
+      if (text.startsWith('@')) return L.normalizeHandle(text);
+    }
+    const link = nameBlock.querySelector('a[role="link"][href^="/"]');
+    const match = (link?.getAttribute('href') || '').match(/^\/([A-Za-z0-9_]{1,15})(?:\/|$|\?)/);
+    return match ? L.normalizeHandle(match[1]) : null;
+  }
+
+  function ensureUserCardPill(card, handle) {
+    const nameBlock = card.querySelector('[data-testid="User-Name"]');
+    if (!nameBlock) return false;
+    let pill = nameBlock.querySelector('.xvm-fr-pill');
+    if (!pill) {
+      pill = document.createElement('span');
+      pill.className = 'xvm-fr-pill xvm-fr-user-pill';
+      nameBlock.appendChild(pill);
+    }
+    pill.setAttribute('data-xvm-fr-handle', handle);
+    pill.setAttribute('data-xvm-fr-surface', 'profile');
+    const data = pillFor(handle, 'profile');
+    pill.style.display = '';
+    pill.className = `xvm-fr-pill xvm-fr-user-pill ${data?.cls || 'xvm-fr-rate'}`;
+    pill.textContent = data?.label || `${tt('frRate', '关注率')} \u2014`;
+    if (data?.title) pill.setAttribute('title', data.title);
+    return true;
+  }
+
+  function applyToUserCards() {
+    if (!settings.enabled) return false;
+    const cards = document.querySelectorAll('[data-testid="UserCell"]');
+    const handles = [];
+    let shown = 0;
+    for (const card of cards) {
+      if (card.closest('article[data-testid="tweet"]')) continue;
+      const handle = userCardHandle(card);
+      if (!handle) continue;
+      handles.push(handle);
+      if (ensureUserCardPill(card, handle)) shown++;
+    }
+    scheduleTimelineRefresh(handles);
+    if (cards.length) dbg('applyToUserCards:', cards.length, 'cards,', shown, 'with pills');
+    return shown > 0;
   }
 
   // ─── Active GraphQL calls ───────────────────────────────────────────
@@ -429,10 +480,11 @@
   }
 
   function scheduleTimelineRefresh(handles) {
-    if (!settings.enabled || !settings.timeline) return;
+    if (!settings.enabled) return;
     for (const h of handles || []) {
       const rec = state.users[L.normalizeHandle(h)];
-      if (!rec || ![0, 1].includes(rec.f) || ![0, 1].includes(rec.b)) {
+      if (!rec || ![0, 1].includes(rec.f) || ![0, 1].includes(rec.b)
+        || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd))) {
         timelineRefreshPending.add(h);
       }
     }
@@ -704,6 +756,7 @@
     timelineTick = setTimeout(() => {
       timelineTick = 0;
       applyToTimeline();
+      applyToUserCards();
       scheduleEmit();
     }, 600);
   }
@@ -730,6 +783,7 @@
     // A timeline pass before storage completed could only see the live cache;
     // run one more after merging persisted relationships.
     applyToTimeline();
+    applyToUserCards();
     setStatus(tt('frScanIdle', '就绪'));
     emitStatus();
   })();
