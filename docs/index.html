@@ -1487,10 +1487,12 @@
     async function syncWebsiteLoginToExtension() {
       const result = await handoffToExtension();
       if (result?.ok) {
-        const opened = await extensionMessage(result.extensionId || extensionIds[0], { type: 'XVM_WEBSITE_AUTH_OPEN_WORKSPACE' });
         const button = document.getElementById('auth-button');
-        if (button) { button.textContent = opened?.ok ? '已打开插件工作台' : '已同步至插件工作台'; button.dataset.authenticated = 'true'; }
-        renderHandoffStatus(opened?.ok ? 'synced' : (result.alreadySynced ? 'alreadySynced' : 'synced'));
+        if (button) { button.textContent = '进入同步工作台'; button.dataset.authenticated = 'true'; }
+        renderHandoffStatus(result.alreadySynced ? 'alreadySynced' : 'synced');
+        // 登录后的主落地页是官网域名下的账户工作台。扩展仅保留本机
+        // 书签/扫描数据，不再接管官网登录后的页面跳转。
+        location.assign('/workspace.html');
       } else if (result?.reason === 'extension_unavailable') {
         renderHandoffStatus('unavailable');
       } else {
