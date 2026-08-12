@@ -2,8 +2,6 @@ const PLACEHOLDER = '[推文内容]';
 const DEFAULT_PROVIDER = 'x-grok';
 const DEFAULT_PLATFORM = 'openai';
 const DEFAULT_REPLY_COUNT = 10;
-const LICENSE_PROXY_URL = 'https://xvm-license.lengkuxiaomao.workers.dev';
-const LICENSE_PROXY_ACTIONS = new Set(['activate', 'validate', 'deactivate']);
 
 const OPENAI_COMPAT_PLATFORMS = {
   openai: {
@@ -77,6 +75,32 @@ const SYNC_DEFAULTS = {
   aiLanguage: 'auto',
 };
 const LOCAL_DEFAULTS = { xvmAiApiKey: '' };
+const AUTH_BACKEND_URL = 'https://x.jieyiai.dev';
+const SESSION_KEY = 'xvm_session_v1';
+const SUBSCRIPTION_KEY = 'xvm_subscription_v1';
+const WEBSITE_ORIGIN = 'https://x.jieyiai.dev';
+
+function isOfficialWebsiteSender(sender) {
+  try { return new URL(sender?.url || '').origin === WEBSITE_ORIGIN; }
+  catch (_) { return false; }
+}
+
+async function exchangeExtensionHandoff(code) {
+  if (!/^[a-f0-9]{64}$/.test(String(code || ''))) throw new Error('invalid_handoff');
+  const res = await fetch(`${AUTH_BACKEND_URL}/api/extension-handoff/exchange`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ code, extensionId: chrome.runtime.id }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.ok || !data?.token || !data?.user?.id) throw new Error(data?.error || 'handoff_exchange_failed');
+  await chrome.storage.local.set({
+    [SESSION_KEY]: { token: data.token, userId: data.user.id, email: data.user.email || null, name: data.user.name || null, signedInAt: Date.now() },
+    [SUBSCRIPTION_KEY]: { ...(data.subscription || {}), checkedAt: Date.now() },
+  });
+  try { await chrome.runtime.openOptionsPage(); } catch (_) {}
+  return { user: data.user, subscription: data.subscription || null };
+}
 
 function trimTrailingSlash(value) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -333,7 +357,7 @@ async function generateWithOpenAICompatible(config, payload, onProgress) {
   const headers = { 'content-type': 'application/json' };
   if (config.apiKey) headers.authorization = `Bearer ${config.apiKey}`;
   if (config.platform === 'openrouter') {
-    headers['x-title'] = 'X Viral Monitor';
+    headers['x-title'] = 'X-Tools';
   }
   let generated = '';
   let pending = '';
@@ -401,26 +425,8 @@ async function testOpenAICompatible(config) {
   return { ok: true, message: '连接测试通过' };
 }
 
-async function callLicenseProxy(action, body) {
-  if (!LICENSE_PROXY_ACTIONS.has(action)) throw new Error('unknown_license_action');
-  const res = await fetch(`${LICENSE_PROXY_URL}/${action}`, {
-    method: 'POST',
-    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  });
-  return res.json();
-}
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== 'string') return false;
-
-  if (message.type === 'XVM_LICENSE_PROXY') {
-    (async () => {
-      const payload = await callLicenseProxy(message.action, message.body);
-      sendResponse({ ok: true, payload });
-    })().catch((err) => sendResponse({ ok: false, error: err?.message || 'license_proxy_failed' }));
-    return true;
-  }
 
   if (message.type === 'XVM_AI_GET_PRESETS') {
     sendResponse({ ok: true, presets: OPENAI_COMPAT_PLATFORMS, defaults: SYNC_DEFAULTS });
@@ -470,4 +476,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return false;
+});
+
+// Only the first-party website may ask this extension to redeem a one-time
+// handoff code. The raw bearer token remains inside the extension worker.
+chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'XVM_WEBSITE_AUTH_PROBE') {
+    if (!isOfficialWebsiteSender(sender)) {
+      sendResponse({ ok: false, error: 'untrusted_sender' });
+      return false;
+    }
+    chrome.storage.local.get(SESSION_KEY, (items) => {
+      sendResponse({ ok: true, extensionId: chrome.runtime.id, email: items?.[SESSION_KEY]?.email || null });
+    });
+    return true;
+  }
+  if (message?.type === 'XVM_WEBSITE_AUTH_SIGN_OUT') {
+    if (!isOfficialWebsiteSender(sender)) {
+      sendResponse({ ok: false, error: 'untrusted_sender' });
+      return false;
+    }
+    chrome.storage.local.remove([SESSION_KEY, SUBSCRIPTION_KEY], () => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message?.type !== 'XVM_WEBSITE_AUTH_HANDOFF') return false;
+  if (!isOfficialWebsiteSender(sender)) {
+    sendResponse({ ok: false, error: 'untrusted_sender' });
+    return false;
+  }
+  exchangeExtensionHandoff(message.code)
+    .then(({ user, subscription }) => sendResponse({ ok: true, email: user.email || null, subscription }))
+    .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+  return true;
 });

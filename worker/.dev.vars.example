@@ -1,0 +1,23 @@
+# Wrangler local dev secrets — copy to .dev.vars and fill from .env.test
+# This file is the template (safe to commit). The real .dev.vars is git-ignored.
+#
+# Usage:
+#   cp worker/.dev.vars.example worker/.dev.vars
+#   # fill in values from .env.test
+#   cd worker && npx wrangler dev
+
+BETTER_AUTH_URL="http://localhost:8787"
+BETTER_AUTH_SECRET=""
+# Optional: only needed when enabling Better Auth Infrastructure plugins.
+BETTER_AUTH_API_KEY=""
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+WAFFO_MERCHANT_ID=""
+WAFFO_STORE_ID=""
+WAFFO_PRIVATE_KEY=""
+WAFFO_WEBHOOK_PUBLIC_KEY=""
+WAFFO_ENV="test"
+WAFFO_PRODUCT_MEMBERSHIP_MONTHLY=""
+WAFFO_PRODUCT_MEMBERSHIP_YEARLY=""
+ALLOWED_ORIGIN="chrome-extension://dkplofpecmjmbhgjgleeflcnfgfkdfpd"
+EXTENSION_IDS="dkplofpecmjmbhgjgleeflcnfgfkdfpd"

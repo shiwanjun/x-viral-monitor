@@ -1,43 +1,45 @@
-// === XVM Pro popup wiring (popup context) ===
+// === XVM popup Pro tab (popup context) — Waffo subscription + Better Auth ===
 //
-// Renders the tier banner + license activation/management section in the
-// extension popup. Popup runs in extension context so it has direct
-// chrome.storage + fetch access — but we keep tier resolution logic
-// IDENTICAL to src/premium/license/isolated.js to maintain the ADR-0004
-// "single tier resolution path" invariant in spirit (any future change to
-// tier rules must be made in BOTH places, which the license-slice tests
-// will catch via duplicated invariant assertions).
+// Renders the subscription hub in the extension popup. The Worker is the
+// only authority for subscription access; the popup keeps only the auth token
+// in storage and fetches the current plan whenever it opens or changes.
 //
-(() => {
-  const LICENSE_PROXY_URL = 'https://xvm-license.lengkuxiaomao.workers.dev';
-  const PRODUCT_SITE_URL = 'https://icy-cat.github.io/x-viral-monitor/#pro';
+// Auth flow:
+//   1. User clicks "Sign in with Google" → the popup opens the official
+//      website's Google login flow in a new tab.
+//   2. After OAuth, the website mints a short-lived, single-use handoff code
+//      and sends it to the installed extension.
+//   3. The background worker exchanges that code for a bearer token and this
+//      popup re-renders when chrome.storage changes.
+//
+// Subscription flow:
+//   1. Signed-in user picks monthly ($5.99) or annual ($57.50) billing → POST
+//      /api/checkout/start → get a Waffo checkoutUrl → open it.
+//   2. After payment, the Waffo webhook updates D1; we poll
+//      /api/subscription/status on popup open.
 
-  // All tier-resolution logic lives in tier-logic.js (loaded BEFORE us via
-  // <script> in popup.html). Single source of truth; eliminates mirror
-  // drift between this file and isolated.js.
+(() => {
+  const AUTH_BACKEND_URL = 'https://x.jieyiai.dev';
+  const PRODUCT_SITE_URL = 'https://x.jieyiai.dev';
+  const WAFFO_PORTAL_URL = 'https://pancake.waffo.ai/consumer/portal';
+
   const TL = globalThis.__xvmTierLogic;
-  const ENT = globalThis.__xvmEntitlement;
   if (!TL) {
-    console.error('[xvm pro] tier-logic.js not loaded before popup-pro.js — popup.html script order broken');
+    console.error('[xvm] tier-logic.js not loaded before popup-pro.js — popup.html script order broken');
     return;
   }
-  if (!ENT) {
-    console.error('[xvm pro] entitlement.js not loaded before popup-pro.js — popup.html script order broken');
-    return;
-  }
-  const { isXvmProduct, licenseStatusFrom, resolveTierFrom } = TL;
-  const { verifyEntitlementEnvelope } = ENT;
+  const { subscriptionStatusFrom } = TL;
   const isCommunityDev = globalThis.__xvmIsCommunityDevBuild === true;
 
-  const STORAGE_KEY = 'xvm_license_v1';
-  const TRIAL_KEY = 'xvm_trial_v1';
-  const DEVICE_ID_KEY = 'xvm_device_id';
-  const REVALIDATE_RETRY_MS = 5 * 60 * 1000;
-  const KEY_RE = /^[A-Za-z0-9_\-]{8,128}$/;
+  const SESSION_KEY = 'xvm_session_v1';
+  const SUBSCRIPTION_KEY = 'xvm_subscription_v1';
+  let currentSubscription = null;
 
-  // chrome.i18n wrapper — falls back to the key itself if the locale file
-  // is missing the entry (defensive; never block rendering on a stray
-  // i18n miss).
+  const PLANS = [
+    { id: 'monthly', price: '$5.99', periodKey: 'proPlanMonthlyPeriod', noteKey: 'proPlanMonthlyNote' },
+    { id: 'yearly', price: '$57.50', periodKey: 'proPlanYearlyPeriod', noteKey: 'proPlanYearlyNote', recommended: true },
+  ];
+
   function t(key, ...subs) {
     try {
       const v = chrome?.i18n?.getMessage?.(key, subs.length ? subs.map(String) : undefined);
@@ -59,8 +61,6 @@
       catch (_) { resolve(); }
     });
   }
-  // Non-blocker #2 fix: deactivate previously used a bare chrome.storage.local.remove.
-  // Wrap consistently so an unavailable storage layer doesn't throw.
   function storageRemove(key) {
     return new Promise((resolve) => {
       try { chrome.storage.local.remove(key, resolve); }
@@ -68,178 +68,102 @@
     });
   }
 
-  async function callProxy(action, body) {
-    if (LICENSE_PROXY_URL === '__XVM_LICENSE_WORKER__') {
-      throw new Error('worker_url_unset');
-    }
-    const res = await fetch(`${LICENSE_PROXY_URL}/${action}`, {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return res.json();
-  }
-
-  async function getDeviceId() {
-    let deviceId = await storageGet(DEVICE_ID_KEY, null);
-    if (!deviceId) {
-      deviceId = crypto.randomUUID();
-      await storageSet({ [DEVICE_ID_KEY]: deviceId });
-    }
-    return deviceId;
-  }
-
-  async function buildLicenseRecord({ key, envelope, deviceId, fallback = {} }) {
-    if (!envelope?.ok) return { ok: false, error: 'activation_failed', detail: envelope };
-    const data = envelope.data || {};
-    if (!isXvmProduct(data.product_id)) {
-      return { ok: false, error: 'wrong_product', detail: { actual: data.product_id } };
-    }
-    const inst = data.instance || {};
-    const instanceId = inst.id || fallback.instanceId || null;
-    const entitlement = await verifyEntitlementEnvelope(envelope, {
-      productId: data.product_id,
-      instanceId: instanceId || '',
-      key,
-    }, isXvmProduct);
-    if (!entitlement.ok) {
-      return { ok: false, error: entitlement.error, detail: entitlement.detail || null };
-    }
-    return {
-      ok: true,
-      record: {
-        ...fallback,
-        key,
-        instanceId,
-        instanceName: inst.name || fallback.instanceName || null,
-        deviceId: deviceId || fallback.deviceId || null,
-        activatedAt: fallback.activatedAt || Date.now(),
-        lastChecked: Date.now(),
-        lastTriedAt: Date.now(),
-        status: data.status || fallback.status || 'active',
-        activationLimit: data.activation_limit ?? fallback.activationLimit ?? null,
-        activationUsage: data.activation ?? fallback.activationUsage ?? null,
-        expiresAt: data.expires_at ? new Date(data.expires_at).getTime() : fallback.expiresAt ?? null,
-        productId: data.product_id || fallback.productId || null,
-        entitlementPayload: envelope.entitlement_payload || '',
-        entitlementSig: envelope.entitlement_sig || '',
-        entitlementExpiresAt: entitlement.entitlement.exp * 1000,
-      },
-    };
-  }
-
-  function shouldRevalidate(info, stored) {
-    if (!stored?.key || !stored?.instanceId) return false;
-    if (!['offline-grace', 'stale', 'invalid_entitlement', 'missing_product'].includes(info?.source)) return false;
-    return Date.now() - (stored.lastTriedAt || 0) > REVALIDATE_RETRY_MS;
-  }
-
-  async function revalidateStoredLicense(stored) {
-    try {
-      const envelope = await callProxy('validate', { key: stored.key, instance_id: stored.instanceId });
-      if (envelope?.ok && !isXvmProduct(envelope.data?.product_id)) {
-        await storageRemove(STORAGE_KEY);
-        return { ok: false, error: 'wrong_product' };
-      }
-      const built = await buildLicenseRecord({
-        key: stored.key,
-        envelope,
-        deviceId: stored.deviceId,
-        fallback: stored,
-      });
-      if (!built.ok) {
-        if (envelope?.data) {
-          const data = envelope.data;
-          await storageSet({
-            [STORAGE_KEY]: {
-              ...stored,
-              status: data.status || stored.status,
-              activationLimit: data.activation_limit ?? stored.activationLimit,
-              activationUsage: data.activation ?? stored.activationUsage,
-              expiresAt: data.expires_at ? new Date(data.expires_at).getTime() : stored.expiresAt,
-              productId: data.product_id || stored.productId,
-              lastTriedAt: Date.now(),
-            },
-          });
-        }
-        if (built.error === 'wrong_product') {
-          await storageRemove(STORAGE_KEY);
-          return built;
-        }
-        if (!envelope?.data) await storageSet({ [STORAGE_KEY]: { ...stored, lastTriedAt: Date.now() } });
-        return built;
-      }
-      await storageSet({ [STORAGE_KEY]: built.record });
-      return { ok: true, record: built.record };
-    } catch (e) {
-      await storageSet({ [STORAGE_KEY]: { ...stored, lastTriedAt: Date.now() } });
-      return { ok: false, error: 'network', message: String(e?.message || e) };
-    }
-  }
-
-  // ─── Tier resolver — delegates to tier-logic.js pure helpers ────────
-  async function resolveTier({ revalidate = true } = {}) {
+  // ─── Tier resolver ─────────────────────────────────────────────────
+  async function resolveTier() {
     if (isCommunityDev) {
-      return { tier: 'pro', daysLeft: 0, source: 'community-dev', record: null };
+      return { tier: 'max', daysLeft: 0, source: 'community-dev', record: null };
     }
-    const stored = await storageGet(STORAGE_KEY, null);
-    const trial  = await storageGet(TRIAL_KEY, null);
-    // Non-blocker #3 fix: tier-logic.js threads lic.source (expired /
-    // wrong_product / etc.) through the free path, so popup diagnostics
-    // are now accurate.
-    const info = resolveTierFrom(stored, trial, Date.now());
-    if (!revalidate || !shouldRevalidate(info, stored)) return info;
-    await revalidateStoredLicense(stored);
-    return resolveTierFrom(
-      await storageGet(STORAGE_KEY, null),
-      await storageGet(TRIAL_KEY, null),
-      Date.now(),
-    );
+    const status = subscriptionStatusFrom(currentSubscription, Date.now());
+    return { ...status, daysLeft: 0, record: currentSubscription };
   }
 
-  // ─── Activate via Worker proxy ──────────────────────────────────────
-  async function activate(rawKey) {
-    const key = String(rawKey || '').trim();
-    if (!KEY_RE.test(key)) return { ok: false, error: 'invalid_format' };
-    if (LICENSE_PROXY_URL === '__XVM_LICENSE_WORKER__') {
-      return { ok: false, error: 'worker_url_unset' };
-    }
-    const deviceId = await getDeviceId();
-    let envelope;
-    try {
-      envelope = await callProxy('activate', { key, instance_name: `Popup — ${deviceId.slice(0, 8)}` });
-    } catch (e) {
-      return { ok: false, error: 'network', message: String(e?.message || e) };
-    }
-    const built = await buildLicenseRecord({ key, envelope, deviceId });
-    if (!built.ok) return built;
-    await storageSet({ [STORAGE_KEY]: built.record });
-    return { ok: true, record: built.record };
+  function signInWithGoogle() {
+    // Extension and website cookies are deliberately isolated by Chrome.
+    // Let the first-party website own OAuth, then use its safe handoff flow
+    // to place the resulting bearer session into this extension.
+    const loginUrl = new URL(PRODUCT_SITE_URL);
+    loginUrl.searchParams.set('extensionLogin', '1');
+    loginUrl.hash = 'pricing';
+    window.open(loginUrl.toString(), '_blank', 'noopener');
   }
 
-  async function deactivate() {
-    const stored = await storageGet(STORAGE_KEY, null);
-    if (!stored?.key) return { ok: true };
-    if (LICENSE_PROXY_URL !== '__XVM_LICENSE_WORKER__' && stored.instanceId) {
+  async function signOut() {
+    // Best-effort: tell Better Auth to revoke the session, then clear local.
+    const session = await storageGet(SESSION_KEY, null);
+    if (session?.token) {
       try {
-        await fetch(`${LICENSE_PROXY_URL}/deactivate`, {
+        await fetch(`${AUTH_BACKEND_URL}/api/auth/sign-out`, {
           method: 'POST',
-          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: stored.key, instance_id: stored.instanceId }),
+          headers: { Authorization: `Bearer ${session.token}` },
         });
       } catch (_) {}
     }
-    await storageRemove(STORAGE_KEY);
-    return { ok: true };
+    await Promise.all([storageRemove(SESSION_KEY), storageRemove(SUBSCRIPTION_KEY)]);
+    refresh();
   }
 
-  // ─── Mask license key for display ───────────────────────────────────
-  function maskKey(k) {
-    if (!k) return '';
-    if (k.length <= 8) return '••••••••';
-    return `${k.slice(0, 4)}••••${k.slice(-4)}`;
+  // ─── Subscription: checkout + status poll ───────────────────────────
+  async function startCheckout(interval) {
+    const session = await storageGet(SESSION_KEY, null);
+    if (!session?.token) return { ok: false, error: 'not_signed_in' };
+    try {
+      const res = await fetch(`${AUTH_BACKEND_URL}/api/checkout/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ interval }),
+      });
+      const data = await res.json();
+      if (!data?.ok) return { ok: false, error: data?.error || 'checkout_failed' };
+      return { ok: true, checkoutUrl: data.checkoutUrl };
+    } catch (e) {
+      return { ok: false, error: 'network', message: String(e?.message || e) };
+    }
   }
 
+  async function refreshSubscriptionStatus() {
+    const session = await storageGet(SESSION_KEY, null);
+    if (!session?.token) {
+      currentSubscription = null;
+      return { ok: true, record: null };
+    }
+    const cached = await storageGet(SUBSCRIPTION_KEY, null);
+    if (cached?.plan) {
+      currentSubscription = {
+        userId: session.userId,
+        email: session.email,
+        plan: cached.plan,
+        status: cached.status,
+        currentPeriodEnd: cached.expiresAt,
+      };
+    }
+    try {
+      const res = await fetch(`${AUTH_BACKEND_URL}/api/subscription/status`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      if (res.status === 401 || res.status === 403) {
+        await Promise.all([storageRemove(SESSION_KEY), storageRemove(SUBSCRIPTION_KEY)]);
+        currentSubscription = null;
+        return { ok: false, error: 'auth_expired' };
+      }
+      if (!res.ok) return { ok: false, error: 'status_failed' };
+      const data = await res.json();
+      if (!data?.ok) return { ok: false, error: data?.error || 'status_failed' };
+      currentSubscription = {
+        userId: session.userId,
+        email: session.email,
+        plan: data.plan,
+        status: data.status,
+        currentPeriodEnd: data.expiresAt,
+      };
+      await storageSet({ [SUBSCRIPTION_KEY]: { ...data, checkedAt: Date.now() } });
+      return { ok: true, record: currentSubscription };
+    } catch (_) {
+      // Keep the cached membership status during a network outage.
+      return { ok: false, error: 'network' };
+    }
+  }
+
+  // ─── Render ─────────────────────────────────────────────────────────
   function appendProScope(container) {
     const scope = document.createElement('div');
     scope.className = 'pro-scope';
@@ -266,19 +190,22 @@
     container.appendChild(scope);
   }
 
-  // ─── Render (Pro tab banner, mock A) ───────────────────────────────
-  // Inside #xvm-pro-section (.pro-banner): big TIER label + sub + CTA
-  // row (or Pro meta when active). Tabs are the navigation, so no 3-dot
-  // menu. The header tier-chip syncs from body.dataset.tier.
+  function tierLabel(tier) {
+    if (isCommunityDev) return 'DEV';
+    return tier === 'pro' ? t('chipTierPro')
+      : t('chipTierFree');
+  }
+
   function render(container, info) {
     const tier = info.tier;
     const days = info.daysLeft;
     container.dataset.tier = tier;
     document.body.dataset.tier = tier;
     document.body.dataset.buildChannel = globalThis.__xvmBuildChannel || 'store';
-    window.__xvmProDays = (tier === 'trial') ? days : null;
+    window.__xvmProDays = null;
     window.dispatchEvent(new CustomEvent('xvm-pro-days', { detail: { days, tier } }));
     container.innerHTML = '';
+
     if (isCommunityDev) {
       const dev = document.createElement('div');
       dev.className = 'community-dev-badge';
@@ -286,18 +213,21 @@
       container.appendChild(dev);
     }
 
-    // Tier giant label
+    // Subscription status
+    const kicker = document.createElement('div');
+    kicker.className = 'subscription-kicker';
+    kicker.textContent = t(isCommunityDev ? 'communityDevKicker' : 'subscriptionKicker');
+    container.appendChild(kicker);
+
     const tierEl = document.createElement('div');
     tierEl.className = 'tier-big';
-    tierEl.textContent = isCommunityDev ? 'DEV' : tier === 'pro' ? 'PRO' : tier === 'trial' ? 'TRIAL' : 'FREE';
+    tierEl.textContent = tierLabel(tier);
     container.appendChild(tierEl);
 
     // Tier subtitle
     const sub = document.createElement('div');
     sub.className = 'tier-sub';
-    if (tier === 'trial') {
-      sub.textContent = days === 1 ? t('heroTrialDayOne') : t('heroTrialDaysLeft', days);
-    } else if (isCommunityDev) {
+    if (isCommunityDev) {
       sub.textContent = t('communityDevSub');
     } else if (tier === 'pro') {
       sub.textContent = t('heroProActive');
@@ -310,122 +240,129 @@
       appendProScope(container);
     }
 
-    if (tier !== 'pro' && !isCommunityDev) {
-      const row = document.createElement('div');
-      row.className = 'pro-cta-row';
-      const site = document.createElement('a');
-      site.className = 'pro-cta';
-      site.href = PRODUCT_SITE_URL; site.target = '_blank'; site.rel = 'noopener';
-      site.innerHTML = `<svg><use href="#icon-sparkles"/></svg> <span></span>`;
-      site.querySelector('span').textContent = t('proWebsiteLink');
-      row.appendChild(site);
-      // "Activate existing license" — opens inline form
-      const actLink = document.createElement('button');
-      actLink.type = 'button';
-      actLink.className = 'pro-cta secondary';
-      actLink.textContent = t('heroActivateExistingLink');
-      actLink.addEventListener('click', () => {
-        window.dispatchEvent(new CustomEvent('xvm-pro-nav', { detail: { view: 'activate' } }));
-      });
-      row.appendChild(actLink);
-      container.appendChild(row);
-    } else if (!isCommunityDev) {
-      const row = document.createElement('div');
-      row.className = 'pro-cta-row';
-      const manage = document.createElement('a');
-      manage.className = 'pro-cta secondary';
-      manage.href = PRODUCT_SITE_URL;
-      manage.target = '_blank'; manage.rel = 'noopener';
-      manage.textContent = t('proWebsiteLink');
-      row.appendChild(manage);
-      container.appendChild(row);
+    if (isCommunityDev) return;
 
-      const rec = info.record || {};
-      const meta = document.createElement('div');
-      meta.className = 'pro-meta';
-      meta.innerHTML = `
-        <div class="row"><span></span><code>${maskKey(rec.key)}</code></div>
-        ${rec.activatedAt ? `<div class="row"><span></span><span>${new Date(rec.activatedAt).toLocaleDateString()}</span></div>` : ''}
-        ${rec.expiresAt   ? `<div class="row"><span></span><span>${new Date(rec.expiresAt).toLocaleDateString()}</span></div>` : ''}
-      `;
-      const labels = ['proLicenseField'];
-      if (rec.activatedAt) labels.push('proActivatedField');
-      if (rec.expiresAt)   labels.push('proExpiresField');
-      meta.querySelectorAll('.row > span:first-child').forEach((el, i) => {
-        el.textContent = t(labels[i] || '');
-      });
-      container.appendChild(meta);
+    // ─── Action area ────────────────────────────────────────────────
+    const isPaid = tier === 'pro';
+
+    if (!isPaid) {
+      // Not subscribed: show Google sign-in + plan cards.
+      renderSignInAndPlans(container);
+    } else {
+      // Subscribed: show status + manage.
+      renderSubscribed(container, info);
     }
   }
 
-  // === Activation submit handler — wired by popup-dashboard via the
-  // view-activate form. Imported here so the activate() logic stays
-  // co-located with the rest of license operations.
-  function wireActivateView() {
-    const btn   = document.getElementById('activate-submit');
-    const cancel = document.getElementById('activate-cancel');
-    const keyEl = document.getElementById('activate-key');
-    const msg   = document.getElementById('activate-msg');
-    if (!btn || !keyEl || !msg) return;
-    cancel?.addEventListener('click', () => {
-      window.dispatchEvent(new CustomEvent('xvm-pro-nav', { detail: { view: 'dashboard' } }));
-    });
-    btn.addEventListener('click', async () => {
-      const key = keyEl.value.trim();
-      if (!KEY_RE.test(key)) {
-        msg.textContent = t('proActErrFormat');
-        msg.dataset.kind = 'err';
-        return;
-      }
-      btn.disabled = true; btn.textContent = t('proActivating');
-      const res = await activate(key);
-      btn.disabled = false; btn.textContent = t('proActivateBtn');
-      if (res.ok) {
-        msg.textContent = t('proActivatedOk');
-        msg.dataset.kind = 'ok';
-        // Auto-return to dashboard so user sees the new Pro hero.
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('xvm-pro-nav', { detail: { view: 'dashboard' } }));
-        }, 800);
-        refresh();
-      } else if (res.error === 'worker_url_unset') {
-        msg.textContent = t('proActErrWorkerUnset');
-        msg.dataset.kind = 'err';
-      } else {
-        const detail = res.error + (res.message ? ' — ' + res.message : '');
-        msg.textContent = t('proActErrGeneric', detail);
-        msg.dataset.kind = 'err';
-      }
-    });
+  function renderSignInAndPlans(container) {
+    // Google sign-in button
+    const signInRow = document.createElement('div');
+    signInRow.className = 'pro-cta-row';
+    const signInBtn = document.createElement('button');
+    signInBtn.type = 'button';
+    signInBtn.className = 'pro-cta';
+    signInBtn.innerHTML = `<svg><use href="#icon-sparkles"/></svg> <span></span>`;
+    signInBtn.querySelector('span').textContent = t('proSignInGoogle');
+    signInBtn.addEventListener('click', signInWithGoogle);
+    signInRow.appendChild(signInBtn);
+    container.appendChild(signInRow);
+
+    // Plan cards (only meaningful once signed in, but visible to entice).
+    const plansWrap = document.createElement('div');
+    plansWrap.className = 'pro-plans';
+    for (const plan of PLANS) {
+      const card = document.createElement('div');
+      card.className = `pro-plan-card plan-${plan.id}${plan.recommended ? ' is-recommended' : ''}`;
+      card.innerHTML = `
+        <div class="plan-name">${t('proPlanName')}</div>
+        <div class="plan-note">${t(plan.noteKey)}</div>
+        <div class="plan-price">${plan.price}<span class="plan-period">${t(plan.periodKey)}</span></div>
+        <button type="button" class="plan-btn">${t('proPlanChoose')}</button>
+        ${plan.recommended ? `<span class="plan-recommended">${t('proPlanRecommended')}</span>` : ''}
+      `;
+      card.querySelector('.plan-btn').addEventListener('click', async () => {
+        const session = await storageGet(SESSION_KEY, null);
+        if (!session?.token) {
+          signInWithGoogle();
+          return;
+        }
+        const res = await startCheckout(plan.id);
+        if (res.ok && res.checkoutUrl) {
+          window.open(res.checkoutUrl, '_blank');
+        }
+      });
+      plansWrap.appendChild(card);
+    }
+    container.appendChild(plansWrap);
+
+    // Website link
+    const row = document.createElement('div');
+    row.className = 'pro-cta-row';
+    const site = document.createElement('a');
+    site.className = 'pro-cta secondary';
+    site.href = PRODUCT_SITE_URL; site.target = '_blank'; site.rel = 'noopener';
+    site.textContent = t('proWebsiteLink');
+    row.appendChild(site);
+    container.appendChild(row);
   }
-  document.addEventListener('DOMContentLoaded', wireActivateView);
+
+  function renderSubscribed(container, info) {
+    const row = document.createElement('div');
+    row.className = 'pro-cta-row';
+
+    // Manage subscription (Waffo customer portal)
+    const manage = document.createElement('a');
+    manage.className = 'pro-cta secondary';
+    manage.href = WAFFO_PORTAL_URL;
+    manage.target = '_blank'; manage.rel = 'noopener';
+    manage.textContent = t('proManageBtn');
+    row.appendChild(manage);
+
+    // Sign out
+    const signOutBtn = document.createElement('button');
+    signOutBtn.type = 'button';
+    signOutBtn.className = 'pro-cta secondary';
+    signOutBtn.textContent = t('proSignOut');
+    signOutBtn.addEventListener('click', signOut);
+    row.appendChild(signOutBtn);
+    container.appendChild(row);
+
+    // Subscription meta
+    const session = info.record || {};
+    const meta = document.createElement('div');
+    meta.className = 'pro-meta';
+    const periodEnd = session.currentPeriodEnd;
+    meta.innerHTML = `
+      <div class="row"><span></span><code>${tierLabel(info.tier)}</code></div>
+      ${session.email ? `<div class="row"><span></span><span>${session.email}</span></div>` : ''}
+      ${periodEnd ? `<div class="row"><span></span><span>${new Date(periodEnd).toLocaleDateString()}</span></div>` : ''}
+    `;
+    const labels = ['proPlanField'];
+    if (session.email) labels.push('proEmailField');
+    if (periodEnd) labels.push('proRenewsField');
+    meta.querySelectorAll('.row > span:first-child').forEach((el, i) => {
+      el.textContent = t(labels[i] || '');
+    });
+    container.appendChild(meta);
+  }
 
   async function refresh() {
     const container = document.getElementById('xvm-pro-section');
     if (!container) return;
+    await refreshSubscriptionStatus();
     const info = await resolveTier();
     render(container, info);
   }
 
-  // Re-render on storage changes (license activate/deactivate from elsewhere)
+  // Re-render on storage changes (auth token stored, subscription updated).
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
-      if (STORAGE_KEY in changes || TRIAL_KEY in changes) refresh();
+      if (SESSION_KEY in changes || SUBSCRIPTION_KEY in changes) refresh();
     });
   } catch (_) {}
 
-  // Seed trial in popup context too (defensive — isolated.js does this on
-  // any x.com page load, but popup may open before user visits x.com on a
-  // fresh install).
-  (async () => {
-    const rec = await storageGet(TRIAL_KEY, null);
-    if (!rec || !Number.isFinite(rec.startAt)) {
-      await storageSet({ [TRIAL_KEY]: { startAt: Date.now() } });
-    }
-    refresh();
-  })();
+  refresh();
 
-  // Expose for popup.js if it wants to manually trigger refresh.
-  window.__xvmProPopup = { refresh, resolveTier };
+  window.__xvmProPopup = { refresh, resolveTier, signInWithGoogle, signOut, startCheckout };
 })();

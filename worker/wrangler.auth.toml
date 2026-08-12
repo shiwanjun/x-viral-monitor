@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────────
+# X-Tools Auth Worker — Better Auth + Waffo subscription backend.
+#
+# This Worker contains the complete Better Auth + Waffo subscription backend.
+#
+# Deploy:  npx wrangler deploy -c wrangler.auth.toml [--env test|production]
+# Dev:     npx wrangler dev -c wrangler.auth.toml
+#
+# Before first deploy:
+#   1. npx wrangler d1 create xvm-auth           → paste database_id below
+#   2. npx wrangler d1 execute xvm-auth --file=./auth/schema.sql
+#   3. Set secrets (from .env.test):
+#        npx wrangler secret put BETTER_AUTH_SECRET       -c wrangler.auth.toml
+#        npx wrangler secret put GOOGLE_CLIENT_ID         -c wrangler.auth.toml
+#        npx wrangler secret put GOOGLE_CLIENT_SECRET     -c wrangler.auth.toml
+#        npx wrangler secret put WAFFO_MERCHANT_ID        -c wrangler.auth.toml
+#        npx wrangler secret put WAFFO_STORE_ID           -c wrangler.auth.toml
+#        npx wrangler secret put WAFFO_PRIVATE_KEY        -c wrangler.auth.toml
+#        npx wrangler secret put WAFFO_WEBHOOK_PUBLIC_KEY -c wrangler.auth.toml
+# ─────────────────────────────────────────────────────────────────────
+
+name = "xtool"
+main = "src/index.ts"
+compatibility_date = "2026-05-24"
+compatibility_flags = ["nodejs_compat"]
+
+# Route — the Worker is deployed as "xtool" and reachable via the custom
+# domain https://x.jieyiai.dev (test and production both use it).
+routes = [
+  { pattern = "https://x.jieyiai.dev/*", zone_name = "jieyiai.dev" },
+]
+
+# Defaults (shared across envs unless overridden)
+[vars]
+BETTER_AUTH_URL = "https://x.jieyiai.dev"
+WAFFO_ENV = "test"
+ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,https://x.jieyiai.dev"
+EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf"
+
+[assets]
+directory = "../docs"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+# Production authentication data. The prelaunch database is bound only in
+# the test environment below, keeping production sessions and subscriptions
+# separate from pre-release testing.
+[[d1_databases]]
+binding = "DB"
+database_name = "jieyi-auth"
+database_id = "d83e9d6e-0b2b-4c4c-b8ce-e83082188a6d"
+
+# ─── Test environment ────────────────────────────────────────────────
+# Deploy:  npx wrangler deploy -c wrangler.auth.toml --env test
+# Reachable at: https://x.jieyiai.dev
+[env.test]
+name = "xtool"
+routes = [
+  { pattern = "https://x.jieyiai.dev/*", zone_name = "jieyiai.dev" },
+]
+
+[env.test.vars]
+BETTER_AUTH_URL = "https://x.jieyiai.dev"
+WAFFO_ENV = "test"
+ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,https://x.jieyiai.dev"
+EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf"
+
+[[env.test.d1_databases]]
+binding = "DB"
+database_name = "jieyi-auth-prelaunch"
+database_id = "35e5099a-158c-4362-89b5-84cdfae4f272"
+
+# ─── Production environment ──────────────────────────────────────────
+# Deploy:  npx wrangler deploy -c wrangler.auth.toml --env production
+# Reachable at: https://x.jieyiai.dev
+[env.production]
+name = "xtool"
+routes = [
+  { pattern = "https://x.jieyiai.dev/*", zone_name = "jieyiai.dev" },
+]
+
+[env.production.vars]
+BETTER_AUTH_URL = "https://x.jieyiai.dev"
+WAFFO_ENV = "prod"
+ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,https://x.jieyiai.dev"
+EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "jieyi-auth"
+database_id = "d83e9d6e-0b2b-4c4c-b8ce-e83082188a6d"

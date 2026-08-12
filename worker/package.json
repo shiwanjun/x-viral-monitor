@@ -1,0 +1,26 @@
+{
+  "name": "xvm-auth-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy:test": "wrangler deploy --env test",
+    "deploy:prod": "wrangler deploy --env production",
+    "bootstrap:waffo": "node scripts/waffo-bootstrap.mjs",
+    "db:generate": "npx @better-auth/cli generate --config ./auth/better-auth.config.ts",
+    "db:migrate:local": "wrangler d1 execute xvm-auth --local --file=./auth/schema.sql",
+    "db:migrate:remote": "wrangler d1 execute xvm-auth --remote --file=./auth/schema.sql",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@waffo/pancake-ts": "^0.18.0",
+    "better-auth": "1.6.26",
+    "hono": "4.13.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}
