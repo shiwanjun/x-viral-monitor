@@ -120,9 +120,14 @@
       visited.add(node);
       budget--;
       const legacy = node.legacy;
+      const core = node.core;
+      // X 近期的时间线 UserResults 把 screen_name/name 从 legacy 挪到了
+      // core，关系字段仍在 result.relationship_perspectives。旧逻辑只认
+      // legacy.screen_name，会把整条用户记录跳过，导致时间线没有任何胶囊。
+      const screenName = core?.screen_name || legacy?.screen_name;
       if (legacy && typeof legacy === 'object'
-        && typeof legacy.screen_name === 'string') {
-        const handle = normalizeHandle(legacy.screen_name);
+        && typeof screenName === 'string') {
+        const handle = normalizeHandle(screenName);
         if (handle && !seen.has(handle)) {
           seen.add(handle);
           // X stores the relationship in TWO places: the older legacy.following
@@ -135,7 +140,7 @@
           const bFinal = (rp && typeof rp.followed_by === 'boolean') ? rp.followed_by : legacy.followed_by;
           out.push({
             handle,
-            name: legacy.name || '',
+            name: core?.name || legacy.name || '',
             f: typeof fFinal === 'boolean' ? (fFinal ? 1 : 0) : undefined,
             b: typeof bFinal === 'boolean' ? (bFinal ? 1 : 0) : undefined,
             // Some timeline payloads no longer include public counts.  They

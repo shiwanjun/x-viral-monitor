@@ -133,6 +133,23 @@ describe('follow-radar logic', () => {
       expect(users[0]).toMatchObject({ handle: 'alice', f: 1, b: 0, fc: 10, fd: 20 });
     });
 
+    it('extracts current X user shape with handle in core', () => {
+      const users = L.extractUsers({
+        data: {
+          user: {
+            result: {
+              core: { screen_name: 'Alice', name: '新版 Alice' },
+              legacy: { followers_count: 10, friends_count: 20 },
+              relationship_perspectives: { following: true, followed_by: true },
+            },
+          },
+        },
+      });
+      expect(users).toEqual([expect.objectContaining({
+        handle: 'alice', name: '新版 Alice', f: 1, b: 1, fc: 10, fd: 20,
+      })]);
+    });
+
     it('keeps relationship flags when a timeline user omits public counts', () => {
       const users = L.extractUsers({
         data: { user: { result: { legacy: { screen_name: 'alice', following: true, followed_by: false } } } },
