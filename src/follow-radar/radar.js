@@ -350,6 +350,16 @@
     return handle;
   }
 
+  function absorbUserCardRelation(card, handle) {
+    const text = card.textContent || '';
+    const buttonText = [...card.querySelectorAll('button')].map((button) => (button.textContent || '').trim()).join(' ');
+    const u = { handle };
+    if (/关注了你|follows you|フォローされています|Đang theo dõi bạn/i.test(text)) u.b = 1;
+    if (/正在关注|following/i.test(buttonText)) u.f = 1;
+    else if (/回关|关注|follow/i.test(buttonText) && !/正在关注|following/i.test(buttonText)) u.f = 0;
+    if (u.f !== undefined || u.b !== undefined) recordUser(u);
+  }
+
   // Inject / refresh a pill next to the username row of a tweet (mirrors the
   // x互关雷达 placement the user wants). We inject into the User-Name row.
   function ensureTimelinePill(article, handle) {
@@ -476,6 +486,7 @@
       const handle = userCardHandle(card);
       if (!handle) continue;
       handles.push(handle);
+      absorbUserCardRelation(card, handle);
       if (ensureUserCardPill(card, handle)) shown++;
     }
     scheduleTimelineRefresh(handles);

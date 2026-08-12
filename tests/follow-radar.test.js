@@ -64,6 +64,8 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('applyToUserCards();');
       expect(radarSrc).toContain("/i/api/1.1/users/show.json");
       expect(radarSrc).toContain('host.insertBefore(pill, actionButton)');
+      expect(radarSrc).toContain('lookupProfileCounts(batch)');
+      expect(radarSrc).toContain('关注了你|follows you');
     });
 
     it('不再把关系胶囊渲染到流速榜', () => {
