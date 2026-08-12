@@ -62,6 +62,8 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('function applyToUserCards()');
       expect(radarSrc).toContain("pillFor(handle, 'profile')");
       expect(radarSrc).toContain('applyToUserCards();');
+      expect(radarSrc).toContain("/i/api/1.1/users/show.json");
+      expect(radarSrc).toContain('host.insertBefore(pill, actionButton)');
     });
 
     it('不再把关系胶囊渲染到流速榜', () => {

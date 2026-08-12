@@ -71,6 +71,7 @@
   let timelineRefreshTimer = 0;
   let timelineRefreshPending = new Set();
   let relationshipLookupPending = new Map();
+  let profileLookupPending = new Set();
 
   // ─── i18n (XVM_SETTINGS_UPDATE broadcast, same as starchart.js) ─────
   window.addEventListener('message', (ev) => {
@@ -250,6 +251,32 @@
     scheduleEmit();
   }
 
+  async function lookupProfileCounts(handles) {
+    const auth = authorizationToken(window.__xvmNet?.getBearer?.() || FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE.authorization);
+    if (!auth) return;
+    for (const handle of [...new Set(handles || [])].slice(0, TIMELINE_REFRESH_BATCH)) {
+      try {
+        const url = new URL('/i/api/1.1/users/show.json', location.origin);
+        url.searchParams.set('screen_name', handle);
+        const res = await fetch(url.toString(), { credentials: 'include', headers: {
+          authorization: auth, 'x-csrf-token': getCsrf(),
+          'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
+        } });
+        if (!res.ok) continue;
+        const row = await res.json();
+        const fc = Number(row?.followers_count);
+        const fd = Number(row?.friends_count);
+        recordUser({ handle: L.normalizeHandle(row?.screen_name || handle), id: row?.id_str || row?.id, name: row?.name,
+          fc: Number.isFinite(fc) ? fc : undefined, fd: Number.isFinite(fd) ? fd : undefined,
+          f: typeof row?.following === 'boolean' ? (row.following ? 1 : 0) : undefined,
+          b: typeof row?.followed_by === 'boolean' ? (row.followed_by ? 1 : 0) : undefined });
+      } catch (_) {}
+      await sleep(120);
+    }
+    schedulePersist();
+    scheduleEmit();
+  }
+
   function subscribe() {
     const net = window.__xvmNet;
     if (net?.onResponse) {
@@ -420,12 +447,14 @@
 
   function ensureUserCardPill(card, handle) {
     const nameBlock = card.querySelector('[data-testid="User-Name"]');
-    const host = nameBlock || card.querySelector('div[dir="ltr"]')?.parentElement || card;
-    let pill = host.querySelector('.xvm-fr-pill');
+    const actionButton = [...card.querySelectorAll('button')].find((button) => /^(回关|正在关注|关注|Follow|Following|关注了你)/i.test((button.textContent || '').trim()));
+    const host = actionButton?.parentElement || nameBlock || card.querySelector('div[dir="ltr"]')?.parentElement || card;
+    let pill = card.querySelector('.xvm-fr-user-pill');
     if (!pill) {
       pill = document.createElement('span');
       pill.className = 'xvm-fr-pill xvm-fr-user-pill';
-      host.appendChild(pill);
+      if (actionButton && actionButton.parentElement === host) host.insertBefore(pill, actionButton);
+      else host.appendChild(pill);
     }
     pill.setAttribute('data-xvm-fr-handle', handle);
     pill.setAttribute('data-xvm-fr-surface', 'profile');
@@ -450,6 +479,15 @@
       if (ensureUserCardPill(card, handle)) shown++;
     }
     scheduleTimelineRefresh(handles);
+    for (const handle of handles) {
+      const rec = state.users[L.normalizeHandle(handle)];
+      if (!rec || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd))) profileLookupPending.add(handle);
+    }
+    if (profileLookupPending.size) {
+      const batch = [...profileLookupPending].slice(0, TIMELINE_REFRESH_BATCH);
+      batch.forEach((handle) => profileLookupPending.delete(handle));
+      lookupProfileCounts(batch).catch(() => {});
+    }
     if (cards.length) dbg('applyToUserCards:', cards.length, 'cards,', shown, 'with pills');
     return shown > 0;
   }
