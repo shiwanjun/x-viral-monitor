@@ -427,6 +427,7 @@
       if (ensureTimelinePill(article, handle)) { anyShown = true; withData++; }
     }
     scheduleTimelineRefresh(visibleHandles);
+    queueProfileLookup(visibleHandles);
     if (articles.length) dbg('applyToTimeline:', articles.length, 'articles,', withData, 'with pill data,', Object.keys(state.users).length, 'users cached');
     return anyShown;
   }
@@ -456,12 +457,15 @@
   }
 
   function ensureUserCardPill(card, handle) {
+    const owner = card.closest('[data-testid="UserCell"]') || card;
     const nameBlock = card.querySelector('[data-testid="User-Name"]');
-    const actionButton = [...card.querySelectorAll('button')].find((button) => /^(回关|正在关注|关注|Follow|Following|关注了你)/i.test((button.textContent || '').trim()));
-    const host = actionButton?.parentElement || nameBlock || card.querySelector('div[dir="ltr"]')?.parentElement || card;
-    let pill = card.querySelector('.xvm-fr-user-pill');
-    if (!pill) {
-      pill = document.createElement('span');
+    const actionButton = [...owner.querySelectorAll('button')].find((button) => /^(回关|正在关注|关注|Follow|Following|关注了你)/i.test((button.textContent || '').trim()));
+    const host = actionButton?.parentElement || nameBlock || owner.querySelector('div[dir="ltr"]')?.parentElement || owner;
+    const existingPills = [...owner.querySelectorAll('.xvm-fr-user-pill')];
+    const isNew = existingPills.length === 0;
+    const pill = existingPills[0] || document.createElement('span');
+    existingPills.slice(1).forEach((extra) => extra.remove());
+    if (isNew) {
       pill.className = 'xvm-fr-pill xvm-fr-user-pill';
       if (actionButton && actionButton.parentElement === host) host.insertBefore(pill, actionButton);
       else host.appendChild(pill);
@@ -478,7 +482,11 @@
 
   function applyToUserCards() {
     if (!settings.enabled) return false;
-    const cards = document.querySelectorAll('[data-testid="UserCell"], li[role="listitem"]');
+    const markedCards = [...document.querySelectorAll('[data-testid="UserCell"]')];
+    const cards = markedCards.length
+      ? markedCards
+      : [...document.querySelectorAll('li[role="listitem"]')].filter((card) => card.querySelector('a[role="link"][href^="/"]')
+        && !card.parentElement?.closest('li[role="listitem"]'));
     const handles = [];
     let shown = 0;
     for (const card of cards) {
@@ -490,17 +498,20 @@
       if (ensureUserCardPill(card, handle)) shown++;
     }
     scheduleTimelineRefresh(handles);
-    for (const handle of handles) {
+    queueProfileLookup(handles);
+    if (cards.length) dbg('applyToUserCards:', cards.length, 'cards,', shown, 'with pills');
+    return shown > 0;
+  }
+
+  function queueProfileLookup(handles) {
+    for (const handle of handles || []) {
       const rec = state.users[L.normalizeHandle(handle)];
       if (!rec || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd))) profileLookupPending.add(handle);
     }
-    if (profileLookupPending.size) {
-      const batch = [...profileLookupPending].slice(0, TIMELINE_REFRESH_BATCH);
-      batch.forEach((handle) => profileLookupPending.delete(handle));
-      lookupProfileCounts(batch).catch(() => {});
-    }
-    if (cards.length) dbg('applyToUserCards:', cards.length, 'cards,', shown, 'with pills');
-    return shown > 0;
+    if (!profileLookupPending.size) return;
+    const batch = [...profileLookupPending].slice(0, TIMELINE_REFRESH_BATCH);
+    batch.forEach((handle) => profileLookupPending.delete(handle));
+    lookupProfileCounts(batch).catch(() => {});
   }
 
   // ─── Active GraphQL calls ───────────────────────────────────────────

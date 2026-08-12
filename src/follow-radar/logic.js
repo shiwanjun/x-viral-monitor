@@ -105,6 +105,7 @@
   function extractUsers(json) {
     const out = [];
     const seen = new Set();
+    const outputByHandle = new Map();
     const visited = new WeakSet();
     const MAX_DEPTH = 14;
     const NODE_BUDGET = 200000;
@@ -152,8 +153,7 @@
       const screenName = core?.screen_name || legacy?.screen_name;
       if (typeof screenName === 'string') {
         const handle = normalizeHandle(screenName);
-        if (handle && !seen.has(handle)) {
-          seen.add(handle);
+        if (handle) {
           // X stores the relationship in TWO places: the older legacy.following
           // and the newer relationship_perspectives.following (a sibling of
           // legacy on the same result node). Merge both so we don't miss the
@@ -162,7 +162,7 @@
           const rp = node.relationship_perspectives;
           const fFinal = relationshipField(node, legacy, core, 'following');
           const bFinal = relationshipField(node, legacy, core, 'followed_by');
-          out.push({
+          const user = {
             handle,
             id: typeof node.rest_id === 'string' ? node.rest_id
               : (typeof node.id_str === 'string' ? node.id_str
@@ -191,7 +191,16 @@
               node.friends_count,
               node.friendsCount,
             ),
-          });
+          };
+          const prior = outputByHandle.get(handle);
+          if (prior) {
+            for (const key of ['id', 'name', 'f', 'b', 'fc', 'fd']) {
+              if (user[key] !== undefined) prior[key] = user[key];
+            }
+          } else {
+            outputByHandle.set(handle, user);
+            out.push(user);
+          }
         }
         return; // consume the legacy subtree
       }

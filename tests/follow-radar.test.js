@@ -55,7 +55,7 @@ describe('follow-radar logic', () => {
     });
 
     it('会扫描用户卡片页面并复用关系胶囊', () => {
-      expect(radarSrc).toContain('querySelectorAll(\'[data-testid="UserCell"], li[role="listitem"]\')');
+      expect(radarSrc).toContain('querySelectorAll(\'[data-testid="UserCell"]\')');
       expect(radarSrc).toContain('li[role="listitem"]');
       expect(radarSrc).toContain('UserCell cards in the current X build omit User-Name');
       expect(radarSrc).toContain("const match = (link.getAttribute('href') || '').match(/^\\/([A-Za-z0-9_]{1,15})$/)");
@@ -66,6 +66,7 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('host.insertBefore(pill, actionButton)');
       expect(radarSrc).toContain('lookupProfileCounts(batch)');
       expect(radarSrc).toContain('关注了你|follows you');
+      expect(radarSrc).toContain("const owner = card.closest('[data-testid=\"UserCell\"]') || card");
     });
 
     it('不再把关系胶囊渲染到流速榜', () => {
@@ -239,6 +240,15 @@ describe('follow-radar logic', () => {
         },
       });
       expect(users[0]).toMatchObject({ handle: 'alice', fc: 200, fd: 50 });
+    });
+
+    it('merges duplicate user nodes so later counts are not discarded', () => {
+      const users = L.extractUsers({
+        first: { core: { screen_name: 'alice' }, relationship_perspectives: { following: true, followed_by: true } },
+        second: { core: { screen_name: 'alice' }, legacy: { followers_count: 100, friends_count: 25 } },
+      });
+      expect(users).toHaveLength(1);
+      expect(users[0]).toMatchObject({ handle: 'alice', f: 1, b: 1, fc: 100, fd: 25 });
     });
 
     it('extracts from timeline user_results and core wrappers', () => {
