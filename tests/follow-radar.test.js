@@ -99,10 +99,11 @@ describe('follow-radar logic', () => {
   });
 
   describe('computeRate / formatRate', () => {
-    it('following ÷ followers with 1 decimal', () => {
+    it('following ÷ followers with 2 decimals', () => {
       expect(L.computeRate({ fc: 100, fd: 320 })).toBe(3.2);
       expect(L.computeRate({ fc: 1000, fd: 999 })).toBe(1);
-      expect(L.computeRate({ fc: 3, fd: 1 })).toBe(0.3);
+      expect(L.computeRate({ fc: 3, fd: 1 })).toBe(0.33);
+      expect(L.computeRate({ fc: 100, fd: 95 })).toBe(0.95);
     });
     it('null when followers unknown or zero', () => {
       expect(L.computeRate({ fc: 0, fd: 10 })).toBeNull();
@@ -221,6 +222,16 @@ describe('follow-radar logic', () => {
         },
       });
       expect(users[0]).toMatchObject({ handle: 'alice', fc: 100, fd: 25 });
+    });
+
+    it('accepts string and camelCase public metrics from newer X payloads', () => {
+      const users = L.extractUsers({
+        result: {
+          core: { screen_name: 'alice' },
+          publicMetrics: { followersCount: '200', followingCount: '50' },
+        },
+      });
+      expect(users[0]).toMatchObject({ handle: 'alice', fc: 200, fd: 50 });
     });
 
     it('extracts from timeline user_results and core wrappers', () => {

@@ -31,14 +31,14 @@
     return 'none';
   }
 
-  // Follow ratio = their following ÷ their followers (关注/粉丝比), 1 decimal.
+  // Follow ratio = their following ÷ their followers (关注/粉丝比), 2 decimals.
   // null when followers count is unknown/zero.
   function computeRate(rec) {
     if (!rec) return null;
     const fc = Number(rec.fc) || 0;
     const fd = Number(rec.fd) || 0;
     if (fc <= 0) return null;
-    return Math.round((fd / fc) * 10) / 10;
+    return Math.round((fd / fc) * 100) / 100;
   }
 
   function formatRate(rate) {
@@ -113,7 +113,11 @@
       return obj && typeof obj[key] === 'boolean' ? obj[key] : undefined;
     }
     function firstNumber(...values) {
-      return values.find((value) => typeof value === 'number' && Number.isFinite(value));
+      for (const value of values) {
+        const number = typeof value === 'number' ? value : Number(value);
+        if (Number.isFinite(number) && number >= 0) return number;
+      }
+      return undefined;
     }
     function relationshipField(node, legacy, core, key) {
       const candidates = [
@@ -172,14 +176,20 @@
             fc: firstNumber(
               legacy.followers_count,
               legacy.public_metrics?.followers_count,
+              legacy.publicMetrics?.followersCount,
               node.public_metrics?.followers_count,
+              node.publicMetrics?.followersCount,
               node.followers_count,
+              node.followersCount,
             ),
             fd: firstNumber(
               legacy.friends_count,
               legacy.public_metrics?.following_count,
+              legacy.publicMetrics?.followingCount,
               node.public_metrics?.following_count,
+              node.publicMetrics?.followingCount,
               node.friends_count,
+              node.friendsCount,
             ),
           });
         }
