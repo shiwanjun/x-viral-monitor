@@ -90,7 +90,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- Fixed empty XVM velocity badges appearing in tweet author headers when badge data was incomplete.
+- Fixed empty X-Tools velocity badges appearing in tweet author headers when badge data was incomplete.
 - Improved content-filter DOM fallback extraction by preserving emoji image alt text from X replies.
 - Tightened short spam reply detection for letter/number/emoji patterns while preserving normal short Chinese replies.
 
@@ -127,7 +127,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 ### Fixed
 
 - Fixed a content-filter summary observer loop that could make X detail pages unresponsive after filtered replies were rendered.
-- Debounced content-filter DOM rescans and ignored XVM's own summary/style mutations so the filter no longer reacts to its own UI updates.
+- Debounced content-filter DOM rescans and ignored X-Tools's own summary/style mutations so the filter no longer reacts to its own UI updates.
 
 ### Internal
 
@@ -179,14 +179,14 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- Switched XVM Pro license activation from the shared XMP Worker to an independent `xvm-license` Worker, fixing Chrome extension CORS failures during activation.
+- Switched X-Tools Membership license activation from the shared XMP Worker to an independent `xvm-license` Worker, fixing Chrome extension CORS failures during activation.
 - Added Worker-signed ECDSA entitlement envelopes and client-side verification before storing or refreshing Pro license state.
-- Made XVM product scoping fail closed: missing or non-XVM `product_id` now rejects the license and downgrades to Free.
+- Made X-Tools product scoping fail closed: missing or non-X-Tools `product_id` now rejects the license and downgrades to Free.
 - Pinned the license proxy URL to `https://xvm-license.lengkuxiaomao.workers.dev`.
 
 ### Internal
 
-- Added independent Worker deployment config, XVM-only product whitelist, and local ignored secret helper files.
+- Added independent Worker deployment config, X-Tools-only product whitelist, and local ignored secret helper files.
 - Kept the existing $2.9/month and $29/year Creem checkout product IDs while the new pricing products are pending.
 
 ---
@@ -195,7 +195,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Added
 
-- XVM Pro tier: Free / Trial / Pro states, a 14-day local trial, Creem-backed Pro license checks through a Cloudflare Worker proxy, and Trial/Pro-only feature gating.
+- X-Tools Membership tier: Free / Trial / Pro states, a 14-day local trial, Creem-backed Pro license checks through a Cloudflare Worker proxy, and Trial/Pro-only feature gating.
 - Hot-only filtering: hide low-velocity tweets using views-per-minute and absolute view thresholds, with separate short-post and long-article settings.
 - Hot-only scope controls: Home, Lists, Profiles, and Tweet detail pages can be enabled independently from the popup.
 - Floating leaderboard controls: compact Hot-only switch synced with the popup. Free or expired users see a disabled switch with a Pro badge; Trial/Pro users can toggle directly from X.
@@ -221,7 +221,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### 新增
 
-- XVM Pro 套装: Free / Trial / Pro 三态、14 天本地试用、通过 Cloudflare Worker 代理 Creem license 校验, 并对 Trial/Pro 功能做统一 gating。
+- X-Tools Membership 套装: Free / Trial / Pro 三态、14 天本地试用、通过 Cloudflare Worker 代理 Creem license 校验, 并对 Trial/Pro 功能做统一 gating。
 - 仅看热帖: 按 views/min + 总浏览量双阈值隐藏低流速推文, 短推和 X Article 长文可分开设置。
 - 仅看热帖作用域: 首页、List、博主主页、推文详情页可在 popup 中独立开关。
 - 悬浮流速榜控制: 在 X 页面悬浮面板中显示“仅看热帖”开关, 与 popup 双向同步。Free/过期用户显示灰色禁用 + Pro 角标, Trial/Pro 可直接切换。

@@ -1,8 +1,8 @@
-# X Viral Monitor
+# X-Tools
 
 [English](README.en.md)
 
-在 X (Twitter) 时间线上实时显示每条推文的**浏览量流速**，并附带一整套阅读 / 创作辅助工具。
+X-Tools 是 X (Twitter) 创作者工具集：**爆款检测** —— 在时间线上实时显示每条推文的浏览量流速，在推文起爆前先一步看到；**关注关系洞察** —— 互关标识、单向关注检测、曾关注过但已取消关注的提醒；另附带一整套阅读 / 创作辅助工具。
 
 [![Chrome Extension](https://img.shields.io/badge/Chrome-扩展-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-green)](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
@@ -19,6 +19,7 @@
 |---|---|---|
 | 流速徽章 | 时间线每条推文 | 每小时浏览量（impression/h），胶囊或行内两种样式 |
 | 流速排行榜 | 浮动面板（可拖拽） | 当前页面可见推文按流速排序，列可自定义 |
+| 关注关系洞察 | 用户主页 | 互关标识、单向关注检测、曾关注后取关提醒（规划中） |
 | 书签数显示 | 推文操作栏 | 时间线上书签按钮旁直接显示数字 |
 | 图片查看增强 | X 原生灯箱 | 触控板捏合 / Ctrl+滚轮缩放、双指 / 拖拽平移、双击切换；长图（h/w > 3）自动切到固定宽度纵向滚动 |
 | 内容过滤 | 推文回复区 | 多级规则过滤 spam/色情/电报漏斗，**规则远程拉取**自动更新 |
@@ -31,7 +32,7 @@
 
 ## 开源与官方版本
 
-本仓库包含 X Viral Monitor 的完整源码，包括 Pro 功能闸门和 license 逻辑。源码按 MIT 协议开放，你可以自行审计、修改和构建。
+本仓库包含 X-Tools 的完整源码，包括 Pro 功能闸门和 license 逻辑。源码按 MIT 协议开放，你可以自行审计、修改和构建。
 
 Chrome Web Store 版本是**官方发行版**：提供一键安装、自动更新、license 激活和维护支持。自行从 GitHub 构建或通过开发者模式加载的版本属于 community/self-built build，按 MIT 协议以 "as-is" 方式提供，不包含 Chrome Web Store 自动更新和官方支持承诺。
 
@@ -93,7 +94,7 @@ Pro License 只用于解锁官方版本里的 Pro 功能。客户端代码本身
 - 三档严重度：`block` / `high` / `medium` / `low`
 - 白名单（关注的人 / handle / 域名）+ 黑名单 handle
 - 自定义规则类型：`keyword` / `regex` / `domain` / `short-symbol`
-- 被隐藏的回复在主推文下方折叠为「已过滤 N 条 - XVM」面板，可展开查看
+- 被隐藏的回复在主推文下方折叠为「已过滤 N 条 - X-Tools」面板，可展开查看
 
 ### 远程规则自动更新
 
@@ -121,7 +122,7 @@ Pro License 只用于解锁官方版本里的 Pro 功能。客户端代码本身
 ### Chrome / Edge 扩展（推荐）
 
 **Chrome 应用商店：**
-[安装 X Viral Monitor](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
+[安装 X-Tools](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
 
 **手动安装（最新未上架版本）：**
 

@@ -4,7 +4,7 @@
 // chrome.storage.local.xvm_rate_filter_v1; isolated.js watches that key
 // and pushes XVM_RATE_SETTINGS_UPDATE to MAIN-world filter.js.
 //
-// Tier-aware: when getCurrentTier() ∈ {trial, pro} the form is editable;
+// Tier-aware: a current paid subscription makes the form editable;
 // when 'free' the form is shown but disabled with an "upgrade to unlock"
 // hint above it. Settings persist across tier changes so a user who
 // upgrades sees their previous configuration restored.
@@ -70,14 +70,11 @@
     return out;
   }
 
-  // Resolve tier independently (popup-pro.js already uses tier-logic.js for
-  // banner; we can read again — cheap, and avoids cross-script coupling).
+  // Reuse popup-pro.js's in-memory, server-authoritative subscription result.
   async function resolveTier() {
     const TL = globalThis.__xvmTierLogic;
-    if (!TL) return { tier: 'free', daysLeft: 0, source: 'tier-logic-missing' };
-    const lic = await storageGet('xvm_license_v1', null);
-    const trial = await storageGet('xvm_trial_v1', null);
-    return TL.resolveTierFrom(lic, trial, Date.now());
+    if (!TL || !globalThis.__xvmProPopup?.resolveTier) return { tier: 'free', source: 'subscription-unavailable' };
+    return globalThis.__xvmProPopup.resolveTier();
   }
 
   function buildSection() {
@@ -224,12 +221,11 @@
       setTimeout(() => { msg.textContent = ''; delete msg.dataset.kind; }, 1500);
     });
 
-    // Re-evaluate lock when tier changes (license activation / deactivation
-    // happens in the same popup; storage onChanged fires).
+    // Re-evaluate lock when the authenticated subscription session changes.
     try {
       chrome.storage.onChanged.addListener(async (changes, area) => {
         if (area !== 'local') return;
-        if ('xvm_license_v1' in changes || 'xvm_trial_v1' in changes) {
+        if ('xvm_session_v1' in changes) {
           const r = await resolveTier();
           setLocked(section, r.tier === 'free');
         }

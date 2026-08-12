@@ -43,8 +43,8 @@ describe('#45 popup tabs structure (mock A)', () => {
     expect(/<body[^>]*data-theme="light"/.test(html)).toBe(true);
   });
 
-  it('declares 5 tab buttons (role=tab) with data-tab values', () => {
-    for (const name of ['pro', 'filter', 'leaderboard', 'ai', 'about']) {
+  it('declares tab buttons (role=tab) with data-tab values', () => {
+    for (const name of ['pro', 'filter', 'leaderboard', 'follow-radar', 'ai', 'about']) {
       expect(new RegExp(`<button[^>]*role="tab"[^>]*data-tab="${name}"`).test(html),
         `popup.html must contain <button role="tab" data-tab="${name}">`
       ).toBe(true);
@@ -58,8 +58,8 @@ describe('#45 popup tabs structure (mock A)', () => {
     ).toBe(true);
   });
 
-  it('declares 5 tab panels (data-tab-panel) matching the 5 tabs', () => {
-    for (const name of ['pro', 'filter', 'leaderboard', 'ai', 'about']) {
+  it('declares tab panels (data-tab-panel) matching the tabs', () => {
+    for (const name of ['pro', 'filter', 'leaderboard', 'follow-radar', 'ai', 'about']) {
       expect(new RegExp(`data-tab-panel="${name}"`).test(html),
         `popup.html must contain a panel with data-tab-panel="${name}"`
       ).toBe(true);
@@ -67,7 +67,7 @@ describe('#45 popup tabs structure (mock A)', () => {
   });
 
   it('header includes the SVG app icon, tier chip, language button, and theme toggle button', () => {
-    expect(/<img class="app-logo" src="icons\/icon_origin\.svg" alt="X Viral Monitor">/.test(html)).toBe(true);
+    expect(/<img class="app-logo" src="icons\/x-tools-logo\.png" alt="X-Tools">/.test(html)).toBe(true);
     expect(/id="tier-chip"/.test(html)).toBe(true);
     expect(/id="language-toggle"/.test(html)).toBe(true);
     expect(/id="theme-toggle"/.test(html)).toBe(true);
@@ -75,12 +75,22 @@ describe('#45 popup tabs structure (mock A)', () => {
     expect(/<symbol id="icon-moon"/.test(html)).toBe(true);
   });
 
-  it('Pro tab includes inline activate form + Coming-soon M2 list', () => {
+  it('会员 tab renders sign-in/plans into #xvm-pro-section without v1.8.0 previews', () => {
+    // The Creem-era inline #activate-inline license form was removed.
+    // popup-pro.js renders Google sign-in / plan cards / subscription status
+    // into #xvm-pro-section. The old v1.8.0 preview list is gone.
     const pro = html.match(/data-tab-panel="pro"[\s\S]*?(?=role="tabpanel"|<\/section>\s*$)/)?.[0] || '';
-    expect(/id="activate-inline"/.test(pro)).toBe(true);
-    expect(/class="coming-list"/.test(pro)).toBe(true);
-    // 3 stubs: color-card, webhook, bark
-    expect((pro.match(/icon-palette|icon-webhook|icon-bell/g) || []).length).toBeGreaterThanOrEqual(3);
+    expect(/id="xvm-pro-section"/.test(pro),
+      'Pro panel must host #xvm-pro-section (rendered by popup-pro.js)'
+    ).toBe(true);
+    // The removed inline license activation form must NOT be present.
+    expect(/id="activate-inline"/.test(pro),
+      'Pro panel must NOT contain the removed #activate-inline license form'
+    ).toBe(false);
+    expect(/id="activate-key"/.test(pro),
+      'Pro panel must NOT contain the removed #activate-key input'
+    ).toBe(false);
+    expect(/coming-list|icon-palette|icon-webhook|icon-bell/.test(pro)).toBe(false);
   });
 
   it('Filter tab hosts #rate-filter-section', () => {
@@ -168,6 +178,13 @@ describe('#45 popup tabs structure (mock A)', () => {
     expect(injector).toContain("querySelectorAll?.('.xvm-grok-generate-btn').forEach((btn) => btn.remove())");
   });
 
+  it('isolates MAIN-world declarations so an extension reload cannot redeclare them', () => {
+    expect(contentJs).toContain('Keep every lexical declaration inside this closure');
+    expect(/^\(\(\) => \{/m.test(contentJs)).toBe(true);
+    expect(contentJs.trimEnd().endsWith('})();')).toBe(true);
+    expect((contentJs.match(/const RECENT_REPLY_CONTEXT_TTL_MS\s*=/g) || [])).toHaveLength(1);
+  });
+
   it('places the AI generate button before the native reply submit button', () => {
     const hostStart = contentJs.indexOf('function findGrokButtonHost');
     const hostEnd = contentJs.indexOf('function findReplySubmitButton', hostStart);
@@ -231,10 +248,11 @@ describe('#45 popup tabs structure (mock A)', () => {
     expect(/id="grok-article-prompt"/.test(ai)).toBe(true);
   });
 
-  it('About footer links to the project and maintainer X profile', () => {
+  it('About footer links to the official site and support contacts', () => {
     const about = html.match(/data-tab-panel="about"[\s\S]*?(?=<\/div>\s*<div id="xvm-toast")/)?.[0] || '';
-    expect(/https:\/\/github\.com\/Icy-Cat\/x-viral-monitor/.test(about)).toBe(true);
-    expect(/https:\/\/x\.com\/intent\/follow\?screen_name=icycat/.test(about)).toBe(true);
+    expect(/https:\/\/x\.jieyiai\.dev/.test(about)).toBe(true);
+    expect(/https:\/\/x\.com\/jieyi_ai/.test(about)).toBe(true);
+    expect(/mailto:shiwanjun23@gmail\.com/.test(about)).toBe(true);
   });
 
   it('keeps all legacy IDs popup.js / popup-rate-filter.js / popup-pro.js depend on', () => {
@@ -244,7 +262,7 @@ describe('#45 popup tabs structure (mock A)', () => {
                       'lb-reset-pos', 'lb-reset-msg',
                       'grok-template-select', 'grok-prompt', 'grok-prompt-save',
                       'grok-article-template-select', 'grok-article-prompt',
-                      'language-select', 'language-toggle',
+                      'language-select', 'language-toggle', 'language-popover',
                       'rate-filter-section', 'xvm-pro-section']) {
       expect(new RegExp(`id="${id}"`).test(html), `popup.html must keep id="${id}"`).toBe(true);
     }
@@ -254,20 +272,19 @@ describe('#45 popup tabs structure (mock A)', () => {
     expect(/<select\b|<option\b/.test(html)).toBe(false);
     expect(/document\.createElement\(\s*['"]option['"]\s*\)/.test(popupJs)).toBe(false);
     expect(/<select\b|<option\b/.test(userScript)).toBe(false);
-    expect((html.match(/class="xvm-select"/g) || []).length).toBe(5);
+    expect((html.match(/class="xvm-select"/g) || []).length).toBe(6);
   });
 
-  it('loads scripts in order: build-channel → tier-logic → popup-pro → popup filters → popup.js → popup-dashboard', () => {
+  it('loads locale bootstrap before subscription and settings renderers', () => {
     const scripts = [...html.matchAll(/<script\s+src="([^"]+)"/g)].map((m) => m[1]);
     expect(scripts).toEqual([
       'src/build-channel.js',
       'src/premium/license/tier-logic.js',
-      'src/premium/license/entitlement.js',
+      'popup.js',
       'src/premium/license/popup-pro.js',
       'src/premium/rate-filter/popup-rate-filter.js',
       'src/premium/content-filter/rules.js',
       'src/premium/content-filter/popup-content-filter.js',
-      'popup.js',
       'popup-dashboard.js',
     ]);
   });
@@ -298,15 +315,14 @@ describe('#45 popup tabs structure (mock A)', () => {
 });
 
 describe('#45 dual theme (light warm default + dark slate)', () => {
-  it(':root declares warm light tokens (sand bg, copper accent)', () => {
-    // popup.html should define the LIGHT theme on :root.
-    expect(/:root\s*\{[\s\S]*?--bg:\s*#f4efe5/.test(html), 'light bg #f4efe5').toBe(true);
-    expect(/:root\s*\{[\s\S]*?--accent:\s*#bf5a2a/.test(html), 'light accent #bf5a2a (warm orange-brown)').toBe(true);
+  it('defines the light theme with warm semantic tokens', () => {
+    expect(/body\[data-theme="light"\]\s*\{[\s\S]*?--color-bg:\s*#f4efe5/.test(html)).toBe(true);
+    expect(/body\[data-theme="light"\]\s*\{[\s\S]*?--color-accent:\s*#bf5a2a/.test(html)).toBe(true);
   });
 
   it('body[data-theme="dark"] overrides tokens to slate-950 + cyan-500', () => {
-    expect(/body\[data-theme="dark"\]\s*\{[\s\S]*?--bg:\s*#020617/.test(html)).toBe(true);
-    expect(/body\[data-theme="dark"\]\s*\{[\s\S]*?--accent:\s*#06b6d4/.test(html)).toBe(true);
+    expect(/:root,\s*body\[data-theme="dark"\]\s*\{[\s\S]*?--color-bg:\s*var\(--slate-950\)/.test(html)).toBe(true);
+    expect(/:root,\s*body\[data-theme="dark"\]\s*\{[\s\S]*?--color-accent:\s*var\(--cyan-500\)/.test(html)).toBe(true);
   });
 
   it('popup-dashboard.js wires #theme-toggle + #theme-toggle-about + chrome.storage.sync', () => {
@@ -362,7 +378,7 @@ describe('#45 Filter sub-tabs (Short / Long)', () => {
 describe('#45 popup-dashboard.js tab router', () => {
   it('exposes setTab function + TABS whitelist', () => {
     expect(/function\s+setTab\s*\(/.test(dashJs)).toBe(true);
-    expect(/TABS\s*=\s*\[\s*['"]pro['"]\s*,\s*['"]filter['"]\s*,\s*['"]leaderboard['"]\s*,\s*['"]ai['"]\s*,\s*['"]about['"]\s*\]/.test(dashJs)).toBe(true);
+    expect(/TABS\s*=\s*\[\s*['"]pro['"]\s*,\s*['"]filter['"]\s*,\s*['"]leaderboard['"]\s*,\s*['"]follow-radar['"]\s*,\s*['"]ai['"]\s*,\s*['"]about['"]\s*\]/.test(dashJs)).toBe(true);
   });
   it('wires aria-selected updates on tab click', () => {
     expect(/aria-selected/.test(dashJs)).toBe(true);
@@ -383,12 +399,13 @@ describe('#45 popup-dashboard.js tab router', () => {
     expect(/const\s+next\s*=\s*isValidTab\(saved\)\s*\?\s*saved\s*:\s*['"]filter['"]/.test(dashJs)).toBe(true);
     expect(/setTab\(next,\s*\{\s*persist:\s*false\s*\}\s*\)/.test(dashJs)).toBe(true);
   });
-  it('listens for xvm-pro-nav (activate link click)', () => {
-    expect(/xvm-pro-nav/.test(dashJs)).toBe(true);
-    expect(/['"]activate['"]/.test(dashJs)).toBe(true);
+  it('has removed the legacy xvm-pro-nav listener (Creem-era activate flow)', () => {
+    expect(/xvm-pro-nav/.test(dashJs)).toBe(false);
   });
-  it('tier-chip updates via MutationObserver on body data-tier', () => {
+  it('tier-chip observes data-tier only after a valid DOM target is available', () => {
     expect(/MutationObserver/.test(dashJs)).toBe(true);
+    expect(/const target = document\.body \|\| document\.documentElement/.test(dashJs)).toBe(true);
+    expect(/if \(!target\?\.nodeType\)/.test(dashJs)).toBe(true);
     expect(/data-tier/.test(dashJs)).toBe(true);
     expect(/data-build-channel/.test(dashJs)).toBe(true);
     expect(/label\s*=\s*['"]DEV['"]/.test(dashJs)).toBe(true);
@@ -405,21 +422,44 @@ describe('#45 popup-pro.js Pro-tab rendering', () => {
   it('writes document.body.dataset.tier so global CSS tier-color rules apply', () => {
     expect(/document\.body\.dataset\.tier\s*=\s*tier/.test(proJs)).toBe(true);
   });
-  it('writes build channel and renders community dev without store license controls', () => {
+  it('writes build channel and renders community dev without Creem license controls', () => {
     expect(/document\.body\.dataset\.buildChannel\s*=\s*globalThis\.__xvmBuildChannel/.test(proJs)).toBe(true);
     expect(/communityDevBadge/.test(proJs)).toBe(true);
     expect(/communityDevSub/.test(proJs)).toBe(true);
-    expect(/tier\s*!==\s*['"]pro['"]\s*&&\s*!isCommunityDev/.test(proJs)).toBe(true);
-    expect(/else\s+if\s*\(\s*!isCommunityDev\s*\)/.test(proJs)).toBe(true);
+    // Community-dev builds short-circuit to max tier (no sign-in/checkout UI).
+    expect(/if\s*\(isCommunityDev\)\s*\{[\s\S]*?return\s*\{[\s\S]*?tier:\s*['"]max['"]/.test(proJs)
+      || /if\s*\(isCommunityDev\)[\s\S]*tier:\s*['"]max['"]/.test(proJs),
+      'community dev builds must resolve to the max tier'
+    ).toBe(true);
+    expect(/const\s+isPaid\s*=\s*tier\s*===\s*['"]pro['"]/.test(proJs),
+      'the single membership must be represented by the pro tier'
+    ).toBe(true);
+    // Negative: the Creem license-key activation form must NOT be wired up.
+    expect(/activate-key|maskKey|callProxy\(['"]validate['"]/.test(proJs),
+      'popup-pro.js must NOT reference Creem license-key controls'
+    ).toBe(false);
   });
   it('exposes window.__xvmProDays for tier-chip days-left display', () => {
     expect(/window\.__xvmProDays/.test(proJs)).toBe(true);
     expect(/xvm-pro-days/.test(proJs)).toBe(true);
   });
-  it('emits xvm-pro-nav { view: activate } from the Activate Existing link', () => {
-    expect(/xvm-pro-nav[\s\S]*detail:\s*\{\s*view:\s*['"]activate['"]\s*\}/.test(proJs)
-      || /detail:\s*\{\s*view:\s*['"]activate['"]\s*\}[\s\S]*xvm-pro-nav/.test(proJs)
+  it('exposes the Waffo/Better Auth actions on window.__xvmProPopup', () => {
+    // The Creem-era "Activate Existing license" link (xvm-pro-nav
+    // { view: 'activate' }) was removed with the inline license form.
+    // popup-pro.js now exposes the new auth/subscription entry points on
+    // window.__xvmProPopup so tests / dashboards can drive them.
+    expect(/window\.__xvmProPopup\s*=/.test(proJs),
+      'popup-pro.js must publish window.__xvmProPopup'
     ).toBe(true);
+    for (const fn of ['refresh', 'resolveTier', 'signInWithGoogle', 'signOut', 'startCheckout']) {
+      expect(new RegExp(`\\b${fn}\\b`).test(
+        proJs.match(/window\.__xvmProPopup\s*=\s*\{[\s\S]*?\}/)?.[0] || ''
+      ), `window.__xvmProPopup must expose ${fn}`).toBe(true);
+    }
+    // Negative: the removed activate nav event must NOT be emitted.
+    expect(/xvm-pro-nav[\s\S]*view:\s*['"]activate['"]/.test(proJs),
+      'popup-pro.js must NOT emit the removed xvm-pro-nav { view: activate }'
+    ).toBe(false);
   });
 });
 
@@ -431,12 +471,13 @@ describe('#45 i18n keys (mock A + dual theme)', () => {
     const required = [
       'tabPro', 'tabFilter', 'tabLeaderboard', 'tabAi', 'tabAbout',
       'rfSubShort', 'rfSubLong',
-      'comingListTitle',
-      'chipTierFree', 'chipTierTrial', 'chipTierPro',
-      'chipTrialDays', 'chipTrialOne',
+      'chipTierFree', 'chipTierStandard', 'chipTierPro', 'chipTierMax',
+      'subscriptionKicker', 'communityDevKicker',
+      'proPlanName', 'proPlanMonthlyPeriod', 'proPlanMonthlyNote',
+      'proPlanYearlyPeriod', 'proPlanYearlyNote', 'proPlanRecommended',
       'themeLabel', 'themeSwitchToDark', 'themeSwitchToLight',
       'advAppearanceTitle',
-      'languageLabel', 'languageHint', 'languageAuto',
+      'languageLabel', 'languageHint',
       'languageZh', 'languageEn', 'languageJa',
       'aboutUpdatesTitle', 'aboutUpdatesDesc', 'aboutShowUpdateNotes',
       'aboutShowUpdateNotesSent', 'aboutShowUpdateNotesNoTab',
@@ -524,7 +565,7 @@ describe('#69/#72 user self-test polish', () => {
 
   it('gives the Short/Long rate-filter sub-tabs a visible selected + keyboard focus state', () => {
     expect(/\.rf-subcard\s+\.sub-tab-btn\[aria-selected="true"\]\s*\{[\s\S]*?background:\s*var\(--accent\)\s*!important/.test(html)).toBe(true);
-    expect(/\.rf-subcard\s+\.sub-tab-btn\[aria-selected="true"\]\s*\{[\s\S]*?color:\s*#0b1120\s*!important/.test(html)).toBe(true);
+    expect(/\.rf-subcard\s+\.sub-tab-btn\[aria-selected="true"\]\s*\{[\s\S]*?color:\s*var\(--on-accent\)\s*!important/.test(html)).toBe(true);
     expect(/\.rf-subcard\s+\.sub-tab-btn:hover\s*\{[\s\S]*?background:\s*var\(--surface\)\s*!important/.test(html)).toBe(true);
     expect(/\.rf-subcard\s+\.sub-tab-btn:focus-visible\s*\{[\s\S]*?outline:\s*2px\s+solid\s+var\(--accent\)/.test(html)).toBe(true);
   });
@@ -774,11 +815,11 @@ describe('#45 i18n lock-step (content.js i18n() ↔ bridge CONTENT_MESSAGE_KEYS 
     expect(missingJa, `popup.html references data-i18n keys missing from _locales/ja: ${missingJa.join(', ')}`).toEqual([]);
   });
 
-  it('keeps package and extension versions in sync for v1.18.11', () => {
-    expect(manifest.version).toBe('1.18.11');
-    expect(pkg.version).toBe('1.18.11');
-    expect(packageLock.version).toBe('1.18.11');
-    expect(packageLock.packages?.['']?.version).toBe('1.18.11');
+  it('keeps package and extension versions in sync for v1.0.0', () => {
+    expect(manifest.version).toBe('1.0.0');
+    expect(pkg.version).toBe('1.0.0');
+    expect(packageLock.version).toBe('1.0.0');
+    expect(packageLock.packages?.['']?.version).toBe('1.0.0');
   });
 
   it('renders the popup footer version from the extension manifest', () => {

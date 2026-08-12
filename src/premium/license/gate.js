@@ -2,7 +2,7 @@
 //
 // Single source of truth for "what tier is the current user?" from any
 // premium feature module's perspective. Feature modules MUST query this
-// gate and NEVER make their own tier decisions or read license/trial state.
+// gate and NEVER make their own tier decisions or read subscription state.
 //
 // Step 2 (this version) listens for XVM_TIER_UPDATE postMessage from the
 // ISOLATED-world license bridge (src/premium/license/isolated.js). The
@@ -16,8 +16,7 @@
 // of free users getting paid feature for free).
 //
 // API (window.__xvmPro):
-//   getCurrentTier()          → 'free' | 'trial' | 'pro'
-//   getTrialDaysLeft()        → number  (0 when not trialing)
+//   getCurrentTier()          → 'free' | 'standard' | 'pro' | 'max'
 //   isFeatureEnabled(name)    → boolean
 //   onTierChange(fn)          → subscribe; fn(tier, info) on every change
 
@@ -26,7 +25,8 @@
   const isCommunityDev = window.__xvmIsCommunityDevBuild === true;
 
   const FEATURE_TIER = {
-    'rate-filter': 'trial', // M1 paid feature
+    'rate-filter': 'standard', // subscription feature (standard+)
+    'rate-filter-advanced': 'pro', // advanced thresholds (pro+)
     'content-filter': 'free',
   };
 
@@ -45,9 +45,10 @@
     const need = FEATURE_TIER[name];
     if (!need || need === 'free') return true;
     const tier = getCurrentTier();
-    if (need === 'trial') return tier === 'trial' || tier === 'pro';
-    if (need === 'pro')   return tier === 'pro';
-    return false;
+    const RANK = { free: 0, standard: 1, pro: 2, max: 3 };
+    const userRank = RANK[tier] ?? 0;
+    const needRank = RANK[need] ?? 99;
+    return userRank >= needRank;
   }
 
   function onTierChange(fn) { if (typeof fn === 'function') _subs.push(fn); }
@@ -61,7 +62,7 @@
     }
     // Internal — called when XVM_TIER_UPDATE arrives. Diff-suppressed so
     // subscribers don't see no-op churn.
-    const tier = ['free','trial','pro'].includes(next) ? next : 'free';
+    const tier = ['free','standard','pro','max'].includes(next) ? next : 'free';
     const dl = Number.isFinite(daysLeft) ? daysLeft : 0;
     const src = typeof source === 'string' ? source : 'unknown';
     const changed = tier !== _currentTier || dl !== _daysLeft;

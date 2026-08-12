@@ -1,33 +1,67 @@
+// The popup normally runs in Chrome. This fallback makes the local design
+// preview work too, without affecting an actual extension runtime.
+if (!globalThis.chrome?.storage?.sync) {
+  const makeStorageArea = () => {
+    const state = {};
+    return {
+      get(query, done) {
+        const keys = typeof query === 'string' ? [query] : Array.isArray(query) ? query : Object.keys(query || {});
+        const result = {};
+        for (const key of keys) {
+          result[key] = state[key] ?? (query && typeof query === 'object' && !Array.isArray(query) ? query[key] : undefined);
+        }
+        done?.(result);
+      },
+      set(values, done) { Object.assign(state, values || {}); done?.(); },
+      remove(keys, done) { for (const key of [].concat(keys || [])) delete state[key]; done?.(); },
+    };
+  };
+  const listeners = new Set();
+  const existingChrome = globalThis.chrome || {};
+  globalThis.chrome = {
+    ...existingChrome,
+    i18n: existingChrome.i18n || { getMessage: () => '' },
+    runtime: {
+      ...(existingChrome.runtime || {}),
+      getURL: (path) => path,
+      getManifest: () => ({ version: '1.0.0' }),
+      sendMessage: (_message, done) => done?.(),
+    },
+    storage: {
+      ...(existingChrome.storage || {}),
+      sync: makeStorageArea(),
+      local: makeStorageArea(),
+      onChanged: { addListener: (listener) => listeners.add(listener) },
+    },
+    tabs: { ...(existingChrome.tabs || {}), query: (_query, done) => done?.([]), sendMessage: (_tabId, _message, done) => done?.() },
+  };
+}
+
 const LANGUAGE_KEY = 'language';
-const SUPPORTED_LANGUAGE_IDS = ['auto', 'zh_CN', 'en', 'ja'];
+const SUPPORTED_LANGUAGE_IDS = ['zh_CN', 'zh_TW', 'en', 'ja', 'vi', 'ko'];
 const LANGUAGE_LABELS = {
-  auto: 'Auto / 跟随系统',
   zh_CN: '中文',
+  zh_TW: '繁體中文',
   en: 'English',
   ja: '日本語',
+  vi: 'Tiếng Việt',
+  ko: '한국어',
 };
 const LANGUAGE_TOGGLE_TEXT = {
   zh_CN: '中',
+  zh_TW: '繁',
   en: 'EN',
   ja: '日',
+  vi: 'VI',
+  ko: '한',
 };
 
 function normalizeLanguage(raw) {
-  return SUPPORTED_LANGUAGE_IDS.includes(raw) ? raw : 'auto';
-}
-
-function getBrowserLocaleId() {
-  try {
-    const ui = chrome?.i18n?.getUILanguage?.() || navigator.language || '';
-    const lower = ui.toLowerCase();
-    if (lower.startsWith('zh')) return 'zh_CN';
-    if (lower.startsWith('ja')) return 'ja';
-  } catch (_) {}
-  return 'en';
+  return SUPPORTED_LANGUAGE_IDS.includes(raw) ? raw : 'zh_CN';
 }
 
 function getEffectiveLanguageId(pref = normalizeLanguage(localStorage.getItem(LANGUAGE_KEY))) {
-  return pref === 'auto' ? getBrowserLocaleId() : normalizeLanguage(pref);
+  return normalizeLanguage(pref);
 }
 
 function normalizeSubstitutions(substitutions) {
@@ -45,23 +79,27 @@ function formatLocaleMessage(entry, substitutions) {
     const value = match ? (subs[Number(match[1]) - 1] ?? '') : String(meta?.content || '');
     message = message.replace(new RegExp(`\\$${name}\\$`, 'gi'), value);
   }
-  message = message.replace(/\$(\d+)/g, (_, n) => subs[Number(n) - 1] ?? '');
   return message.replace(/\u0000/g, '$');
 }
 
 function loadLocaleBundleSync(languageId) {
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', chrome.runtime.getURL(`_locales/${languageId}/messages.json`), false);
-    xhr.send(null);
-    if (xhr.status >= 200 && xhr.status < 300) return JSON.parse(xhr.responseText);
-  } catch (_) {}
-  return null;
+  const load = (id) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', chrome.runtime.getURL(`_locales/${id}/messages.json`), false);
+      xhr.send(null);
+      if ((xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300)) && xhr.responseText) {
+        return JSON.parse(xhr.responseText);
+      }
+    } catch (_) {}
+    return null;
+  };
+  return load(languageId);
 }
 
 const initialLanguagePref = normalizeLanguage(localStorage.getItem(LANGUAGE_KEY));
 const initialLanguageId = getEffectiveLanguageId(initialLanguagePref);
-const overrideMessages = initialLanguagePref === 'auto' ? null : loadLocaleBundleSync(initialLanguageId);
+const overrideMessages = loadLocaleBundleSync(initialLanguageId);
 const nativeGetMessage = chrome?.i18n?.getMessage?.bind(chrome.i18n);
 
 if (overrideMessages && nativeGetMessage) {
@@ -166,6 +204,11 @@ const DEFAULT_FEATURES = {
   badgeStyle: 'pill-solid',
   leaderboardCount: 10,
   leaderboardColumns: DEFAULT_COLUMNS,
+  followRadarEnabled: true,
+  followRadarTimelineEnabled: true,
+  followRadarLeaderboardEnabled: true,
+  followRadarShowRelations: true,
+  followRadarShowRate: true,
   grokCommentPrompt: LOCALIZED_GROK_DEFAULTS.grokCommentPrompt,
   grokPromptTemplates: LOCALIZED_GROK_DEFAULTS.grokPromptTemplates,
   grokArticlePromptTemplates: LOCALIZED_GROK_DEFAULTS.grokArticlePromptTemplates,
@@ -374,6 +417,9 @@ const leaderboardCountInput = document.getElementById('lb-count');
 const badgeStyleSelect = document.getElementById('badge-style');
 const languageSelect = document.getElementById('language-select');
 const languageToggle = document.getElementById('language-toggle');
+const languageMenu = document.getElementById('language-menu');
+const languagePopover = document.getElementById('language-popover');
+const languageOptions = Array.from(document.querySelectorAll('[data-language-option]'));
 const colListEl = document.getElementById('lb-col-list');
 const grokTemplateSelect = document.getElementById('grok-template-select');
 const grokTemplateNameInput = document.getElementById('grok-template-name');
@@ -405,6 +451,153 @@ const grokArticlePromptSaveBtn = document.getElementById('grok-article-prompt-sa
 const grokArticlePromptResetBtn = document.getElementById('grok-article-prompt-reset');
 const grokArticlePromptAddBtn = document.getElementById('grok-article-prompt-add');
 const grokArticlePromptDeleteBtn = document.getElementById('grok-article-prompt-delete');
+const followRadarEnabledToggle = document.getElementById('follow-radar-enabled');
+const followRadarTimelineToggle = document.getElementById('follow-radar-timeline');
+const followRadarLeaderboardToggle = document.getElementById('follow-radar-leaderboard');
+const followRadarRelationsToggle = document.getElementById('follow-radar-relations');
+const followRadarRateToggle = document.getElementById('follow-radar-rate');
+const frHistoryLock = document.getElementById('fr-history-lock');
+const frHistoryContent = document.getElementById('fr-history-content');
+const frHistoryList = document.getElementById('fr-history-list');
+const frHistorySearch = document.getElementById('fr-history-search');
+const frHistoryDirection = document.getElementById('fr-history-direction');
+const frHistoryPeriod = document.getElementById('fr-history-period');
+const frHistoryMore = document.getElementById('fr-history-more');
+const frCloudSync = document.getElementById('fr-cloud-sync');
+const frSyncNow = document.getElementById('fr-sync-now');
+const frLocalDelete = document.getElementById('fr-local-delete');
+const frCloudDelete = document.getElementById('fr-cloud-delete');
+const frHistoryUpgrade = document.getElementById('fr-history-upgrade');
+const FR_SESSION_KEY = 'xvm_session_v1';
+const FR_SYNC_KEY = 'followRadarCloudSync';
+let frEvents = [];
+let frHistoryVisibleCount = 50;
+let frSyncRetryTimer = 0;
+let frSyncRetryCount = 0;
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+}
+
+function followRadarIsMember() {
+  return ['pro', 'max'].includes(document.body.dataset.tier || 'free') || globalThis.__xvmIsCommunityDevBuild === true;
+}
+
+function formatFollowCount(value) {
+  const number = Number(value);
+  return value == null || !Number.isFinite(number) ? '—' : number.toLocaleString();
+}
+
+function renderFollowHistory() {
+  if (!frHistoryList) return;
+  const member = followRadarIsMember();
+  frHistoryLock.hidden = member;
+  frHistoryContent.hidden = !member;
+  if (!member) return;
+  const query = (frHistorySearch?.value || '').trim().toLowerCase();
+  const direction = frHistoryDirection?.value || 'all';
+  const period = Number(frHistoryPeriod?.value || 0);
+  const cutoff = period ? Date.now() - period * 24 * 60 * 60 * 1000 : 0;
+  const visible = frEvents.filter((event) => {
+    if (direction !== 'all' && event.type !== direction) return false;
+    if (cutoff && Number(event.ts || 0) < cutoff) return false;
+    return !query || `${event.h || ''} ${event.n || ''}`.toLowerCase().includes(query);
+  }).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+  if (!visible.length) {
+    if (frHistoryMore) frHistoryMore.hidden = true;
+    frHistoryList.innerHTML = '<div class="fr-history-empty">暂无取关记录。请在 X 页面扫描关注和粉丝列表后再查看。</div>';
+    return;
+  }
+  const page = visible.slice(0, frHistoryVisibleCount);
+  frHistoryList.innerHTML = page.map((event) => {
+    const byThem = event.type === 'unfollowed_me';
+    const label = byThem ? 'TA 取关了你' : '你取关了 TA';
+    const rate = Number(event.fc) > 0 && Number.isFinite(Number(event.fd)) ? `${(Number(event.fd) / Number(event.fc)).toFixed(1)}x` : '—';
+    const time = event.ts ? new Date(event.ts).toLocaleString() : '—';
+    const name = event.n || `@${event.h || 'unknown'}`;
+    return `<div class="fr-history-item"><div class="fr-history-name">${escapeHtml(name)} <span>@${escapeHtml(event.h || '')}</span></div><div class="fr-history-kind">${label}</div><div class="fr-history-meta">${time} · 粉丝 ${formatFollowCount(event.fc)} · 关注 ${formatFollowCount(event.fd)} · 关注率 ${rate}</div></div>`;
+  }).join('');
+  if (frHistoryMore) {
+    frHistoryMore.hidden = page.length >= visible.length;
+    frHistoryMore.textContent = `显示更多（剩余 ${visible.length - page.length} 条）`;
+  }
+}
+
+async function loadFollowHistory() {
+  try {
+    const items = await new Promise((resolve) => chrome.storage.local.get({ followRadarV1: null, [FR_SYNC_KEY]: false }, resolve));
+    frEvents = Array.isArray(items.followRadarV1?.events) ? items.followRadarV1.events : [];
+    if (frCloudSync) frCloudSync.checked = items[FR_SYNC_KEY] === true;
+  } catch (_) { frEvents = []; }
+  renderFollowHistory();
+  if (frCloudSync?.checked && followRadarIsMember()) {
+    pullFollowHistory().catch(() => {});
+  }
+}
+
+async function followRadarAuthedFetch(path, options = {}) {
+  const session = await new Promise((resolve) => chrome.storage.local.get({ [FR_SESSION_KEY]: null }, (items) => resolve(items[FR_SESSION_KEY])));
+  if (!session?.token) throw new Error('not_signed_in');
+  return fetch(`https://x.jieyiai.dev${path}`, { ...options, headers: { ...(options.headers || {}), Authorization: `Bearer ${session.token}` } });
+}
+
+async function syncFollowHistory() {
+  if (!followRadarIsMember()) return;
+  const res = await followRadarAuthedFetch('/api/follow-radar/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events: frEvents }) });
+  if (!res.ok) throw new Error('sync_failed');
+  frSyncRetryCount = 0;
+  clearTimeout(frSyncRetryTimer);
+  flash('取关历史已同步');
+}
+
+function scheduleFollowHistoryRetry() {
+  if (!frCloudSync?.checked || !followRadarIsMember() || frSyncRetryTimer || frSyncRetryCount >= 5) return;
+  const wait = Math.min(30_000 * (2 ** frSyncRetryCount), 10 * 60_000);
+  frSyncRetryCount += 1;
+  frSyncRetryTimer = setTimeout(async () => {
+    frSyncRetryTimer = 0;
+    try {
+      await syncFollowHistory();
+      await pullFollowHistory();
+    } catch (_) { scheduleFollowHistoryRetry(); }
+  }, wait);
+}
+
+function eventId(event) {
+  return String(event.id || `${event.type || 'unknown'}:${event.h || ''}:${event.ts || 0}`);
+}
+
+async function persistFollowHistory() {
+  const items = await new Promise((resolve) => chrome.storage.local.get({ followRadarV1: null }, resolve));
+  const current = items.followRadarV1 || {};
+  await new Promise((resolve) => chrome.storage.local.set({ followRadarV1: { ...current, events: frEvents } }, resolve));
+}
+
+async function pullFollowHistory() {
+  const res = await followRadarAuthedFetch('/api/follow-radar/events?limit=1000');
+  if (!res.ok) throw new Error('pull_failed');
+  const payload = await res.json();
+  const remoteEvents = Array.isArray(payload.events) ? payload.events : [];
+  const merged = new Map(frEvents.map((event) => [eventId(event), event]));
+  remoteEvents.forEach((event) => {
+    const normalized = {
+      id: event.eventId || event.id,
+      h: event.handle,
+      n: event.displayName,
+      type: event.eventType,
+      ts: event.occurredAt,
+      fc: event.followersCount,
+      fd: event.followingCount,
+    };
+    merged.set(eventId(normalized), { ...merged.get(eventId(normalized)), ...normalized });
+  });
+  frEvents = [...merged.values()].sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)).slice(0, 1000);
+  await persistFollowHistory();
+  renderFollowHistory();
+  flash(payload.retention === 'last_30_days' ? '已拉取最近 30 天云端记录' : '已拉取云端记录');
+}
 
 setCustomSelectOptions(badgeStyleSelect, [
   { value: 'pill-solid', label: tr('badgeStylePillSolid') || 'Pill solid' },
@@ -412,11 +605,25 @@ setCustomSelectOptions(badgeStyleSelect, [
 ], 'pill-solid');
 
 setCustomSelectOptions(languageSelect, [
-  { value: 'auto', label: tr('languageAuto') || LANGUAGE_LABELS.auto },
   { value: 'zh_CN', label: tr('languageZh') || LANGUAGE_LABELS.zh_CN },
+  { value: 'zh_TW', label: tr('languageZhTW') || LANGUAGE_LABELS.zh_TW },
   { value: 'en', label: tr('languageEn') || LANGUAGE_LABELS.en },
   { value: 'ja', label: tr('languageJa') || LANGUAGE_LABELS.ja },
+  { value: 'vi', label: tr('languageVi') || LANGUAGE_LABELS.vi },
+  { value: 'ko', label: tr('languageKo') || LANGUAGE_LABELS.ko },
 ], initialLanguagePref);
+
+setCustomSelectOptions(frHistoryDirection, [
+  { value: 'all', label: '全部取关' },
+  { value: 'unfollowed_me', label: 'TA 取关我' },
+  { value: 'i_unfollowed', label: '我取关 TA' },
+]);
+setCustomSelectOptions(frHistoryPeriod, [
+  { value: 'all', label: '全部时间' },
+  { value: '7', label: '最近 7 天' },
+  { value: '30', label: '最近 30 天' },
+  { value: '90', label: '最近 90 天' },
+], '30');
 
 setCustomSelectOptions(aiPlatformSelect, Object.entries(AI_PLATFORM_PRESETS).map(([value, preset]) => ({
   value,
@@ -425,22 +632,34 @@ setCustomSelectOptions(aiPlatformSelect, Object.entries(AI_PLATFORM_PRESETS).map
 
 function getLanguageDisplayName(language) {
   const normalized = normalizeLanguage(language);
-  const key = normalized === 'auto' ? 'languageAuto'
-    : normalized === 'zh_CN' ? 'languageZh'
+  const key = normalized === 'zh_CN' ? 'languageZh'
+    : normalized === 'zh_TW' ? 'languageZhTW'
     : normalized === 'ja' ? 'languageJa'
+    : normalized === 'vi' ? 'languageVi'
+    : normalized === 'ko' ? 'languageKo'
     : 'languageEn';
-  return tr(key) || LANGUAGE_LABELS[normalized] || LANGUAGE_LABELS.auto;
+  return tr(key) || LANGUAGE_LABELS[normalized] || LANGUAGE_LABELS.zh_CN;
 }
 
 function updateLanguageToggle(language) {
   if (!languageToggle) return;
   const normalized = normalizeLanguage(language);
+  document.documentElement.lang = normalized === 'zh_CN' ? 'zh-CN' : normalized === 'zh_TW' ? 'zh-TW' : normalized;
   const label = getLanguageDisplayName(normalized);
   const effective = getEffectiveLanguageId(normalized);
   languageToggle.querySelector('.language-toggle-text').textContent = LANGUAGE_TOGGLE_TEXT[effective] || LANGUAGE_TOGGLE_TEXT.en;
   languageToggle.dataset.languagePref = normalized;
   languageToggle.title = `${tr('languageLabel')}: ${label}`;
   languageToggle.setAttribute('aria-label', `${tr('languageLabel')}: ${label}`);
+  languageOptions.forEach((option) => {
+    option.setAttribute('aria-selected', option.dataset.languageOption === normalized ? 'true' : 'false');
+  });
+}
+
+function setLanguageMenuOpen(open) {
+  if (!languageToggle || !languagePopover) return;
+  languageToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  languagePopover.hidden = !open;
 }
 
 function buildLanguageStoragePatch(language) {
@@ -661,6 +880,11 @@ chrome.storage.sync.get(STORAGE_DEFAULTS, (items) => {
   starChartToggle.checked = items.featureStarChart !== false;
   if (bookmarkFolderToggle) bookmarkFolderToggle.checked = !!items.featureBookmarkFolders;
   bookmarkCountToggle.checked = items.showBookmarkCount !== false;
+  if (followRadarEnabledToggle) followRadarEnabledToggle.checked = items.followRadarEnabled !== false;
+  if (followRadarTimelineToggle) followRadarTimelineToggle.checked = items.followRadarTimelineEnabled !== false;
+  if (followRadarLeaderboardToggle) followRadarLeaderboardToggle.checked = items.followRadarLeaderboardEnabled !== false;
+  if (followRadarRelationsToggle) followRadarRelationsToggle.checked = items.followRadarShowRelations !== false;
+  if (followRadarRateToggle) followRadarRateToggle.checked = items.followRadarShowRate !== false;
   leaderboardCountInput.value = normalizeCount(items.leaderboardCount);
   setCustomSelectValue(badgeStyleSelect, items.badgeStyle === 'inline-classic' ? 'inline-classic' : 'pill-solid');
   const storedLanguage = normalizeLanguage(items.language || initialLanguagePref);
@@ -815,6 +1039,7 @@ colListEl.addEventListener('dragend', () => {
     el.classList.remove('dragging');
     el.classList.remove('drag-over');
   });
+  loadFollowHistory();
 });
 
 function persistColumns() {
@@ -831,6 +1056,96 @@ leaderboardEdgeHideToggle.addEventListener('change', () => {
   chrome.storage.sync.set({ leaderboardEdgeHideEnabled: leaderboardEdgeHideToggle.checked }, () => {
     flash(tr(leaderboardEdgeHideToggle.checked ? 'flashLeaderboardEdgeHideOn' : 'flashLeaderboardEdgeHideOff'));
   });
+});
+
+[
+  [followRadarEnabledToggle, 'followRadarEnabled'],
+  [followRadarTimelineToggle, 'followRadarTimelineEnabled'],
+  [followRadarLeaderboardToggle, 'followRadarLeaderboardEnabled'],
+  [followRadarRelationsToggle, 'followRadarShowRelations'],
+  [followRadarRateToggle, 'followRadarShowRate'],
+].forEach(([toggle, key]) => {
+  toggle?.addEventListener('change', () => chrome.storage.sync.set({ [key]: toggle.checked }));
+});
+
+[frHistorySearch, frHistoryDirection, frHistoryPeriod].forEach((control) => {
+  const resetPage = () => { frHistoryVisibleCount = 50; renderFollowHistory(); };
+  control?.addEventListener('input', resetPage);
+  control?.addEventListener('change', resetPage);
+});
+
+frHistoryMore?.addEventListener('click', () => {
+  frHistoryVisibleCount += 50;
+  renderFollowHistory();
+});
+
+frHistoryUpgrade?.addEventListener('click', () => window.open('https://x.jieyiai.dev', '_blank', 'noopener'));
+frCloudSync?.addEventListener('change', async () => {
+  await new Promise((resolve) => chrome.storage.local.set({ [FR_SYNC_KEY]: frCloudSync.checked }, resolve));
+  if (!frCloudSync.checked) {
+    flash('已关闭云端同步，本地记录会继续保留');
+    return;
+  }
+  try {
+    await syncFollowHistory();
+    await pullFollowHistory();
+  } catch (_) {
+    scheduleFollowHistoryRetry();
+    flash('暂时无法同步，将在网络恢复后重试');
+  }
+});
+frSyncNow?.addEventListener('click', async () => {
+  try {
+    await syncFollowHistory();
+    await pullFollowHistory();
+  } catch (_) { scheduleFollowHistoryRetry(); flash('同步失败，将自动重试'); }
+});
+frLocalDelete?.addEventListener('click', async () => {
+  if (!confirm('清除本机保存的取关历史？此操作不会删除云端记录。')) return;
+  frEvents = [];
+  frHistoryVisibleCount = 50;
+  await persistFollowHistory();
+  renderFollowHistory();
+  flash('本地历史已清除');
+});
+frCloudDelete?.addEventListener('click', async () => {
+  if (!confirm('删除当前账户的全部云端取关历史？本地记录不会删除。')) return;
+  try {
+    const res = await followRadarAuthedFetch('/api/follow-radar/events', { method: 'DELETE' });
+    if (!res.ok) throw new Error('delete_failed');
+    if (frCloudSync) frCloudSync.checked = false;
+    clearTimeout(frSyncRetryTimer);
+    frSyncRetryTimer = 0;
+    await new Promise((resolve) => chrome.storage.local.set({ [FR_SYNC_KEY]: false }, resolve));
+    flash('云端历史已删除，同步已关闭；本地记录仍保留');
+  } catch (_) { flash('删除失败，请稍后重试'); }
+});
+function observeFollowHistoryTier() {
+  const target = document.body || document.documentElement;
+  if (!target?.nodeType) {
+    document.addEventListener('DOMContentLoaded', observeFollowHistoryTier, { once: true });
+    return;
+  }
+  new MutationObserver(renderFollowHistory).observe(target, {
+    attributes: true,
+    attributeFilter: ['data-tier'],
+  });
+}
+observeFollowHistoryTier();
+window.addEventListener('online', () => {
+  if (frCloudSync?.checked) {
+    clearTimeout(frSyncRetryTimer);
+    frSyncRetryTimer = 0;
+    frSyncRetryCount = 0;
+    syncFollowHistory().then(pullFollowHistory).catch(scheduleFollowHistoryRetry);
+  }
+});
+chrome.storage.onChanged?.addListener((changes, area) => {
+  if (area !== 'local' || !changes.followRadarV1) return;
+  const next = changes.followRadarV1.newValue;
+  frEvents = Array.isArray(next?.events) ? next.events : [];
+  renderFollowHistory();
+  if (frCloudSync?.checked) scheduleFollowHistoryRetry();
 });
 
 copyMdToggle.addEventListener('change', () => {
@@ -1038,10 +1353,22 @@ languageSelect?.addEventListener('change', () => {
 });
 
 languageToggle?.addEventListener('click', () => {
-  const current = normalizeLanguage(languageSelect?.value || initialLanguagePref);
-  const idx = SUPPORTED_LANGUAGE_IDS.indexOf(current);
-  const next = SUPPORTED_LANGUAGE_IDS[(Math.max(idx, 0) + 1) % SUPPORTED_LANGUAGE_IDS.length];
-  applyLanguageChange(next);
+  setLanguageMenuOpen(languagePopover?.hidden);
+});
+
+languageOptions.forEach((option) => {
+  option.addEventListener('click', () => {
+    setLanguageMenuOpen(false);
+    applyLanguageChange(option.dataset.languageOption);
+  });
+});
+
+document.addEventListener('click', (event) => {
+  if (languageMenu && !languageMenu.contains(event.target)) setLanguageMenuOpen(false);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') setLanguageMenuOpen(false);
 });
 
 form.addEventListener('submit', (e) => {
@@ -1081,4 +1408,8 @@ lbResetBtn?.addEventListener('click', () => {
 const versionEl = document.getElementById('popup-version');
 if (versionEl) {
   try { versionEl.textContent = chrome.runtime.getManifest().version; } catch (_) {}
+}
+const inlineVersionEl = document.getElementById('popup-version-inline');
+if (inlineVersionEl) {
+  try { inlineVersionEl.textContent = chrome.runtime.getManifest().version; } catch (_) {}
 }

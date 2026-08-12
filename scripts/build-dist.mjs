@@ -16,17 +16,22 @@ const DIST_EXCLUDED_FILES = new Set([
   'src/premium/content-filter/rules.json',
 ]);
 
-// Same canonical 18-file shipping set used by the v1.6.13 release zip,
+// Same canonical shipping set used by the release zip,
 // plus the M1 premium tree under src/.
 const ITEMS = [
   '_locales',
   'icons',
   'lib',
   'src',
+  'auth-callback.html',
+  'auth-callback.js',
   'background.js',
   'bridge.js',
   'bookmark-menu.js',
   'content.js',
+  'dashboard.css',
+  'dashboard.html',
+  'dashboard.js',
   'manifest.json',
   'popup.html',
   'popup.js',

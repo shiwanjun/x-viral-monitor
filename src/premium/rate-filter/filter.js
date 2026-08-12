@@ -170,7 +170,7 @@
   //   activate() runs at module load when gate.js still reports 'free'
   //   (fail-closed default before isolated.js async-pushes the real tier).
   //   The original code returned early from activate() so subscribe()
-  //   never ran; when tier later flipped to 'trial' via onTierChange,
+  //   never ran; when tier later flips to a paid subscription via onTierChange,
   //   subscribe() was never re-invoked → net hook had no listener for X
   //   GraphQL responses → decisions map stayed empty → applyHidesNow()
   //   was a no-op.
@@ -396,7 +396,7 @@
   function cellForArticle(art) { return articleMeta(art).cell; }
 
   // === Tier revoke at runtime ===
-  // If user's tier drops mid-session (trial expired / license revoked),
+  // If a subscription becomes inactive mid-session,
   // un-hide everything we previously hid so they regain Free behavior.
   // Tier revoke (Pro → Free): the root flag alone hides the CSS effect
   // instantly, but we also clear individual markers so leftover state

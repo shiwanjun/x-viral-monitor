@@ -1,0 +1,1085 @@
+{
+  "extName": {
+    "message": "X-Tools",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "바이럴 감지 및 팔로우 인사이트: 속도 배지, 맞팔 표시, 일방 팔로우, 언팔 알림. 모든 처리는 로컬에서 이루어지며 데이터를 수집하지 않습니다.",
+    "description": "Extension description"
+  },
+  "popupSubtitle": {
+    "message": "X를 위한 바이럴 감지 및 팔로우 인사이트"
+  },
+  "tierNormal": {
+    "message": "일반"
+  },
+  "tierTrending": {
+    "message": "트렌딩"
+  },
+  "tierViral": {
+    "message": "바이럴"
+  },
+  "hoverHint": {
+    "message": "Hover badges to see views, likes, RT, replies, bookmarks and viral score."
+  },
+  "thresholdTrending": {
+    "message": "🚀 Trending threshold"
+  },
+  "thresholdViral": {
+    "message": "🔥 Viral threshold"
+  },
+  "btnSave": {
+    "message": "저장"
+  },
+  "btnSaved": {
+    "message": "저장됨"
+  },
+  "btnReset": {
+    "message": "초기화"
+  },
+  "btnAdd": {
+    "message": "추가"
+  },
+  "btnDelete": {
+    "message": "삭제"
+  },
+  "flashSaved": {
+    "message": "Saved ✓"
+  },
+  "flashReset": {
+    "message": "Reset ✓"
+  },
+  "featureCopyMdTitle": {
+    "message": "📋 게시물을 Markdown으로 복사"
+  },
+  "featureCopyMdDesc": {
+    "message": "Adds a \"Copy as Markdown\" entry at the bottom of X's native share menu. Copies the tweet text, author, link and date in Markdown format."
+  },
+  "featureLeaderboardTitle": {
+    "message": "📊 속도 리더보드"
+  },
+  "featureLeaderboardDesc": {
+    "message": "Draggable floating panel showing the fastest-growing tweets visible on the current page. Click a row to scroll to the tweet."
+  },
+  "featureLeaderboardEdgeHideTitle": {
+    "message": "Edge-hide leaderboard"
+  },
+  "featureLeaderboardEdgeHideDesc": {
+    "message": "When enabled, drag the leaderboard to a screen edge and release to tuck it away."
+  },
+  "featureLeaderboardShowTop": {
+    "message": "Show top"
+  },
+  "featureLeaderboardTweets": {
+    "message": "tweets"
+  },
+  "featureLeaderboardColsHint": {
+    "message": "Drag to reorder · check to show"
+  },
+  "popupColRank": {
+    "message": "Rank"
+  },
+  "popupColIcon": {
+    "message": "Tier icon"
+  },
+  "popupColHandle": {
+    "message": "Username"
+  },
+  "popupColPreview": {
+    "message": "Tweet preview"
+  },
+  "popupColViews": {
+    "message": "Views"
+  },
+  "popupColVelocity": {
+    "message": "Velocity"
+  },
+  "contentViews": {
+    "message": "Views"
+  },
+  "contentLikes": {
+    "message": "Likes"
+  },
+  "contentRetweets": {
+    "message": "Retweets"
+  },
+  "contentReplies": {
+    "message": "Replies"
+  },
+  "contentBookmarks": {
+    "message": "Bookmarks"
+  },
+  "contentVelocity": {
+    "message": "Velocity"
+  },
+  "contentViralScore": {
+    "message": "Viral Score"
+  },
+  "contentPosted": {
+    "message": "Posted"
+  },
+  "contentLeaderboardTitle": {
+    "message": "Hot on this page"
+  },
+  "contentLeaderboardDragToMove": {
+    "message": "Drag to move"
+  },
+  "contentLeaderboardBackToPrevious": {
+    "message": "Return to previous scroll position"
+  },
+  "contentLeaderboardEdgeHide": {
+    "message": "Hide at edge"
+  },
+  "contentLeaderboardEdgeShow": {
+    "message": "Expand"
+  },
+  "contentLeaderboardSettings": {
+    "message": "Open leaderboard settings"
+  },
+  "contentLeaderboardClose": {
+    "message": "Close leaderboard"
+  },
+  "contentLeaderboardCloseSettings": {
+    "message": "Close settings"
+  },
+  "contentLeaderboardSettingsPanelTitle": {
+    "message": "Leaderboard settings"
+  },
+  "contentLeaderboardColumns": {
+    "message": "Visible columns"
+  },
+  "contentLeaderboardSettingsAutoSave": {
+    "message": "Changes are saved automatically and apply to this page immediately."
+  },
+  "contentLeaderboardTotalViews": {
+    "message": "Total views"
+  },
+  "contentCopyMdLabel": {
+    "message": "Copy as Markdown"
+  },
+  "contentCopyMdDone": {
+    "message": "Copied!"
+  },
+  "contentCopyMdAttribution": {
+    "message": "via X-Tools"
+  },
+  "contentCopyMdNoTweetFound": {
+    "message": "No tweet found"
+  },
+  "contentCopyMdCopyFailed": {
+    "message": "Copy failed"
+  },
+  "contentCopyTweetCommentsLabel": {
+    "message": "Copy tweet and comments"
+  },
+  "contentCopyTweetCommentsDone": {
+    "message": "Tweet and comments copied!"
+  },
+  "contentCopyTweetCommentsHeading": {
+    "message": "Comments"
+  },
+  "contentFallbackTweetLabel": {
+    "message": "tweet"
+  },
+  "flashColumnsSaved": {
+    "message": "Columns saved ✓"
+  },
+  "flashLeaderboardOn": {
+    "message": "Leaderboard ON ✓"
+  },
+  "flashLeaderboardOff": {
+    "message": "Leaderboard OFF"
+  },
+  "flashLeaderboardEdgeHideOn": {
+    "message": "Edge-hide ON ✓"
+  },
+  "flashLeaderboardEdgeHideOff": {
+    "message": "Edge-hide OFF"
+  },
+  "flashCopyMdOn": {
+    "message": "Copy-as-Markdown ON ✓"
+  },
+  "flashCopyMdOff": {
+    "message": "Copy-as-Markdown OFF"
+  },
+  "flashShowingTop": {
+    "message": "Showing top $COUNT$ ✓",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "contentStarChartMenuLabel": {
+    "message": "Thank-You Star Chart"
+  },
+  "contentStarChartAttribution": {
+    "message": "via X-Tools"
+  },
+  "contentStarChartTitle": {
+    "message": "Thank-You Star Chart"
+  },
+  "contentStarChartLoading": {
+    "message": "Loading supporters..."
+  },
+  "contentStarChartProgress": {
+    "message": "{{COUNT}} supporters loaded"
+  },
+  "contentStarChartRateLimited": {
+    "message": "Hit rate limit, waiting {{SECONDS}}s..."
+  },
+  "contentStarChartDone": {
+    "message": "Done — {{COUNT}} supporters"
+  },
+  "contentStarChartDoneTruncated": {
+    "message": "Done — {{COUNT}} supporters (capped, more available)"
+  },
+  "contentStarChartError": {
+    "message": "Could not load supporters: {{REASON}}"
+  },
+  "contentStarChartNoTweetFound": {
+    "message": "Could not identify the tweet"
+  },
+  "contentStarChartModuleNotLoaded": {
+    "message": "Star chart not available — please reload the page"
+  },
+  "contentStarChartLegendRT": {
+    "message": "Retweet"
+  },
+  "contentStarChartLegendQuote": {
+    "message": "Quote"
+  },
+  "contentStarChartLegendBoth": {
+    "message": "Both"
+  },
+  "contentStarChartClose": {
+    "message": "Close"
+  },
+  "contentStarChartStatRetweets": {
+    "message": "Retweets"
+  },
+  "contentStarChartStatQuotes": {
+    "message": "Quotes"
+  },
+  "contentStarChartStatSupporters": {
+    "message": "Supporters"
+  },
+  "contentStarChartStatSpan": {
+    "message": "Quote span"
+  },
+  "contentStarChartSearchPlaceholder": {
+    "message": "Search name or handle..."
+  },
+  "contentStarChartRiverTitle": {
+    "message": "Quote River"
+  },
+  "contentStarChartRiverEmpty": {
+    "message": "No quotes yet"
+  },
+  "contentStarChartEmpty": {
+    "message": "No supporters found for this tweet"
+  },
+  "contentStarChartReset": {
+    "message": "Reset view"
+  },
+  "popupStarChartLabel": {
+    "message": "Thank-You Star Chart"
+  },
+  "popupStarChartHint": {
+    "message": "Adds a star-chart option to the share menu of any tweet."
+  },
+  "flashStarChartOn": {
+    "message": "Star chart enabled"
+  },
+  "flashStarChartOff": {
+    "message": "Star chart disabled"
+  },
+  "featureBookmarkFoldersTitle": {
+    "message": "🔖 북마크 폴더 메뉴"
+  },
+  "featureBookmarkFoldersDesc": {
+    "message": "Hover over a tweet bookmark button to pick a folder, see where it is saved, or create a folder. Requires X Premium."
+  },
+  "flashBookmarkFoldersOn": {
+    "message": "Bookmark folder menu enabled"
+  },
+  "flashBookmarkFoldersOff": {
+    "message": "Bookmark folder menu disabled"
+  },
+  "contentBookmarkMenuInFolder": {
+    "message": "In folder:"
+  },
+  "contentBookmarkMenuNotInAny": {
+    "message": "Not in any folder"
+  },
+  "contentBookmarkMenuCheckFailed": {
+    "message": "Couldn’t check current folder. Click a folder to retry."
+  },
+  "contentBookmarkMenuChecking": {
+    "message": "Checking current folder…"
+  },
+  "contentBookmarkMenuLoadingFolders": {
+    "message": "Loading bookmark folders…"
+  },
+  "contentBookmarkMenuLoadFailed": {
+    "message": "Failed to load folders. X Premium may be required."
+  },
+  "contentBookmarkMenuNoFolders": {
+    "message": "No folders yet"
+  },
+  "contentBookmarkMenuNewFolderPlaceholder": {
+    "message": "+ New folder (Enter)"
+  },
+  "featureBookmarkCountTitle": {
+    "message": "🔖 북마크 수 표시"
+  },
+  "featureBookmarkCountDesc": {
+    "message": "Display the bookmark count next to each tweet's bookmark button on the timeline."
+  },
+  "flashBookmarkCountOn": {
+    "message": "Bookmark count enabled"
+  },
+  "flashBookmarkCountOff": {
+    "message": "Bookmark count disabled"
+  },
+  "contentStarChartTitleLabel": {
+    "message": "VELOCITY MONITOR"
+  },
+  "contentStarChartHeroEyebrow": {
+    "message": "THANK YOU FOR CARRYING THIS POST FURTHER"
+  },
+  "contentStarChartHeroTitle": {
+    "message": "Every light is a hand passing the post along."
+  },
+  "contentStarChartStatsSectionTitle": {
+    "message": "Overview"
+  },
+  "contentStarChartPeopleSectionTitle": {
+    "message": "Supporters"
+  },
+  "contentStarChartFilterAll": {
+    "message": "All"
+  },
+  "contentStarChartFilterRetweet": {
+    "message": "Retweet"
+  },
+  "contentStarChartFilterQuote": {
+    "message": "Quote"
+  },
+  "contentStarChartFilterBoth": {
+    "message": "Both"
+  },
+  "contentStarChartRiverPrev": {
+    "message": "Previous quote"
+  },
+  "contentStarChartRiverNext": {
+    "message": "Next quote"
+  },
+  "popupGrokPromptTitle": {
+    "message": "Grok comment prompt"
+  },
+  "popupGrokPromptHint": {
+    "message": "Use [推文内容] where the source tweet should be inserted. Click AI Generate in a reply box, choose a template, then pick one generated option to fill the reply."
+  },
+  "popupGrokTempChatLabel": {
+    "message": "Use temporary chat (don't pollute Grok history)"
+  },
+  "flashGrokTempChatOn": {
+    "message": "Temporary chat enabled ✓"
+  },
+  "flashGrokTempChatOff": {
+    "message": "Temporary chat disabled"
+  },
+  "flashGrokPromptSaved": {
+    "message": "Grok prompt saved ✓"
+  },
+  "flashGrokPromptReset": {
+    "message": "Grok prompt reset ✓"
+  },
+  "badgeStyleLabel": {
+    "message": "🏷️ Badge style"
+  },
+  "badgeStylePillSolid": {
+    "message": "Pill solid"
+  },
+  "badgeStyleInlineClassic": {
+    "message": "Inline classic"
+  },
+  "flashBadgeStyleSaved": {
+    "message": "Badge style saved ✓"
+  },
+  "proSignInGoogle": {
+    "message": "Google로 로그인"
+  },
+  "proSignOut": {
+    "message": "로그아웃"
+  },
+  "proPlanChoose": {
+    "message": "Choose"
+  },
+  "subscriptionKicker": {
+    "message": "구독"
+  },
+  "communityDevKicker": {
+    "message": "Development access"
+  },
+  "proPlanName": {
+    "message": "멤버십"
+  },
+  "proPlanMonthlyPeriod": {
+    "message": "/월"
+  },
+  "proPlanMonthlyNote": {
+    "message": "월간 · 언제든 취소 가능"
+  },
+  "proPlanYearlyPeriod": {
+    "message": "/년"
+  },
+  "proPlanYearlyNote": {
+    "message": "20% 절약 · 월 $4.79 상당"
+  },
+  "proPlanRecommended": {
+    "message": "최고의 가치"
+  },
+  "proPlanField": {
+    "message": "Plan"
+  },
+  "proEmailField": {
+    "message": "Account"
+  },
+  "proRenewsField": {
+    "message": "Renews"
+  },
+  "proManageBtn": {
+    "message": "구독 관리"
+  },
+  "rfTitle": {
+    "message": "속도 필터 (멤버십)"
+  },
+  "rfLockedHint": {
+    "message": "구독하면 속도 필터를 사용할 수 있습니다."
+  },
+  "rfEnabled": {
+    "message": "속도가 낮은 게시물 숨기기"
+  },
+  "rfScopeLegend": {
+    "message": "적용 범위"
+  },
+  "rfScopeHome": {
+    "message": "홈"
+  },
+  "rfScopeList": {
+    "message": "리스트"
+  },
+  "rfScopeProfile": {
+    "message": "프로필"
+  },
+  "rfScopeStatus": {
+    "message": "게시물 상세"
+  },
+  "rfShortLegend": {
+    "message": "짧은 게시물 — 두 기준 중 하나를 통과하면 유지"
+  },
+  "rfLongLegend": {
+    "message": "X 아티클 — 두 기준 중 하나를 통과하면 유지"
+  },
+  "rfRatePerMin": {
+    "message": "조회 / 분 ≥"
+  },
+  "rfAbsoluteViews": {
+    "message": "총 조회수 ≥"
+  },
+  "rfRuleHint": {
+    "message": "(조회/분 > 기준) 또는 (총 조회수 > 기준)이면 유지하고, 그렇지 않으면 숨깁니다."
+  },
+  "rfReset": {
+    "message": "기본값으로 초기화"
+  },
+  "rfSave": {
+    "message": "저장"
+  },
+  "rfSavedOk": {
+    "message": "저장됨 ✓"
+  },
+  "rfResetOk": {
+    "message": "초기화됨 ✓"
+  },
+  "featureLeaderboardResetPos": {
+    "message": "Reset leaderboard position"
+  },
+  "featureLeaderboardResetDone": {
+    "message": "Reset — please refresh the page."
+  },
+  "accRateFilter": {
+    "message": "Velocity filter"
+  },
+  "accRateFilterSub": {
+    "message": "Standard+"
+  },
+  "accLeaderboard": {
+    "message": "Leaderboard & badges"
+  },
+  "accPro": {
+    "message": "Account / Subscription"
+  },
+  "accOther": {
+    "message": "Other features & settings"
+  },
+  "heroProActive": {
+    "message": "Active · thanks for supporting!"
+  },
+  "communityDevBadge": {
+    "message": "Community DEV Build"
+  },
+  "communityDevSub": {
+    "message": "All local Pro features are enabled. Official license service and auto-updates belong to the Web Store build."
+  },
+  "heroFreeTagline": {
+    "message": "Most features are free. Subscribe for advanced extras."
+  },
+  "chipTierFree": {
+    "message": "FREE"
+  },
+  "chipTierStandard": {
+    "message": "STANDARD"
+  },
+  "chipTierPro": {
+    "message": "PRO"
+  },
+  "chipTierMax": {
+    "message": "MAX"
+  },
+  "proScopeTitle": {
+    "message": "Subscription plans"
+  },
+  "proScopeBody": {
+    "message": "Standard ($3.99/mo) unlocks velocity filtering. Pro ($5.99/mo) adds advanced thresholds + Pro leaderboard. Max ($7.99/mo) includes all future premium features."
+  },
+  "proFreeTitle": {
+    "message": "What stays free"
+  },
+  "proFreeBody": {
+    "message": "Velocity badges, leaderboard, bookmark counts, long-image reading, image enhancements, content filter, Grok helper, Markdown copy, and bookmark-folder tools remain free to use."
+  },
+  "proWebsiteLink": {
+    "message": "Read the website guide"
+  },
+  "cardFreeFeaturesTitle": {
+    "message": "무료 기능"
+  },
+  "cardProFeaturesTitle": {
+    "message": "멤버십 기능"
+  },
+  "cardProFeaturesSub": {
+    "message": "A few advanced extras"
+  },
+  "featureBadgeLabel": {
+    "message": "속도 배지"
+  },
+  "featureLeaderboardLabel": {
+    "message": "리더보드 패널"
+  },
+  "featureCopyMdLabel": {
+    "message": "Markdown으로 복사"
+  },
+  "featureRateFilterLabel": {
+    "message": "속도 필터"
+  },
+  "chipEnabled": {
+    "message": "활성화됨"
+  },
+  "btnBack": {
+    "message": "뒤로"
+  },
+  "btnCancel": {
+    "message": "취소"
+  },
+  "footerPoweredBy": {
+    "message": "Powered by"
+  },
+  "advBadgeThresholdsTitle": {
+    "message": "Badge thresholds & style"
+  },
+  "advLeaderboardTitle": {
+    "message": "Leaderboard details"
+  },
+  "advOtherFeaturesTitle": {
+    "message": "Other features"
+  },
+  "advGrokShortTitle": {
+    "message": "Grok reply — short tweet template"
+  },
+  "advGrokArticleTitle": {
+    "message": "Grok reply — article template"
+  },
+  "aiProviderTitle": {
+    "message": "AI comment provider"
+  },
+  "aiProviderLabel": {
+    "message": "Provider"
+  },
+  "aiPlatformLabel": {
+    "message": "Platform"
+  },
+  "aiBaseUrlLabel": {
+    "message": "Base URL"
+  },
+  "aiModelLabel": {
+    "message": "Model"
+  },
+  "aiReplyCountLabel": {
+    "message": "Replies"
+  },
+  "aiApiKeyLabel": {
+    "message": "API Key"
+  },
+  "aiProviderHint": {
+    "message": "Cloud providers send tweet context to the selected AI service. Ollama runs on your local machine."
+  },
+  "aiProviderHintGrok": {
+    "message": "X Grok uses your current X login state. No API key is needed."
+  },
+  "aiProviderHintOllama": {
+    "message": "Ollama runs locally. Make sure Ollama is running and the model has been downloaded."
+  },
+  "aiProviderHintCloud": {
+    "message": "Cloud providers send tweet text and reply context to the selected AI service."
+  },
+  "aiProviderXGrok": {
+    "message": "X Grok"
+  },
+  "aiProviderXGrokDesc": {
+    "message": "Use the current X session"
+  },
+  "aiProviderOllama": {
+    "message": "Ollama"
+  },
+  "aiProviderOllamaDesc": {
+    "message": "Local model service"
+  },
+  "aiProviderOpenAICompatible": {
+    "message": "OpenAI compatible"
+  },
+  "aiProviderOpenAICompatibleDesc": {
+    "message": "OpenAI, DeepSeek, OpenRouter"
+  },
+  "aiServiceConfigTitle": {
+    "message": "Service configuration"
+  },
+  "aiGenerationSettingsTitle": {
+    "message": "Generation settings"
+  },
+  "aiCheckLoginStatus": {
+    "message": "Check login status"
+  },
+  "aiTestConnection": {
+    "message": "Test connection"
+  },
+  "aiTestRunning": {
+    "message": "Testing connection..."
+  },
+  "aiTestOk": {
+    "message": "Connection test passed"
+  },
+  "aiTestFailed": {
+    "message": "Connection test failed"
+  },
+  "tabPro": {
+    "message": "멤버십"
+  },
+  "tabFilter": {
+    "message": "필터"
+  },
+  "tabLeaderboard": {
+    "message": "리더보드"
+  },
+  "tabAi": {
+    "message": "AI 답글"
+  },
+  "tabAbout": {
+    "message": "정보"
+  },
+  "rfSubShort": {
+    "message": "Short tweet"
+  },
+  "rfSubLong": {
+    "message": "X Article (long)"
+  },
+  "themeLabel": {
+    "message": "테마"
+  },
+  "themeSwitchToDark": {
+    "message": "어두운 테마로 전환"
+  },
+  "themeSwitchToLight": {
+    "message": "밝은 테마로 전환"
+  },
+  "themeFollowSystem": {
+    "message": "시스템 설정 따르기"
+  },
+  "languageLabel": {
+    "message": "언어"
+  },
+  "languageHint": {
+    "message": "팝업, 페이지 오버레이 및 Grok 프롬프트의 기본 언어에 적용됩니다."
+  },
+  "languageZh": {
+    "message": "中文"
+  },
+  "languageZhTW": {
+    "message": "繁體中文"
+  },
+  "languageEn": {
+    "message": "English"
+  },
+  "languageJa": {
+    "message": "日本語"
+  },
+  "languageVi": {
+    "message": "Tiếng Việt"
+  },
+  "languageKo": {
+    "message": "한국어"
+  },
+  "aboutUpdatesTitle": {
+    "message": "Update notes"
+  },
+  "aboutUpdatesDesc": {
+    "message": "Open the latest update popup on the current X page."
+  },
+  "aboutShowUpdateNotes": {
+    "message": "Show update notes"
+  },
+  "aboutShowUpdateNotesSent": {
+    "message": "Opened the update popup on the current X page."
+  },
+  "aboutShowUpdateNotesNoTab": {
+    "message": "Open an X page first, then try the update popup again."
+  },
+  "grokShortTemplateLabel": {
+    "message": "Tweet template (short posts, <600 chars)"
+  },
+  "grokArticleTemplateLabel": {
+    "message": "Article template (used for X Articles / long posts, ≥600 chars)"
+  },
+  "grokArticleTemplateHint": {
+    "message": "This template group is used automatically when replying to X long-form posts or Articles."
+  },
+  "popupGrokEnterReplyLabel": {
+    "message": "Press Enter to reply"
+  },
+  "popupGrokEnterReplyHint": {
+    "message": "When enabled, plain Enter sends the reply. Shift/Command/Ctrl/Alt+Enter keep their original behavior."
+  },
+  "flashGrokEnterReplyOn": {
+    "message": "Enter to reply enabled"
+  },
+  "flashGrokEnterReplyOff": {
+    "message": "Enter to reply disabled"
+  },
+  "flashAiProviderSaved": {
+    "message": "AI provider settings saved"
+  },
+  "grokDefaultTemplateName": {
+    "message": "Natural replies"
+  },
+  "grokCustomTemplateName": {
+    "message": "Template $N$",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "grokArticleFallbackName": {
+    "message": "Article template"
+  },
+  "grokArticleCustomTemplateName": {
+    "message": "Article template $N$",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "contentLbHotOnly": {
+    "message": "Hot only"
+  },
+  "contentLbHotProTitle": {
+    "message": "Velocity filter is a Pro feature"
+  },
+  "contentLbHotProSub": {
+    "message": "Hide low-views tweets, keep what's actually spreading"
+  },
+  "contentLbHotEnabledToast": {
+    "message": "Hot only is on: posts that do not meet the hot-post threshold will be removed from this page."
+  },
+  "contentLbHotActiveNotice": {
+    "message": "Hot only is on. Posts below the threshold are hidden."
+  },
+  "contentLbHotScopeTitle": {
+    "message": "Applies to"
+  },
+  "contentLbHotScopeHome": {
+    "message": "Home / For you"
+  },
+  "contentLbHotScopeList": {
+    "message": "Lists"
+  },
+  "contentLbHotScopeProfile": {
+    "message": "Profiles"
+  },
+  "contentLbHotScopeStatus": {
+    "message": "Post detail"
+  },
+  "contentLbHotScopeCurrent": {
+    "message": "Current"
+  },
+  "contentLbHotDetails": {
+    "message": "View Pro scope"
+  },
+  "contentLbHotOpenSite": {
+    "message": "Open website"
+  },
+  "contentUpdateTitle": {
+    "message": "X-Tools has been updated"
+  },
+  "contentUpdateSubtitle": {
+    "message": "A few useful changes in this update are easy to miss:"
+  },
+  "contentUpdateItemAiProviderTitle": {
+    "message": "AI comment providers"
+  },
+  "contentUpdateItemAiProviderBody": {
+    "message": "Open Settings → AI comment generation to choose X Grok, OpenAI-compatible providers, DeepSeek, OpenRouter, or local Ollama."
+  },
+  "contentUpdateItemReplyToolsTitle": {
+    "message": "Press Enter to reply"
+  },
+  "contentUpdateItemReplyToolsBody": {
+    "message": "Added an option to send comments with Enter. Enable it in Settings → Other features → Press Enter to reply, then you no longer need Command + Enter in reply boxes."
+  },
+  "contentUpdateItemHotOnlyTitle": {
+    "message": "Hot only state is clearer"
+  },
+  "contentUpdateItemHotOnlyBody": {
+    "message": "When Hot only is enabled, posts below the threshold are removed from the page. You can choose where it applies in the Popup or floating panel settings."
+  },
+  "contentUpdateItemBookmarkToolsTitle": {
+    "message": "Bookmark tools are easier to find"
+  },
+  "contentUpdateItemBookmarkToolsBody": {
+    "message": "In Settings → Other features, enable the bookmark folder menu and bookmark counts to pick save folders, see saved locations, and show bookmark counts on the timeline."
+  },
+  "contentUpdateItemFilterRulesTitle": {
+    "message": "Content filtering is steadier"
+  },
+  "contentUpdateItemFilterRulesBody": {
+    "message": "Content filtering now avoids more false positives around normal Telegram mentions, while catching additional WeChat / Telegram funnel patterns in replies and profile bios."
+  },
+  "contentUpdateDismiss": {
+    "message": "Got it"
+  },
+  "cfTitle": {
+    "message": "콘텐츠 필터"
+  },
+  "cfLockedHint": {
+    "message": "콘텐츠 필터는 무료입니다. 여기에서 활성화할 수 있습니다."
+  },
+  "cfEnabled": {
+    "message": "성인 / 광고 / 유도성 답글 숨기기"
+  },
+  "cfLevel": {
+    "message": "필터 강도"
+  },
+  "cfLevelLight": {
+    "message": "약함"
+  },
+  "cfLevelStandard": {
+    "message": "표준"
+  },
+  "cfLevelStrict": {
+    "message": "엄격"
+  },
+  "cfRuleCounts": {
+    "message": "기본 규칙 $COUNT$개, 맞춤 규칙 $CUSTOM$개가 활성화되었습니다.",
+    "placeholders": {
+      "COUNT": {
+        "content": "$1"
+      },
+      "CUSTOM": {
+        "content": "$2"
+      }
+    }
+  },
+  "cfScopeHint": {
+    "message": "게시물 상세 페이지의 답글 영역에만 적용됩니다. 홈, 검색, 프로필 및 원문 게시물은 필터링되지 않습니다."
+  },
+  "cfCustomTitle": {
+    "message": "맞춤 규칙"
+  },
+  "cfWhitelistTitle": {
+    "message": "허용 / 차단 목록 설정"
+  },
+  "cfValue": {
+    "message": "키워드 / 정규식 / 도메인"
+  },
+  "cfAddRule": {
+    "message": "규칙 추가"
+  },
+  "cfDeleteRule": {
+    "message": "규칙 삭제"
+  },
+  "cfCustomEmpty": {
+    "message": "맞춤 규칙이 없습니다."
+  },
+  "cfWhitelistFollowing": {
+    "message": "내가 팔로우하는 계정은 항상 허용"
+  },
+  "cfWhitelistHandles": {
+    "message": "허용된 핸들"
+  },
+  "cfBlacklistHandles": {
+    "message": "차단된 핸들"
+  },
+  "cfWhitelistDomains": {
+    "message": "허용된 도메인"
+  },
+  "cfAllRulesTitle": {
+    "message": "모든 규칙"
+  },
+  "cfBuiltinRule": {
+    "message": "기본"
+  },
+  "cfCustomRule": {
+    "message": "맞춤"
+  },
+  "cfNoRules": {
+    "message": "규칙이 없습니다."
+  },
+  "cfRuleHint": {
+    "message": "규칙은 브라우저에서 로컬로 실행됩니다. 업로드되는 데이터가 없습니다."
+  },
+  "cfRulesSourceBundled": {
+    "message": "규칙 소스: 내장"
+  },
+  "cfRulesSourceRemote": {
+    "message": "Rules source: remote · updated $AGO$",
+    "placeholders": {
+      "AGO": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesJustNow": {
+    "message": "just now"
+  },
+  "cfRulesMinutesAgo": {
+    "message": "$N$m ago",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesHoursAgo": {
+    "message": "$N$h ago",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesDaysAgo": {
+    "message": "$N$d ago",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesRefresh": {
+    "message": "업데이트 확인"
+  },
+  "cfRulesRefreshing": {
+    "message": "가져오는 중…"
+  },
+  "cfRulesRefreshOk": {
+    "message": "규칙이 업데이트되었습니다."
+  },
+  "cfRulesRefreshErr": {
+    "message": "가져오지 못했습니다. 나중에 다시 시도하세요."
+  },
+  "cfAutoSaved": {
+    "message": "자동 저장됨"
+  },
+  "advAppearanceTitle": {
+    "message": "Appearance"
+  },
+  "frMutual": {
+    "message": "맞팔"
+  },
+  "frMine": {
+    "message": "내가 팔로우함"
+  },
+  "frTheirs": {
+    "message": "나를 팔로우함"
+  },
+  "frUnfollowed": {
+    "message": "언팔함"
+  },
+  "frRateLabel": {
+    "message": "팔로우 비율"
+  },
+  "frFollowers": {
+    "message": "팔로워"
+  },
+  "frFollowing": {
+    "message": "팔로잉"
+  },
+  "frRefresh": {
+    "message": "새로고침"
+  },
+  "frScanFollowing": {
+    "message": "팔로잉 스캔"
+  },
+  "frScanFollowers": {
+    "message": "팔로워 스캔"
+  },
+  "frScanIdle": {
+    "message": "준비됨"
+  },
+  "frScanBusy": {
+    "message": "{{COUNT}}명 스캔 중"
+  },
+  "frScanDone": {
+    "message": "완료 · {{COUNT}}명 찾음"
+  },
+  "frRefreshDone": {
+    "message": "Refreshed {{COUNT}} accounts"
+  },
+  "frNeedTemplate": {
+    "message": "Visit your Following/Followers page once to initialize"
+  },
+  "frNeedProfileTemplate": {
+    "message": "Visit any profile once to initialize refresh"
+  },
+  "frRate": {
+    "message": "팔로우 비율"
+  },
+  "frNeedUserId": {
+    "message": "Open your own profile once to initialize"
+  },
+  "frRateLimited": {
+    "message": "Rate limited, retrying in {{SECONDS}}s"
+  },
+  "frScanError": {
+    "message": "스캔에 실패했습니다. 다시 시도하세요"
+  },
+  "frUnfollowedMe": {
+    "message": "They unfollowed you"
+  },
+  "frIUnfollowed": {
+    "message": "You unfollowed them"
+  }
+}

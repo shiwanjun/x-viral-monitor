@@ -12,18 +12,18 @@ const userscriptReadme = readFileSync(resolve(repo, 'userscript/README.md'), 'ut
 
 describe('iOS mobile userscript build', () => {
   it('ships as a separate mobile file without replacing the desktop userscript', () => {
-    expect(mobileScript).toContain('@name         X Viral Monitor Mobile Badge');
-    expect(mobileScript).toContain('@version      0.1.15');
+    expect(mobileScript).toContain('@name         X-Tools Mobile Badge');
+    expect(mobileScript).toContain('@version      1.0.0');
     expect(mobileScript).toContain('@match        https://mobile.x.com/*');
-    expect(desktopScript).toContain('@name         X Viral Monitor Minimal Badge');
-    expect(desktopScript).toContain('@version      0.1.22');
-    expect(desktopScript).not.toContain('@name         X Viral Monitor Mobile Badge');
+    expect(desktopScript).toContain('@name         X-Tools Minimal Badge');
+    expect(desktopScript).toContain('@version      1.0.0');
+    expect(desktopScript).not.toContain('@name         X-Tools Mobile Badge');
   });
 
   it('keeps the debug build separate from the mobile release path', () => {
-    expect(debugScript).toContain('@name         X Viral Monitor Minimal Badge DEBUG');
-    expect(debugScript).toContain('@version      0.1.13-debug.6');
-    expect(mobileScript).not.toContain('@name         X Viral Monitor Minimal Badge DEBUG');
+    expect(debugScript).toContain('@name         X-Tools Minimal Badge DEBUG');
+    expect(debugScript).toContain('@version      1.0.0');
+    expect(mobileScript).not.toContain('@name         X-Tools Minimal Badge DEBUG');
     expect(mobileScript).not.toContain('@version      0.1.13-debug.5');
   });
 
@@ -58,16 +58,16 @@ describe('iOS mobile userscript build', () => {
 
   it('declares Safari/mobile script metadata with maintainer and project links', () => {
     expect(mobileScript).toContain('@author       IcyCat');
-    expect(mobileScript).toContain('@homepageURL  https://github.com/Icy-Cat/x-viral-monitor');
-    expect(mobileScript).toContain('@supportURL   https://github.com/Icy-Cat/x-viral-monitor/issues');
+    expect(mobileScript).toContain('@homepageURL  https://x.jieyiai.dev');
+    expect(mobileScript).toContain('@supportURL   https://x.jieyiai.dev');
   });
 });
 
 describe('desktop userscript Tampermonkey compatibility', () => {
   it('declares desktop script metadata with maintainer, contributor, and project links', () => {
     expect(desktopScript).toContain('@author       IcyCat, Chlience');
-    expect(desktopScript).toContain('@homepageURL  https://github.com/Icy-Cat/x-viral-monitor');
-    expect(desktopScript).toContain('@supportURL   https://github.com/Icy-Cat/x-viral-monitor/issues');
+    expect(desktopScript).toContain('@homepageURL  https://x.jieyiai.dev');
+    expect(desktopScript).toContain('@supportURL   https://x.jieyiai.dev');
   });
 
   it('uses a CSP-safe Tampermonkey hook path for Firefox page objects', () => {

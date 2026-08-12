@@ -3,93 +3,149 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>X Viral Monitor</title>
+  <title>X-Tools</title>
   <style>
     /*
-     * Tabs layout (mock A) — shadcn-style dark popup.
-     * Locked 2026-05-19 (3rd UI pivot after Accordion C / Dashboard D).
-     * Top header w/ tier chip + 4 main tabs (Pro / Filter / Leaderboard /
-     * About). Filter tab nests Short/Long sub-tabs.
+     * X-Tools popup — unified 3-layer design token system (V1.0.0).
+     *
+     * Layer 1 · Primitive palette  — raw color/scale values, never used
+     *                                directly by components.
+     * Layer 2 · Semantic tokens    — theme-indirect names components use.
+     *                                Each theme overrides ONLY this layer.
+     * Layer 3 · Components         — class rules reference Layer 2 only.
+     *
+     * To add a new theme: add a `body[data-theme="xxx"]` block that
+     * reassigns the Layer-2 tokens. Layers 1 & 3 stay untouched.
+     *
+     * Default theme: dark (shadcn slate-950 + cyan-500).
      */
-    /* Light theme (default, warm sand palette from v1.6.x) */
+
+    /* ───────── Layer 1 · Primitive palette ───────── */
     :root {
-      --bg:        #f4efe5;
-      --surface:   #fffcf6;
-      --surface-2: #f5ede1;
-      --surface-3: #e9dcc5;
-      --border:    rgba(86, 60, 34, 0.18);
-      --border-hi: rgba(86, 60, 34, 0.32);
-      --text:      #24180f;
-      --text-2:    #4a3a2e;
-      --muted:     #6e5b4d;
-      --accent:    #bf5a2a;
-      --accent-2:  #a04017;
-      --accent-hi: #d97540;
-      --orange:    #c2410c;
-      --ok:        #2a7f3f;
-      --warn:      #b8782e;
-      --danger:    #b14a2a;
-      --radius:    10px;
-      --radius-sm: 8px;
-      --radius-xs: 6px;
-      --card:           var(--surface);
-      --line:           var(--border);
-      --accent-strong:  var(--accent-hi);
+      /* Neutral scale (slate) */
+      --slate-50:  #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+      --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+      --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
+      --slate-900: #0f172a; --slate-950: #020617;
+      /* Accent scale (cyan) */
+      --cyan-400: #22d3ee; --cyan-500: #06b6d4; --cyan-600: #0891b2;
+      /* Status */
+      --orange-500: #f97316; --green-400: #4ade80; --green-600: #2a7f3f;
+      --amber-400: #fbbf24; --red-400: #f87171; --violet-500: #a855f7;
+      /* Typography */
+      --font-sans: "Inter", "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, Menlo, monospace;
+      --fs-xs: 10.5px; --fs-sm: 11px; --fs-sm2: 11.5px; --fs-base: 12px;
+      --fs-md: 12.5px; --fs-lg: 13px; --fs-xl: 14px; --fs-2xl: 18px; --fs-tier: 36px;
+      /* Spacing scale */
+      --sp-1: 4px; --sp-2: 6px; --sp-3: 8px; --sp-4: 10px; --sp-5: 12px;
+      --sp-6: 14px; --sp-7: 16px;
+      /* Radii */
+      --r-xs: 6px; --r-sm: 8px; --r-md: 10px; --r-full: 999px;
+      /* Shadows */
+      --sh-sm: 0 1px 3px rgba(0,0,0,0.25);
+      --sh-md: 0 12px 24px rgba(0,0,0,0.18);
+      /* Motion */
+      --t-fast: 120ms; --t-med: 200ms;
     }
-    /* Dark theme (shadcn slate-950 + cyan-500, opt-in via toggle) */
-    body[data-theme="dark"] {
-      --bg:        #020617;
-      --surface:   #0f172a;
-      --surface-2: #1e293b;
-      --surface-3: #334155;
-      --border:    #1e293b;
-      --border-hi: #334155;
-      --text:      #f8fafc;
-      --text-2:    #cbd5e1;
-      --muted:     #64748b;
-      --accent:    #06b6d4;
-      --accent-2:  #0891b2;
-      --accent-hi: #22d3ee;
-      --orange:    #f97316;
-      --ok:        #4ade80;
-      --warn:      #fbbf24;
-      --danger:    #f87171;
+
+    /* ───────── Layer 2 · Semantic tokens — DARK (default) ───────── */
+    :root, body[data-theme="dark"] {
+      --color-bg:        var(--slate-950);
+      --color-surface:   var(--slate-900);
+      --color-surface-2: var(--slate-800);
+      --color-surface-3: var(--slate-700);
+      --color-input:     var(--slate-950);
+      --color-text:      var(--slate-50);
+      --color-text-2:    var(--slate-300);
+      --color-muted:     var(--slate-500);
+      --color-border:    var(--slate-800);
+      --color-border-hi: var(--slate-700);
+      --color-accent:    var(--cyan-500);
+      --color-accent-2:  var(--cyan-600);
+      --color-accent-hi: var(--cyan-400);
+      --color-accent-fg: var(--slate-950);  /* text on accent fill */
+      --color-focus:     var(--cyan-500);
+      --color-orange:    var(--orange-500);
+      --color-ok:        var(--green-400);
+      --color-warn:      var(--amber-400);
+      --color-danger:    var(--red-400);
+      --color-violet:    var(--violet-500);
+      --shadow-select:   var(--sh-md);
+      /* legacy alias map (so un-migrated component rules keep working) */
+      --bg: var(--color-bg); --surface: var(--color-surface);
+      --surface-2: var(--color-surface-2); --surface-3: var(--color-surface-3);
+      --border: var(--color-border); --border-hi: var(--color-border-hi);
+      --text: var(--color-text); --text-2: var(--color-text-2);
+      --muted: var(--color-muted); --accent: var(--color-accent);
+      --accent-2: var(--color-accent-2); --accent-hi: var(--color-accent-hi);
+      --orange: var(--color-orange); --ok: var(--color-ok);
+      --warn: var(--color-warn); --danger: var(--color-danger);
+      --radius: var(--r-md); --radius-sm: var(--r-sm); --radius-xs: var(--r-xs);
     }
-    /* CTA buttons inherit accent contrast; both themes work because text
-       color #0b1120 is dark (cyan-500 / bf5a2a both pass AA). Override
-       per-theme if needed. */
+
+    /* ───────── Layer 2 · Semantic tokens — LIGHT ───────── */
+    body[data-theme="light"] {
+      --color-bg:        #f4efe5;
+      --color-surface:   #fffcf6;
+      --color-surface-2: #f5ede1;
+      --color-surface-3: #e9dcc5;
+      --color-input:     var(--color-bg);
+      --color-text:      #24180f;
+      --color-text-2:    #4a3a2e;
+      --color-muted:     #6e5b4d;
+      --color-border:    rgba(86, 60, 34, 0.18);
+      --color-border-hi: rgba(86, 60, 34, 0.32);
+      --color-accent:    #bf5a2a;
+      --color-accent-2:  #a04017;
+      --color-accent-hi: #d97540;
+      --color-accent-fg: #fff7ed;
+      --color-focus:     #bf5a2a;
+      --color-orange:    #c2410c;
+      --color-ok:        var(--green-600);
+      --color-warn:      #b8782e;
+      --color-danger:    #b14a2a;
+      --color-violet:    var(--violet-500);
+      --shadow-select:   0 12px 24px rgba(86,60,34,0.16);
+      --bg: var(--color-bg); --surface: var(--color-surface);
+      --surface-2: var(--color-surface-2); --surface-3: var(--color-surface-3);
+      --border: var(--color-border); --border-hi: var(--color-border-hi);
+      --text: var(--color-text); --text-2: var(--color-text-2);
+      --muted: var(--color-muted); --accent: var(--color-accent);
+      --accent-2: var(--color-accent-2); --accent-hi: var(--color-accent-hi);
+      --orange: var(--color-orange); --ok: var(--color-ok);
+      --warn: var(--color-warn); --danger: var(--color-danger);
+    }
+    /* Accent-filled CTAs need readable text in both themes. */
+    :root, body[data-theme="dark"] { --on-accent: var(--slate-950); }
+    body[data-theme="light"]       { --on-accent: var(--color-accent-fg); }
+
+    /* ───────── Layer 3 · Base + components ───────── */
     * { box-sizing: border-box; margin: 0; }
     html, body { scrollbar-gutter: stable; }
-    /* scrollbar-gutter only applies to scroll containers. Keep html scrollable
-       so the popup reserves the gutter before a taller tab needs it. */
     html { overflow-y: scroll; }
     body {
-      width: 360px;            /* fixed-width popup per mock A (polish #1) */
-      min-width: 360px;
-      max-width: 360px;
-      font-family: "Inter", "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
-      font-size: 13px;
-      color: var(--text);
-      background: var(--bg);
+      width: 360px; min-width: 360px; max-width: 360px;
+      font-family: var(--font-sans);
+      font-size: var(--fs-base);
+      color: var(--color-text);
+      background: var(--color-bg);
     }
-    /* Polish #1 (post-mock A): keep scrollbar gutter stable so popup doesn't
-       jitter 1-2px when tab content height changes. Plus slim custom
-       scrollbar matching the theme. */
     ::-webkit-scrollbar              { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track        { background: transparent; }
-    ::-webkit-scrollbar-thumb        { background: var(--surface-3); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover  { background: var(--muted); }
-    .popup { padding: 14px; }
+    ::-webkit-scrollbar-thumb        { background: var(--color-surface-3); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover  { background: var(--color-muted); }
+    .popup { padding: var(--sp-6); }
 
     /* === Header === */
     .app-header {
       display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
     }
     .app-logo {
-      width: 28px; height: 28px; border-radius: 8px;
+      width: 30px; height: 30px; border-radius: 9px;
       display: block;
       object-fit: cover;
-      box-shadow: 0 1px 0 rgba(255,255,255,.14) inset, 0 6px 14px rgba(0,0,0,.18);
+      box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 25%, transparent);
     }
     .app-title { flex: 1; }
     .app-title .name { display: block; font-size: 13px; font-weight: 700; color: var(--text); }
@@ -102,9 +158,9 @@
       display: inline-flex; align-items: center; gap: 4px;
     }
     body[data-tier="free"]  #tier-chip { color: var(--muted); border-color: var(--border-hi); background: var(--surface); }
-    body[data-tier="trial"] #tier-chip { color: var(--orange); border-color: rgba(194, 65, 12, 0.45); background: rgba(194, 65, 12, 0.10); }
+    body[data-tier="standard"] #tier-chip { color: var(--accent-hi); border-color: rgba(6, 182, 212, 0.42); background: rgba(6, 182, 212, 0.10); }
     body[data-tier="pro"]   #tier-chip { color: var(--ok); border-color: rgba(42, 127, 63, 0.45); background: rgba(42, 127, 63, 0.10); }
-    body[data-theme="dark"][data-tier="trial"] #tier-chip { color: var(--orange); border-color: rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.10); }
+    body[data-theme="dark"][data-tier="standard"] #tier-chip { color: var(--accent-hi); border-color: rgba(34, 211, 238, 0.45); background: rgba(34, 211, 238, 0.10); }
     body[data-theme="dark"][data-tier="pro"]   #tier-chip { color: var(--ok); border-color: rgba(74, 222, 128, 0.45); background: rgba(74, 222, 128, 0.10); }
 
     .theme-toggle {
@@ -114,6 +170,17 @@
       display: inline-flex; align-items: center; justify-content: center;
       cursor: pointer;
     }
+    .workspace-link {
+      width: 28px; height: 28px; padding: 0;
+      border-radius: 999px; border: 1px solid var(--border-hi);
+      background: var(--surface); color: var(--text-2);
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+    }
+    .workspace-link:hover { color: var(--text); border-color: var(--accent); transform: translateY(-1px); }
+    .workspace-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .workspace-link svg { width: 14px; height: 14px; }
+    .language-menu { position: relative; }
     .language-toggle {
       height: 28px; padding: 0 7px; gap: 3px;
       border-radius: 999px; border: 1px solid var(--border-hi);
@@ -124,9 +191,6 @@
       letter-spacing: 0;
     }
     .language-toggle svg { width: 13px; height: 13px; }
-    /* Auto = following the browser locale: same code, dimmed, so the label
-       always answers "what language am I reading" while still marking auto. */
-    .language-toggle[data-language-pref="auto"] .language-toggle-text { opacity: .55; }
     .theme-toggle:hover { color: var(--text); border-color: var(--accent); }
     .language-toggle:hover { color: var(--text); border-color: var(--accent); }
     .theme-toggle svg { width: 14px; height: 14px; }
@@ -145,6 +209,20 @@
     body:not([data-theme-pref])[data-theme="dark"]  .theme-toggle .ico-moon { display: inline; }
 
     .language-toggle .language-toggle-text { transform: translateY(.2px); }
+    .language-popover {
+      position: absolute; z-index: 40; top: calc(100% + 6px); right: 0;
+      min-width: 132px; padding: 4px;
+      border: 1px solid var(--border-hi); border-radius: var(--radius-sm);
+      background: var(--surface-2); box-shadow: 0 10px 28px rgba(0,0,0,.18);
+    }
+    .language-popover[hidden] { display: none; }
+    .language-option {
+      width: 100%; min-height: 30px; padding: 0 9px; border: 0; border-radius: 6px;
+      background: transparent; color: var(--text-2); text-align: left;
+      font-size: 12px; font-weight: 650; cursor: pointer;
+    }
+    .language-option:hover, .language-option:focus-visible { color: var(--text); background: var(--surface); outline: none; }
+    .language-option[aria-selected="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
 
     /* === Main tab bar === */
     .tabbar {
@@ -159,6 +237,7 @@
       cursor: pointer; position: relative;
       transition: color 120ms;
     }
+    .tabbar[data-tab-count="6"] .tab-btn { font-size: 11.5px; padding-inline: 2px; }
     .tab-btn:hover { color: var(--text-2); }
     .tab-btn[aria-selected="true"] {
       color: var(--text); font-weight: 700;          /* bolder when active (polish #2) */
@@ -177,19 +256,25 @@
 
     /* === Pro tab === */
     .pro-banner {
-      background: var(--surface);
+      position: relative; overflow: hidden;
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
       border: 1px solid var(--border-hi);
-      border-radius: var(--radius);
-      padding: 14px; margin-bottom: 10px;
+      border-radius: calc(var(--radius) + 2px);
+      padding: 16px; margin-bottom: 10px;
     }
+    .pro-banner::before { content: ""; position: absolute; width: 150px; height: 150px; right: -64px; top: -76px; border-radius: 50%; background: var(--accent); opacity: .11; pointer-events: none; }
+    .subscription-kicker { position: relative; display: flex; align-items: center; gap: 6px; font-size: 10px; line-height: 1; font-weight: 800; letter-spacing: .1em; color: var(--accent-hi); text-transform: uppercase; }
+    .subscription-kicker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 14%, transparent); }
     .pro-banner .tier-big {
       font-size: 36px; font-weight: 800; letter-spacing: 0.02em;
-      line-height: 1; margin-bottom: 4px;
+      position: relative; font-size: 31px; font-weight: 800; letter-spacing: -0.035em;
+      line-height: 1; margin: 9px 0 5px;
     }
-    body[data-tier="free"]  .pro-banner .tier-big { color: var(--muted); }
-    body[data-tier="trial"] .pro-banner .tier-big { color: var(--orange); }
-    body[data-tier="pro"]   .pro-banner .tier-big { color: var(--ok); }
-    .pro-banner .tier-sub { font-size: 11.5px; color: var(--text-2); margin-bottom: 12px; }
+    body[data-tier="free"]  .pro-banner .tier-big { color: var(--color-muted); }
+    body[data-tier="standard"] .pro-banner .tier-big { color: var(--color-accent); }
+    body[data-tier="pro"]   .pro-banner .tier-big { color: var(--color-ok); }
+    body[data-tier="max"]   .pro-banner .tier-big { color: var(--color-violet); }
+    .pro-banner .tier-sub { position: relative; font-size: 11.5px; color: var(--text-2); line-height: 1.45; margin-bottom: 14px; }
     .pro-scope {
       display: flex; flex-direction: column; gap: 8px;
       margin: 0 0 12px;
@@ -228,7 +313,7 @@
       display: inline-flex; justify-content: center; align-items: center; gap: 6px;
       padding: 9px 12px; border-radius: var(--radius-sm);
       background: var(--accent); border: 1px solid var(--accent);
-      color: #0b1120; font-weight: 600; font-size: 12.5px;
+      color: var(--on-accent); font-weight: 600; font-size: 12.5px;
       text-decoration: none; cursor: pointer;
     }
     .pro-cta:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
@@ -240,30 +325,31 @@
     .pro-meta .row { display: flex; justify-content: space-between; padding: 2px 0; }
     .pro-meta code { color: var(--text); font-family: ui-monospace, Menlo, monospace; }
 
-    /* Activation form inline in Pro tab */
-    .pro-activate { margin-top: 10px; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-    .pro-activate label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-    .pro-activate input { width: 100%; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border-hi); border-radius: var(--radius-xs); color: var(--text); font-size: 12px; }
-    .pro-activate input:focus { outline: 2px solid var(--accent); }
-    .pro-activate .actions { display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end; }
-    .pro-activate button { padding: 6px 12px; border-radius: var(--radius-xs); border: 1px solid var(--border-hi); background: var(--surface-2); color: var(--text); font-size: 12px; cursor: pointer; }
-    .pro-activate button.primary { background: var(--accent); border-color: var(--accent); color: #0b1120; }
-    .pro-activate button:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Plan cards in Pro tab (replaces old license activation form) */
+    .pro-plans { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+    .pro-plan-card {
+      position: relative; padding: 12px; background: var(--surface); border: 1px solid var(--border-hi);
+      border-radius: var(--radius-sm); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px;
+      transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+    }
+    .pro-plan-card:hover { transform: translateY(-1px); border-color: var(--accent); box-shadow: 0 8px 18px rgba(0,0,0,.10); }
+    .pro-plan-card .plan-name { font-size: 13px; font-weight: 700; color: var(--text); }
+    .pro-plan-card .plan-note { grid-column: 1; font-size: 10.5px; color: var(--muted); }
+    .pro-plan-card .plan-price { font-size: 18px; font-weight: 800; color: var(--text); }
+    .pro-plan-card .plan-period { font-size: 11px; font-weight: 400; color: var(--muted); }
+    .pro-plan-card .plan-btn {
+      grid-column: 2; grid-row: 1 / span 2; padding: 7px 13px; border-radius: var(--radius-xs); border: 1px solid var(--accent);
+      background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .pro-plan-card .plan-btn:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+    .pro-plan-card.plan-standard { border-color: rgba(6, 182, 212, 0.36); }
+    .pro-plan-card.plan-pro { border-color: rgba(22, 163, 74, 0.36); }
+    .pro-plan-card.plan-max { border-color: rgba(168, 85, 247, 0.36); }
+    .pro-plan-card.is-recommended { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+    .plan-recommended { position: absolute; top: -9px; right: 10px; padding: 3px 7px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
     .pro-msg { margin-top: 6px; font-size: 11px; min-height: 14px; }
     .pro-msg[data-kind="ok"]  { color: var(--ok); }
     .pro-msg[data-kind="err"] { color: var(--danger); }
-
-    /* Coming soon list */
-    .coming-list {
-      margin-top: 12px; padding: 10px;
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    }
-    .coming-list-title { font-size: 11.5px; font-weight: 600; color: var(--accent-hi); margin-bottom: 6px; }
-    .coming-list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-    .coming-list li { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; color: var(--text-2); }
-    .coming-list li svg { width: 14px; height: 14px; color: var(--muted); }
-    .coming-list li .label { flex: 1; }
-    .coming-list li .chip-soon { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border-hi); }
 
     /* === Filter tab (sub-tabs) === */
     .sub-tabbar {
@@ -278,7 +364,7 @@
     }
     .sub-tab-btn:hover { color: var(--text); }
     .sub-tab-btn[aria-selected="true"] {
-      background: var(--accent); color: #0b1120; font-weight: 600;
+      background: var(--accent); color: var(--on-accent); font-weight: 600;
     }
     [data-sub-panel] { display: none; }
     [data-sub-panel][data-active="1"] { display: block; }
@@ -290,6 +376,37 @@
     .cf-section[data-locked="1"] { opacity: 0.55; }
     .rf-section[data-locked="1"] input, .rf-section[data-locked="1"] button,
     .cf-section[data-locked="1"] input, .cf-section[data-locked="1"] button, .cf-section[data-locked="1"] select { cursor: not-allowed; }
+    #tabpanel-filter[data-active="1"] { display: grid; gap: 10px; }
+    #tabpanel-filter .cf-section, #tabpanel-filter .rf-section { margin: 0; }
+    .cf-section, .rf-section { position: relative; overflow: hidden; padding: 14px; }
+    .cf-section::before, .rf-section::before { content: ""; position: absolute; width: 86px; height: 86px; top: -52px; right: -40px; border-radius: 50%; pointer-events: none; }
+    .cf-section::before { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+    .rf-section::before { background: color-mix(in srgb, var(--orange) 15%, transparent); }
+    .cf-title, .rf-title { position: relative; }
+    #tabpanel-leaderboard[data-active="1"] { display: grid; gap: 10px; }
+    #tabpanel-leaderboard .panel-card { margin: 0; }
+    .leaderboard-hero { position: relative; overflow: hidden; padding: 15px; border: 1px solid var(--border-hi); border-radius: calc(var(--radius) + 2px); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface)); }
+    .leaderboard-hero::after { content: ""; position: absolute; right: -24px; bottom: -33px; width: 100px; height: 100px; border: 17px solid color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 50%; }
+    .leaderboard-kicker { position: relative; color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .13em; }
+    .leaderboard-hero h2 { position: relative; margin: 5px 0 3px; color: var(--text); font-size: 20px; line-height: 1.1; letter-spacing: -.035em; }
+    .leaderboard-hero p { position: relative; max-width: 240px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .leaderboard-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+    .leaderboard-section-head h3 { margin: 0; }
+    .leaderboard-section-head span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+    .leaderboard-compat-heading { display: none; }
+    .leaderboard-thresholds .info-box { padding: 8px; border: 1px solid var(--border); background: var(--surface-2); }
+    .leaderboard-thresholds .info-box .tier { padding: 4px 2px; }
+    .leaderboard-thresholds .row { gap: 7px; }
+    .leaderboard-thresholds label.field { margin: 9px 0 0; }
+    .leaderboard-thresholds .actions { margin-top: 12px; }
+    .leaderboard-control { padding: 12px; }
+    .leaderboard-control .feature-row { padding: 0; border: 0; }
+    .leaderboard-control .feature-row + .feature-row { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .leaderboard-control .ft-lb-count { padding: 8px; border-radius: var(--radius-xs); background: var(--surface-2); }
+    .leaderboard-control .ft-lb-cols { display: block; margin-top: 10px; }
+    .leaderboard-control .col-list { gap: 5px; margin-top: 7px; }
+    .leaderboard-control .col-list li { min-height: 31px; padding: 5px 7px; border-radius: var(--radius-xs); background: var(--surface-2); }
+    .leaderboard-control .ft-lb-reset { margin-top: 8px; }
     .lf-section {
       margin-top: 12px;
       min-width: 0;
@@ -299,7 +416,7 @@
       padding: 7px 4px; border: 1px solid var(--border-hi); border-radius: var(--radius-xs);
       background: var(--surface-2); color: var(--text-2); font-size: 11px; cursor: pointer;
     }
-    .cf-level[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #0b1120; font-weight: 700; }
+    .cf-level[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
     .cf-custom { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
     .cf-custom summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--text-2); }
     .cf-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
@@ -405,7 +522,7 @@
     }
     .rf-subcard .sub-tab-btn[aria-selected="true"] {
       background: var(--accent) !important;
-      color: #0b1120 !important;
+      color: var(--on-accent) !important;
       border-radius: var(--radius-xs) var(--radius-xs) 0 0 !important;
       font-weight: 700;
       box-shadow: 0 1px 0 rgba(15, 23, 42, 0.1);
@@ -443,7 +560,7 @@
       font-size: 13px; font-weight: 700;
       cursor: pointer; border: 1px solid var(--accent);
     }
-    .rf-btn       { background: var(--accent); color: #0b1120; }
+    .rf-btn       { background: var(--accent); color: var(--on-accent); }
     .rf-btn:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
     .rf-btn-ghost { background: transparent; color: var(--accent-hi); order: 2; font-weight: 500; font-size: 12px; padding: 6px; border: none; }
     .rf-btn-ghost:hover { color: var(--text); }
@@ -476,7 +593,7 @@
     .col-list input[type="checkbox"]:checked::after {
       content: ""; position: absolute; left: 4px; top: 1px;
       width: 6px; height: 11px;
-      border: solid #0b1120; border-width: 0 2px 2px 0;
+      border: solid var(--on-accent); border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
     input[type="checkbox"].xvm-cb:focus-visible,
@@ -592,7 +709,7 @@
     }
     .xvm-select-option[aria-selected="true"] {
       background: var(--accent);
-      color: #0b1120;
+      color: var(--on-accent);
       font-weight: 600;
     }
     button.adv-btn {
@@ -601,7 +718,7 @@
       color: var(--text); font: inherit; font-size: 12px; cursor: pointer;
     }
     button.adv-btn:hover { background: var(--border-hi); }
-    button.adv-btn.primary { background: var(--accent); border-color: var(--accent); color: #0b1120; }
+    button.adv-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
     .actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
     .actions.compact button { padding: 4px 10px; font-size: 11px; }
     .status-msg { font-size: 11px; color: var(--ok); margin-top: 6px; }
@@ -626,12 +743,22 @@
     .ft-lb-reset-btn { padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-hi); background: var(--surface-2); color: var(--text-2); font-size: 11.5px; cursor: pointer; }
     .ft-lb-reset-btn:hover { border-color: var(--accent); color: var(--accent); }
     .ft-lb-reset-msg { font-size: 11px; color: var(--ok); }
-    .grok-template .grok-template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
     [hidden] { display: none !important; }
-    .ai-provider-choice { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 8px 0 10px; }
+    /* AI workspace: provider → connection → generation. The visual structure
+       follows the actual setup order without changing the existing controls. */
+    #tabpanel-ai[data-active="1"] { display: grid; gap: 10px; }
+    #tabpanel-ai .panel-card { margin: 0; }
+    .ai-workspace-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .ai-workspace-heading h3 { margin: 0; }
+    .ai-workspace-step { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+    .ai-setup-flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-bottom: 12px; }
+    .ai-setup-flow span { min-width: 0; padding: 5px 6px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-2); color: var(--muted); font-size: 10px; font-weight: 700; font-style: normal; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ai-setup-flow i { font-style: normal; }
+    .ai-setup-flow b { color: var(--accent); margin-right: 3px; }
+    .ai-provider-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 7px 0 12px; }
     .ai-provider-option {
-      min-height: 52px;
-      padding: 8px 10px;
+      min-height: 70px;
+      padding: 9px 8px;
       border: 1.5px solid var(--border-hi);
       border-radius: var(--radius-sm);
       background: var(--bg);
@@ -641,37 +768,128 @@
       cursor: pointer;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 5px;
     }
-    .ai-provider-option:hover { border-color: var(--accent); }
+    .ai-provider-option:hover { border-color: var(--accent); transform: translateY(-1px); }
     .ai-provider-option:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
     .ai-provider-option[aria-checked="true"] {
       border-color: var(--accent);
       background: color-mix(in srgb, var(--accent) 12%, var(--surface));
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
     }
-    .ai-provider-option-title { font-size: 12.5px; font-weight: 700; }
-    .ai-provider-option-desc { font-size: 10.5px; color: var(--muted); line-height: 1.35; }
-    .ai-provider-section { margin-top: 10px; }
-    .ai-provider-section-title { font-size: 11.5px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
+    .ai-provider-option-title { font-size: 12px; font-weight: 800; line-height: 1.2; }
+    .ai-provider-option-desc { font-size: 10px; color: var(--muted); line-height: 1.3; text-wrap: pretty; }
+    .ai-provider-section { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
+    .ai-provider-section-title { font-size: 10.5px; font-weight: 800; color: var(--text-2); letter-spacing: .045em; text-transform: uppercase; margin-bottom: 7px; }
     .ai-grok-summary {
-      padding: 9px 10px;
-      border: 1px solid var(--border);
+      padding: 10px 11px;
+      border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
       border-radius: var(--radius-sm);
-      background: var(--surface-2);
+      background: color-mix(in srgb, var(--accent) 7%, var(--surface-2));
       color: var(--text-2);
       font-size: 11.5px;
       line-height: 1.45;
     }
     .ai-provider-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .ai-provider-grid .field-wide { grid-column: 1 / -1; }
-    .ai-generation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ai-generation-grid { display: grid; grid-template-columns: minmax(0, 124px); gap: 8px; }
+    .ai-connection-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .ai-connection-actions .adv-btn:first-child { margin-right: auto; }
     .ai-test-status { min-height: 16px; font-size: 11px; color: var(--muted); margin-top: 7px; line-height: 1.35; }
     .ai-test-status[data-state="ok"] { color: var(--ok); }
     .ai-test-status[data-state="error"] { color: var(--danger); }
     .inline-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; margin: 6px 0; color: var(--text-2); }
+    .grok-template { overflow: hidden; padding: 0; }
+    .template-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 11px 13px; cursor: pointer; list-style: none; }
+    .template-summary::-webkit-details-marker { display: none; }
+    .template-summary-copy { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+    .template-summary h3 { margin: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .template-kind { flex: 0 0 auto; color: var(--accent); font-size: 9.5px; font-weight: 800; letter-spacing: .11em; }
+    .template-disclosure { color: var(--muted); font-size: 18px; line-height: 1; transition: transform var(--t-fast); }
+    details[open] .template-disclosure { transform: rotate(90deg); color: var(--accent); }
+    .grok-template-content { padding: 0 13px 12px; border-top: 1px solid var(--border); }
+    .grok-template .grok-template-grid { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 7px; padding: 11px 0 9px; }
+    .grok-template .xvm-select-trigger,
+    .grok-template input[type="text"] { min-height: 36px; background: var(--surface-2); }
+    .grok-template textarea { min-height: 126px; padding: 10px; line-height: 1.6; resize: vertical; background: var(--color-input); }
+    .grok-template .ft-desc { margin-top: 5px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .grok-template .inline-toggle { min-height: 38px; margin: 0; padding: 8px 0; }
+    .template-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .template-actions-end { display: flex; align-items: center; gap: 6px; }
+    .template-actions .adv-btn { min-height: 30px; padding: 5px 10px; }
+    .template-actions .template-save { padding-inline: 13px; font-weight: 700; }
+    .template-actions .template-danger { color: var(--danger); }
+    .template-actions .template-danger:hover { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface-2)); }
+    .follow-radar-card { padding: 13px; }
+    .follow-radar-intro { padding: 10px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)); color: var(--text-2); font-size: 11.5px; line-height: 1.55; }
+    .follow-radar-list { margin-top: 10px; border-top: 1px solid var(--border); }
+    .follow-radar-list .feature-row { align-items: center; padding: 11px 0; }
+    .follow-radar-list .ft-title { font-size: 12.5px; }
+    .follow-radar-list .ft-desc { margin-top: 3px; }
+    .fr-history-card { margin-top: 10px; }
+    .fr-history-toolbar { display: grid; grid-template-columns: 1fr 112px; gap: 6px; margin: 10px 0; }
+    .fr-history-toolbar input { min-width: 0; height: 34px; }
+    .fr-history-period { width: 100%; margin: 0 0 8px; }
+    .fr-history-list { display: grid; gap: 6px; }
+    .fr-history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+    .fr-history-name { font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fr-history-kind { font-size: 10.5px; font-weight: 700; color: var(--accent); }
+    .fr-history-meta { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; line-height: 1.4; }
+    .fr-history-empty, .fr-history-lock { padding: 12px 0 2px; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+    .fr-history-lock .adv-btn { margin-top: 8px; }
+    .fr-history-more { width: 100%; margin-top: 8px; }
+    .fr-cloud-note { margin: 8px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
     .feature-row > .switch, .inline-toggle > .switch { margin-top: 1px; }
     .divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+    /* === About: preference hub === */
+    #tabpanel-about[data-active="1"] { display: grid; gap: 10px; }
+    #tabpanel-about .panel-card { margin: 0; }
+    .about-hero {
+      position: relative; overflow: hidden; padding: 15px 15px 14px;
+      border: 1px solid var(--border-hi); border-radius: calc(var(--radius) + 2px);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface));
+    }
+    .about-hero::after {
+      content: ""; position: absolute; width: 92px; height: 92px; right: -31px; top: -44px;
+      border: 15px solid color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 50%;
+    }
+    .about-kicker { color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .about-hero h2 { position: relative; margin: 5px 0 3px; color: var(--text); font-size: 20px; line-height: 1.1; letter-spacing: -.035em; }
+    .about-hero p { position: relative; max-width: 250px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .about-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+    .about-section-head h3 { margin: 0; }
+    .about-section-head span { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+    .about-compat-heading { display: none; }
+    .about-appearance { padding: 13px; }
+    .about-preference-grid { display: grid; gap: 8px; }
+    .about-preference {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; align-items: center;
+      padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2);
+    }
+    .about-preference > span { color: var(--text); font-size: 12px; font-weight: 700; }
+    .about-preference .xvm-select { min-width: 164px; }
+    .about-preference .ft-desc { grid-column: 1 / -1; margin: -1px 0 0; }
+    .about-theme-choice { min-width: 92px; }
+    .about-feature-list { display: grid; gap: 6px; }
+    .about-feature {
+      position: relative; display: grid; grid-template-columns: 27px minmax(0, 1fr) auto; gap: 9px; align-items: start;
+      padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+      transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast);
+    }
+    .about-feature:hover { border-color: var(--border-hi); background: var(--surface-2); transform: translateY(-1px); }
+    .about-feature::before {
+      content: attr(data-feature); display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px;
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); color: var(--accent);
+      font-size: 9px; font-weight: 800; letter-spacing: .04em;
+    }
+    .about-feature .ft-body { min-width: 0; }
+    .about-feature .ft-title { line-height: 1.25; }
+    .about-feature .switch { align-self: center; margin: 0; }
+    .about-updates { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+    .about-updates p { color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .about-updates .adv-btn { white-space: nowrap; }
+    #tabpanel-about .footer-line { margin: 1px 0 2px; padding: 8px 4px 0; border-top: 1px solid var(--border); }
 
     /* === Footer === */
     .footer-line {
@@ -697,30 +915,41 @@
   <!-- ============ Lucide SVG icon sprite ============ -->
   <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden" focusable="false">
     <symbol id="icon-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3l1.5 4.5L15 9l-4.5 1.5L9 15l-1.5-4.5L3 9l4.5-1.5L9 3z"/><path d="M19 3v4"/><path d="M21 5h-4"/><path d="M19 17v4"/><path d="M21 19h-4"/></symbol>
-    <symbol id="icon-palette"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="0.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="0.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="0.5" fill="currentColor"/><circle cx="6.5" cy="12.5" r="0.5" fill="currentColor"/><path d="M12 2a10 10 0 1 0 10 10c0-2.21-1.79-3-4-3h-2a3 3 0 0 1-3-3V4a2 2 0 0 0-1-2z"/></symbol>
-    <symbol id="icon-webhook"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.98h-5.99c-1.66 0-3.01-1.34-3.01-3s1.35-3 3-3"/><path d="M3.07 11.5l4.41-7.55a3 3 0 0 1 5.99.06"/><path d="M16.97 19.5l-3.16-5.53a3.001 3.001 0 0 0-5.21-.02"/></symbol>
-    <symbol id="icon-bell"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
     <symbol id="icon-sun"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
     <symbol id="icon-moon"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
     <symbol id="icon-monitor"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
     <symbol id="icon-globe"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></symbol>
+    <symbol id="icon-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M9 9h12"/></symbol>
   </svg>
 
   <div class="popup">
 
     <!-- ============ Compact header ============ -->
     <header class="app-header">
-      <img class="app-logo" src="icons/icon_origin.svg" alt="X Viral Monitor">
+      <img class="app-logo" src="icons/x-tools-logo.png" alt="X-Tools">
       <div class="app-title">
-        <span class="name">X-Viral-Monitor</span>
-        <span class="sub" data-i18n="popupSubtitle">Real-time impression velocity on X tweets</span>
+        <span class="name">X-Tools</span>
+        <span class="sub" data-i18n="popupSubtitle">X 爆款检测与关注关系工具</span>
       </div>
-      <span id="tier-chip">FREE</span>
-      <button type="button" id="language-toggle" class="language-toggle" aria-label="Language" title="Language">
-        <svg class="ico-globe"><use href="#icon-globe"/></svg>
-        <span class="language-toggle-text">EN</span>
+      <span id="tier-chip">免费</span>
+      <button type="button" id="open-workspace" class="workspace-link" aria-label="打开数据工作台" title="打开数据工作台">
+        <svg><use href="#icon-layout"/></svg>
       </button>
-      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+      <div class="language-menu" id="language-menu">
+        <button type="button" id="language-toggle" class="language-toggle" aria-label="语言" title="语言" aria-haspopup="listbox" aria-expanded="false">
+          <svg class="ico-globe"><use href="#icon-globe"/></svg>
+          <span class="language-toggle-text">中</span>
+        </button>
+        <div id="language-popover" class="language-popover" role="listbox" aria-label="选择语言" hidden>
+          <button type="button" class="language-option" role="option" data-language-option="zh_CN" aria-selected="true">中文</button>
+          <button type="button" class="language-option" role="option" data-language-option="zh_TW" aria-selected="false">繁體中文</button>
+          <button type="button" class="language-option" role="option" data-language-option="en" aria-selected="false">English</button>
+          <button type="button" class="language-option" role="option" data-language-option="ja" aria-selected="false">日本語</button>
+          <button type="button" class="language-option" role="option" data-language-option="vi" aria-selected="false">Tiếng Việt</button>
+          <button type="button" class="language-option" role="option" data-language-option="ko" aria-selected="false">한국어</button>
+        </div>
+      </div>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="切换主题" title="切换主题">
         <svg class="ico-sun"><use href="#icon-sun"/></svg>
         <svg class="ico-moon"><use href="#icon-moon"/></svg>
         <svg class="ico-monitor"><use href="#icon-monitor"/></svg>
@@ -728,38 +957,21 @@
     </header>
 
     <!-- ============ Tab bar ============ -->
-    <div class="tabbar" role="tablist">
-      <button type="button" class="tab-btn" role="tab" data-tab="pro"         aria-selected="false"><span data-i18n="tabPro">Pro</span></button>
-      <button type="button" class="tab-btn" role="tab" data-tab="filter"      aria-selected="true"><span data-i18n="tabFilter">Filter</span></button>
-      <button type="button" class="tab-btn" role="tab" data-tab="leaderboard" aria-selected="false"><span data-i18n="tabLeaderboard">Leaderboard</span></button>
+    <div class="tabbar" role="tablist" data-tab-count="6">
+      <button type="button" class="tab-btn" role="tab" data-tab="pro"         aria-selected="false"><span data-i18n="tabPro">会员</span></button>
+      <button type="button" class="tab-btn" role="tab" data-tab="filter"      aria-selected="true"><span data-i18n="tabFilter">过滤</span></button>
+      <button type="button" class="tab-btn" role="tab" data-tab="leaderboard" aria-selected="false"><span data-i18n="tabLeaderboard">流速榜</span></button>
+      <button type="button" class="tab-btn" role="tab" data-tab="follow-radar" aria-selected="false">互关助手</button>
       <button type="button" class="tab-btn" role="tab" data-tab="ai"          aria-selected="false"><span data-i18n="tabAi">AI 评论</span></button>
-      <button type="button" class="tab-btn" role="tab" data-tab="about"       aria-selected="false"><span data-i18n="tabAbout">About</span></button>
+      <button type="button" class="tab-btn" role="tab" data-tab="about"       aria-selected="false"><span data-i18n="tabAbout">关于</span></button>
     </div>
 
     <!-- ============ Tab: Pro ============ -->
     <section role="tabpanel" id="tabpanel-pro" data-tab-panel="pro">
-      <!-- popup-pro.js renders banner + CTAs + meta into #xvm-pro-section,
-           and inline activate form into #activate-inline below it. -->
+      <!-- popup-pro.js renders the banner, sign-in / plan cards, and
+           subscription status into #xvm-pro-section. -->
       <div id="xvm-pro-section" class="pro-banner" data-tier="free"></div>
 
-      <div class="pro-activate" id="activate-inline" hidden>
-        <label for="activate-key" data-i18n="proActivateLabel">Already bought? Enter your license key:</label>
-        <input id="activate-key" type="text" autocomplete="off" placeholder="creem-XXXXX...">
-        <div class="actions">
-          <button type="button" id="activate-cancel" class="adv-btn" data-i18n="btnCancel">Cancel</button>
-          <button type="button" id="activate-submit" class="adv-btn primary" data-i18n="proActivateBtn">Activate</button>
-        </div>
-        <div class="pro-msg" id="activate-msg"></div>
-      </div>
-
-      <div class="coming-list">
-        <div class="coming-list-title" data-i18n="comingListTitle">Coming in v1.8.0</div>
-        <ul>
-          <li><svg><use href="#icon-palette"/></svg><span class="label" data-i18n="featureColorCardLabel">Custom color palette</span><span class="chip-soon" data-i18n="chipComingSoon">Coming soon</span></li>
-          <li><svg><use href="#icon-webhook"/></svg><span class="label" data-i18n="featureWebhookLabel">Private hot-tweet webhook</span><span class="chip-soon" data-i18n="chipComingSoon">Coming soon</span></li>
-          <li><svg><use href="#icon-bell"/></svg><span class="label" data-i18n="featureBarkLabel">Bark notifications</span><span class="chip-soon" data-i18n="chipComingSoon">Coming soon</span></li>
-        </ul>
-      </div>
     </section>
 
     <!-- ============ Tab: Filter ============ -->
@@ -773,8 +985,15 @@
     <!-- ============ Tab: Leaderboard ============ -->
     <section role="tabpanel" id="tabpanel-leaderboard" data-tab-panel="leaderboard">
 
-      <div class="panel-card">
-        <h3 data-i18n="advBadgeThresholdsTitle">Badge thresholds &amp; style</h3>
+      <div class="leaderboard-hero">
+        <div class="leaderboard-kicker">LIVE SIGNALS · CONTROL</div>
+        <h2>流速榜控制台</h2>
+        <p>设定内容热度分级，并控制浮动榜单的展示方式与字段。</p>
+      </div>
+
+      <div class="panel-card leaderboard-thresholds">
+        <h3 data-i18n="advBadgeThresholdsTitle" class="leaderboard-compat-heading">Badge thresholds &amp; style</h3>
+        <div class="leaderboard-section-head"><span>热度分级</span><span>THRESHOLDS</span></div>
         <div class="info-box">
           <div class="tier"><span class="icon">🌱</span><span class="label" data-i18n="tierNormal">Normal</span><span class="range" id="range-green">&lt; 1,000/h</span></div>
           <div class="tier"><span class="icon">🚀</span><span class="label" data-i18n="tierTrending">Trending</span><span class="range" id="range-orange">1,000 ~ 10,000/h</span></div>
@@ -803,8 +1022,9 @@
         </form>
       </div>
 
-      <div class="panel-card">
-        <h3 data-i18n="advLeaderboardTitle">Leaderboard details</h3>
+      <div class="panel-card leaderboard-control">
+        <h3 data-i18n="advLeaderboardTitle" class="leaderboard-compat-heading">Leaderboard details</h3>
+        <div class="leaderboard-section-head"><span>榜单显示</span><span>DISPLAY</span></div>
         <div class="feature-row">
           <div class="ft-body">
             <label for="feat-leaderboard"><div class="ft-title" data-i18n="featureLeaderboardTitle">📊 Velocity leaderboard</div></label>
@@ -832,11 +1052,50 @@
       </div>
     </section>
 
+    <!-- ============ Tab: Follow radar ============ -->
+    <section role="tabpanel" id="tabpanel-follow-radar" data-tab-panel="follow-radar">
+      <div class="panel-card follow-radar-card">
+        <div class="ai-workspace-heading"><h3>互关助手</h3><span class="ai-workspace-step">FOLLOW</span></div>
+        <div class="follow-radar-intro">在时间线和流速榜标记互关、单向关注与关注率。关系数据仅保存在本地浏览器。</div>
+        <div class="follow-radar-list">
+          <div class="feature-row"><div class="ft-body"><div class="ft-title">启用互关助手</div><div class="ft-desc">开启或隐藏全部互关与关注率标记。</div></div><label class="switch" for="follow-radar-enabled"><input id="follow-radar-enabled" type="checkbox"><span class="slider"></span></label></div>
+          <div class="feature-row"><div class="ft-body"><div class="ft-title">在时间线显示</div><div class="ft-desc">在 X 帖子作者信息旁显示关系胶囊。</div></div><label class="switch" for="follow-radar-timeline"><input id="follow-radar-timeline" type="checkbox"><span class="slider"></span></label></div>
+          <div class="feature-row"><div class="ft-body"><div class="ft-title">在流速榜显示</div><div class="ft-desc">在流速榜的作者行显示关系胶囊。</div></div><label class="switch" for="follow-radar-leaderboard"><input id="follow-radar-leaderboard" type="checkbox"><span class="slider"></span></label></div>
+          <div class="feature-row"><div class="ft-body"><div class="ft-title">显示关系标签</div><div class="ft-desc">互关、我关注、关注我和取关提示。</div></div><label class="switch" for="follow-radar-relations"><input id="follow-radar-relations" type="checkbox"><span class="slider"></span></label></div>
+          <div class="feature-row"><div class="ft-body"><div class="ft-title">显示关注率</div><div class="ft-desc">对无关系账号显示关注数 / 粉丝数。</div></div><label class="switch" for="follow-radar-rate"><input id="follow-radar-rate" type="checkbox"><span class="slider"></span></label></div>
+        </div>
+      </div>
+      <div class="panel-card follow-radar-card fr-history-card">
+        <div class="ai-workspace-heading"><h3>取关列表</h3><span class="ai-workspace-step">MEMBER</span></div>
+        <div id="fr-history-lock" class="fr-history-lock">取关历史、筛选与云端备份属于会员功能。开通会员后可查看本机已积累的记录。<br><button type="button" id="fr-history-upgrade" class="adv-btn primary">开通会员</button></div>
+        <div id="fr-history-content" hidden>
+          <div class="fr-history-toolbar">
+            <input id="fr-history-search" type="search" placeholder="搜索账号">
+            <div class="xvm-select" data-select-name="fr-history-direction"><input id="fr-history-direction" type="hidden" value="all"><button type="button" class="xvm-select-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="xvm-select-value"></span><svg class="xvm-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button><div class="xvm-select-menu" role="listbox"></div></div>
+          </div>
+          <div class="xvm-select fr-history-period" data-select-name="fr-history-period"><input id="fr-history-period" type="hidden" value="30"><button type="button" class="xvm-select-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="xvm-select-value"></span><svg class="xvm-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button><div class="xvm-select-menu" role="listbox"></div></div>
+          <div id="fr-history-list" class="fr-history-list"></div>
+          <button type="button" id="fr-history-more" class="adv-btn fr-history-more" hidden>显示更多</button>
+          <div class="actions compact"><button type="button" id="fr-sync-now" class="adv-btn">立即同步</button><button type="button" id="fr-local-delete" class="adv-btn">清除本地历史</button><button type="button" id="fr-cloud-delete" class="adv-btn">删除云端历史</button></div>
+          <label class="inline-toggle" for="fr-cloud-sync"><span>会员云端同步（可选）</span><span class="switch"><input id="fr-cloud-sync" type="checkbox"><span class="slider"></span></span></label>
+          <p class="fr-cloud-note">仅同步账号 handle、公开的关注/粉丝数与取关时间；不会上传 X 登录凭证、Cookie 或原始页面内容。会员期间完整保留，取消后可查看最近 30 天；随时可删除云端数据。</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ Tab: AI ============ -->
     <section role="tabpanel" id="tabpanel-ai" data-tab-panel="ai">
 
       <div class="panel-card ai-provider-card">
-        <h3 data-i18n="aiProviderTitle">AI comment provider</h3>
+        <div class="ai-workspace-heading">
+          <h3 data-i18n="aiProviderTitle">AI comment provider</h3>
+          <span class="ai-workspace-step">01 — 03</span>
+        </div>
+        <div class="ai-setup-flow" aria-hidden="true">
+          <span><b>01</b><i data-i18n="aiProviderLabel">Provider</i></span>
+          <span><b>02</b><i data-i18n="aiServiceConfigTitle">Service configuration</i></span>
+          <span><b>03</b><i data-i18n="aiGenerationSettingsTitle">Generation settings</i></span>
+        </div>
         <input id="ai-provider" type="hidden" value="x-grok">
         <div class="ai-provider-section-title" data-i18n="aiProviderLabel">Provider</div>
         <div class="ai-provider-choice" role="radiogroup" aria-label="AI comment provider">
@@ -881,105 +1140,131 @@
           </div>
         </div>
         <div class="ft-desc" id="ai-provider-hint" data-i18n="aiProviderHint">Cloud providers send tweet context to the selected AI service. Ollama runs on your local machine.</div>
-        <div class="actions compact">
+        <div class="ai-connection-actions">
           <button type="button" id="ai-test-connection" class="adv-btn" data-i18n="aiTestConnection">Test connection</button>
           <button type="button" id="ai-provider-save" class="adv-btn primary" data-i18n="btnSave">Save</button>
         </div>
         <div id="ai-test-status" class="ai-test-status" aria-live="polite"></div>
       </div>
 
-      <div class="panel-card grok-template">
-        <h3 data-i18n="advGrokShortTitle">Grok reply — short tweet template</h3>
-        <div class="grok-template-grid">
-          <div class="xvm-select" data-select-name="grok-template-select">
-            <input id="grok-template-select" type="hidden" aria-label="Grok prompt template">
-            <button type="button" class="xvm-select-trigger" aria-haspopup="listbox" aria-expanded="false">
-              <span class="xvm-select-value"></span>
-              <svg class="xvm-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            <div class="xvm-select-menu" role="listbox"></div>
+      <details class="panel-card grok-template" open>
+        <summary class="template-summary">
+          <span class="template-summary-copy"><span class="template-kind">SHORT</span><h3 data-i18n="advGrokShortTitle">Grok reply — short tweet template</h3></span>
+          <span class="template-disclosure" aria-hidden="true">›</span>
+        </summary>
+        <div class="grok-template-content">
+          <div class="grok-template-grid">
+            <div class="xvm-select" data-select-name="grok-template-select">
+              <input id="grok-template-select" type="hidden" aria-label="Grok prompt template">
+              <button type="button" class="xvm-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                <span class="xvm-select-value"></span>
+                <svg class="xvm-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="xvm-select-menu" role="listbox"></div>
+            </div>
+            <input id="grok-template-name" type="text" aria-label="Grok prompt template name">
           </div>
-          <input id="grok-template-name" type="text" aria-label="Grok prompt template name">
+          <label class="field" for="grok-prompt"><span data-i18n="grokShortTemplateLabel">Tweet template (short posts, &lt;600 chars)</span><textarea id="grok-prompt" spellcheck="false"></textarea></label>
+          <div class="ft-desc" data-i18n="popupGrokPromptHint">Use [推文内容] where the source tweet should be inserted.</div>
+          <label class="inline-toggle" for="grok-temp-chat"><span data-i18n="popupGrokTempChatLabel">Use temporary chat (don't pollute Grok history)</span><span class="switch"><input id="grok-temp-chat" type="checkbox"><span class="slider"></span></span></label>
+          <div class="template-actions">
+            <button type="button" id="grok-prompt-add" class="adv-btn" data-i18n="btnAdd">Add</button>
+            <div class="template-actions-end">
+              <button type="button" id="grok-prompt-reset" class="adv-btn" data-i18n="btnReset">Reset</button>
+              <button type="button" id="grok-prompt-delete" class="adv-btn template-danger" data-i18n="btnDelete">Delete</button>
+              <button type="button" id="grok-prompt-save" class="adv-btn primary template-save" data-i18n="btnSave">Save</button>
+            </div>
+          </div>
         </div>
-        <label class="field" for="grok-prompt"><span data-i18n="grokShortTemplateLabel">Tweet template (short posts, &lt;600 chars)</span><textarea id="grok-prompt" spellcheck="false"></textarea></label>
-        <div class="ft-desc" data-i18n="popupGrokPromptHint">Use [推文内容] where the source tweet should be inserted.</div>
-        <label class="inline-toggle" for="grok-temp-chat"><span data-i18n="popupGrokTempChatLabel">Use temporary chat (don't pollute Grok history)</span><span class="switch"><input id="grok-temp-chat" type="checkbox"><span class="slider"></span></span></label>
-        <div class="actions compact">
-          <button type="button" id="grok-prompt-add" class="adv-btn" data-i18n="btnAdd">Add</button>
-          <button type="button" id="grok-prompt-save" class="adv-btn" data-i18n="btnSave">Save</button>
-          <button type="button" id="grok-prompt-delete" class="adv-btn" data-i18n="btnDelete">Delete</button>
-          <button type="button" id="grok-prompt-reset" class="adv-btn" data-i18n="btnReset">Reset</button>
-        </div>
-      </div>
+      </details>
 
-      <div class="panel-card grok-template">
-        <h3 data-i18n="advGrokArticleTitle">Grok reply — article template</h3>
-        <div class="grok-template-grid">
-          <div class="xvm-select" data-select-name="grok-article-template-select">
-            <input id="grok-article-template-select" type="hidden" aria-label="Grok article prompt template">
-            <button type="button" class="xvm-select-trigger" aria-haspopup="listbox" aria-expanded="false">
-              <span class="xvm-select-value"></span>
-              <svg class="xvm-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            <div class="xvm-select-menu" role="listbox"></div>
+      <details class="panel-card grok-template">
+        <summary class="template-summary">
+          <span class="template-summary-copy"><span class="template-kind">ARTICLE</span><h3 data-i18n="advGrokArticleTitle">Grok reply — article template</h3></span>
+          <span class="template-disclosure" aria-hidden="true">›</span>
+        </summary>
+        <div class="grok-template-content">
+          <div class="grok-template-grid">
+            <div class="xvm-select" data-select-name="grok-article-template-select">
+              <input id="grok-article-template-select" type="hidden" aria-label="Grok article prompt template">
+              <button type="button" class="xvm-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                <span class="xvm-select-value"></span>
+                <svg class="xvm-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="xvm-select-menu" role="listbox"></div>
+            </div>
+            <input id="grok-article-template-name" type="text" aria-label="Grok article template name">
           </div>
-          <input id="grok-article-template-name" type="text" aria-label="Grok article template name">
+          <label class="field" for="grok-article-prompt"><span data-i18n="grokArticleTemplateLabel">Article template (used for X Articles / long posts, ≥600 chars)</span><textarea id="grok-article-prompt" spellcheck="false"></textarea></label>
+          <div class="ft-desc" data-i18n="grokArticleTemplateHint">This template group is used automatically when replying to X long-form posts or Articles.</div>
+          <div class="template-actions">
+            <button type="button" id="grok-article-prompt-add" class="adv-btn" data-i18n="btnAdd">Add</button>
+            <div class="template-actions-end">
+              <button type="button" id="grok-article-prompt-reset" class="adv-btn" data-i18n="btnReset">Reset</button>
+              <button type="button" id="grok-article-prompt-delete" class="adv-btn template-danger" data-i18n="btnDelete">Delete</button>
+              <button type="button" id="grok-article-prompt-save" class="adv-btn primary template-save" data-i18n="btnSave">Save</button>
+            </div>
+          </div>
         </div>
-        <label class="field" for="grok-article-prompt"><span data-i18n="grokArticleTemplateLabel">Article template (used for X Articles / long posts, ≥600 chars)</span><textarea id="grok-article-prompt" spellcheck="false"></textarea></label>
-        <div class="ft-desc" data-i18n="grokArticleTemplateHint">This template group is used automatically when replying to X long-form posts or Articles.</div>
-        <div class="actions compact">
-          <button type="button" id="grok-article-prompt-add" class="adv-btn" data-i18n="btnAdd">Add</button>
-          <button type="button" id="grok-article-prompt-save" class="adv-btn" data-i18n="btnSave">Save</button>
-          <button type="button" id="grok-article-prompt-delete" class="adv-btn" data-i18n="btnDelete">Delete</button>
-          <button type="button" id="grok-article-prompt-reset" class="adv-btn" data-i18n="btnReset">Reset</button>
-        </div>
-      </div>
+      </details>
     </section>
 
     <!-- ============ Tab: About ============ -->
     <section role="tabpanel" id="tabpanel-about" data-tab-panel="about">
 
-      <div class="panel-card">
-        <h3 data-i18n="advAppearanceTitle">Appearance</h3>
-        <div class="rf-row">
-          <span data-i18n="themeLabel">Theme</span>
-          <button type="button" id="theme-toggle-about" class="adv-btn"></button>
-        </div>
-        <div class="rf-row">
-          <span data-i18n="languageLabel">Language</span>
+      <div class="about-hero">
+        <div class="about-kicker">X-TOOLS · CONTROL CENTER</div>
+        <h2>偏好与工具</h2>
+        <p>管理界面体验、常用增强和更新说明。所有设置都会即时保存到当前浏览器。</p>
+      </div>
+
+      <div class="panel-card about-appearance">
+        <div class="about-section-head"><h3 data-i18n="advAppearanceTitle">Appearance</h3><span>PERSONALIZE</span></div>
+        <div class="about-preference-grid">
+          <div class="about-preference">
+            <span data-i18n="themeLabel">Theme</span>
+            <button type="button" id="theme-toggle-about" class="adv-btn about-theme-choice"></button>
+          </div>
+          <div class="about-preference">
+            <span data-i18n="languageLabel">Language</span>
           <div class="xvm-select" data-select-name="language-select">
-            <input id="language-select" type="hidden" value="auto">
+            <input id="language-select" type="hidden" value="zh_CN">
             <button type="button" class="xvm-select-trigger" aria-haspopup="listbox" aria-expanded="false">
-              <span class="xvm-select-value">Auto</span>
+              <span class="xvm-select-value">中文</span>
               <svg class="xvm-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="xvm-select-menu" role="listbox"></div>
           </div>
-          <div class="ft-desc" data-i18n="languageHint">Controls the popup, page overlays, and default Grok prompt language.</div>
+            <div class="ft-desc" data-i18n="languageHint">Controls the popup, page overlays, and default Grok prompt language.</div>
+          </div>
         </div>
       </div>
 
       <div class="panel-card">
-        <h3 data-i18n="advOtherFeaturesTitle">Other features</h3>
-        <div class="feature-row"><div class="ft-body"><label for="feat-copy-md"><div class="ft-title" data-i18n="featureCopyMdTitle">📋 Copy tweet as Markdown</div><div class="ft-desc" data-i18n="featureCopyMdDesc">Adds a "Copy as Markdown" entry at the bottom of X's native share menu.</div></label></div><label class="switch" for="feat-copy-md" aria-label="Copy tweet as Markdown"><input id="feat-copy-md" type="checkbox"><span class="slider"></span></label></div>
-        <div class="feature-row"><div class="ft-body"><label for="feat-starchart"><div class="ft-title" data-i18n="popupStarChartLabel">⭐ Thank-You Star Chart</div><div class="ft-desc" data-i18n="popupStarChartHint">Adds a star-chart option to the share menu of any tweet.</div></label></div><label class="switch" for="feat-starchart" aria-label="Thank-You Star Chart"><input id="feat-starchart" type="checkbox"><span class="slider"></span></label></div>
-        <div class="feature-row"><div class="ft-body"><label for="feat-bookmark-folders"><div class="ft-title" data-i18n="featureBookmarkFoldersTitle">🔖 Bookmark folder menu</div><div class="ft-desc" data-i18n="featureBookmarkFoldersDesc">Hover over a tweet bookmark button to pick a folder, see where it is saved, or create a folder. Requires X Premium.</div></label></div><label class="switch" for="feat-bookmark-folders" aria-label="Bookmark folder menu"><input id="feat-bookmark-folders" type="checkbox"><span class="slider"></span></label></div>
-        <div class="feature-row"><div class="ft-body"><label for="feat-bookmark-count"><div class="ft-title" data-i18n="featureBookmarkCountTitle">🔖 Show bookmark count</div><div class="ft-desc" data-i18n="featureBookmarkCountDesc">Display the bookmark count next to each tweet's bookmark button on the timeline.</div></label></div><label class="switch" for="feat-bookmark-count" aria-label="Show bookmark count"><input id="feat-bookmark-count" type="checkbox"><span class="slider"></span></label></div>
-        <div class="feature-row"><div class="ft-body"><label for="grok-enter-reply"><div class="ft-title" data-i18n="popupGrokEnterReplyLabel">Press Enter to reply</div><div class="ft-desc" data-i18n="popupGrokEnterReplyHint">When enabled, plain Enter sends the reply. Shift/Command/Ctrl/Alt+Enter keep their original behavior.</div></label></div><label class="switch" for="grok-enter-reply" aria-label="Press Enter to reply"><input id="grok-enter-reply" type="checkbox"><span class="slider"></span></label></div>
+        <h3 data-i18n="advOtherFeaturesTitle" class="about-compat-heading">Other features</h3>
+        <div class="about-section-head"><span>功能开关</span><span>5 TOOLS</span></div>
+        <div class="about-feature-list">
+          <div class="about-feature" data-feature="01"><div class="ft-body"><label for="feat-copy-md"><div class="ft-title" data-i18n="featureCopyMdTitle">📋 Copy tweet as Markdown</div><div class="ft-desc" data-i18n="featureCopyMdDesc">Adds a "Copy as Markdown" entry at the bottom of X's native share menu.</div></label></div><label class="switch" for="feat-copy-md" aria-label="Copy tweet as Markdown"><input id="feat-copy-md" type="checkbox"><span class="slider"></span></label></div>
+          <div class="about-feature" data-feature="02"><div class="ft-body"><label for="feat-starchart"><div class="ft-title" data-i18n="popupStarChartLabel">⭐ Thank-You Star Chart</div><div class="ft-desc" data-i18n="popupStarChartHint">Adds a star-chart option to the share menu of any tweet.</div></label></div><label class="switch" for="feat-starchart" aria-label="Thank-You Star Chart"><input id="feat-starchart" type="checkbox"><span class="slider"></span></label></div>
+          <div class="about-feature" data-feature="03"><div class="ft-body"><label for="feat-bookmark-folders"><div class="ft-title" data-i18n="featureBookmarkFoldersTitle">🔖 Bookmark folder menu</div><div class="ft-desc" data-i18n="featureBookmarkFoldersDesc">Hover over a tweet bookmark button to pick a folder, see where it is saved, or create a folder. Requires X Premium.</div></label></div><label class="switch" for="feat-bookmark-folders" aria-label="Bookmark folder menu"><input id="feat-bookmark-folders" type="checkbox"><span class="slider"></span></label></div>
+          <div class="about-feature" data-feature="04"><div class="ft-body"><label for="feat-bookmark-count"><div class="ft-title" data-i18n="featureBookmarkCountTitle">🔖 Show bookmark count</div><div class="ft-desc" data-i18n="featureBookmarkCountDesc">Display the bookmark count next to each tweet's bookmark button on the timeline.</div></label></div><label class="switch" for="feat-bookmark-count" aria-label="Show bookmark count"><input id="feat-bookmark-count" type="checkbox"><span class="slider"></span></label></div>
+          <div class="about-feature" data-feature="05"><div class="ft-body"><label for="grok-enter-reply"><div class="ft-title" data-i18n="popupGrokEnterReplyLabel">Press Enter to reply</div><div class="ft-desc" data-i18n="popupGrokEnterReplyHint">When enabled, plain Enter sends the reply. Shift/Command/Ctrl/Alt+Enter keep their original behavior.</div></label></div><label class="switch" for="grok-enter-reply" aria-label="Press Enter to reply"><input id="grok-enter-reply" type="checkbox"><span class="slider"></span></label></div>
+        </div>
       </div>
 
       <div class="panel-card">
-        <h3 data-i18n="aboutUpdatesTitle">Update notes</h3>
-        <div class="rf-row">
-          <span data-i18n="aboutUpdatesDesc">Open the latest update popup on the current X page.</span>
+        <div class="about-section-head"><h3 data-i18n="aboutUpdatesTitle">Update notes</h3><span>V<span id="popup-version-inline"></span></span></div>
+        <div class="about-updates">
+          <p data-i18n="aboutUpdatesDesc">Open the latest update popup on the current X page.</p>
           <button type="button" id="show-update-notes" class="adv-btn" data-i18n="aboutShowUpdateNotes">Show update notes</button>
         </div>
       </div>
 
       <p class="footer-line">
-        <a href="https://github.com/Icy-Cat/x-viral-monitor" target="_blank" rel="noopener">github.com/Icy-Cat/x-viral-monitor</a>
-        · <a href="https://x.com/intent/follow?screen_name=icycat" target="_blank" rel="noopener">X @icycat</a>
-        · v<span id="popup-version"></span>
+        <a href="https://x.jieyiai.dev" target="_blank" rel="noopener">x.jieyiai.dev</a>
+        · <a href="https://x.com/jieyi_ai" target="_blank" rel="noopener">X @jieyi_ai</a>
+        · <a href="mailto:shiwanjun23@gmail.com">shiwanjun23@gmail.com</a>
+        · V<span id="popup-version"></span>
       </p>
     </section>
 
@@ -989,12 +1274,11 @@
 
   <script src="src/build-channel.js"></script>
   <script src="src/premium/license/tier-logic.js"></script>
-  <script src="src/premium/license/entitlement.js"></script>
+  <script src="popup.js"></script>
   <script src="src/premium/license/popup-pro.js"></script>
   <script src="src/premium/rate-filter/popup-rate-filter.js"></script>
   <script src="src/premium/content-filter/rules.js"></script>
   <script src="src/premium/content-filter/popup-content-filter.js"></script>
-  <script src="popup.js"></script>
   <script src="popup-dashboard.js"></script>
 </body>
 </html>

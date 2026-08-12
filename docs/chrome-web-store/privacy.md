@@ -17,7 +17,7 @@ chrome.storage is used to persist user preferences and cache data locally in the
 
 • chrome.storage.sync — user-configurable thresholds (Trending / Viral views-per-hour), badge style, leaderboard column order, Grok prompt template, and general feature toggles. These follow the user across devices; bookmark-folder selection does not.
 
-• chrome.storage.local — Star Chart query template/result caches and, only when bookmark-folder timeline injection is enabled, its device-specific toggle/folder selection, a cache of tweet entries from those folders, and the numeric X account ID used to prevent cross-account cache mixing. The bookmark cache is limited to 2 MB and 120 entries per folder, expires after 24 hours, and is cleared on disable, deselection, or X account change. It is never synced or transmitted to XVM servers.
+• chrome.storage.local — Star Chart query template/result caches and, only when bookmark-folder timeline injection is enabled, its device-specific toggle/folder selection, a cache of tweet entries from those folders, and the numeric X account ID used to prevent cross-account cache mixing. The bookmark cache is limited to 2 MB and 120 entries per folder, expires after 24 hours, and is cleared on disable, deselection, or X account change. It is never synced or transmitted to X-Tools servers.
 
 No browsing history or login credentials are stored. Cached bookmark tweet entries remain on the device and exist only to render the user-selected folders in the X timeline.
 ```
@@ -33,7 +33,7 @@ The extension declares content scripts on https://x.com/* and https://pro.x.com/
 
 (3) Call X's same-origin endpoints (e.g., grok.x.com for the Grok reply feature, X GraphQL for the Star Chart) — same endpoints the X web app itself uses, called from the same origin with the user's existing session.
 
-The extension also requests host permissions for user-configured AI providers, GitHub-hosted filter rule updates, and the XVM license Worker used to activate and validate Pro subscriptions. It does not send analytics or telemetry.
+The extension also requests host permissions for user-configured AI providers, GitHub-hosted filter rule updates, and the X-Tools license Worker used to activate and validate Pro subscriptions. It does not send analytics or telemetry.
 ```
 
 ## 远程代码
@@ -55,7 +55,7 @@ The extension also requests host permissions for user-configured AI providers, G
 - [ ] 用户活动
 - [x] 网站内容（仅在本机处理；包含用户主动启用后短期缓存的所选书签推文）
 
-> 说明：扩展会**读取** X 页面上的推文指标（views/likes/RT 等）和 Star Chart 的转发者公开列表；用户主动开启书签文件夹时间线后，还会在本机短期缓存所选文件夹的推文条目。只有用户主动配置并使用外部 AI 回复服务时，相关提示词与推文正文会直连发送给该服务商；书签缓存不会发送到 XVM 或第三方服务器。
+> 说明：扩展会**读取** X 页面上的推文指标（views/likes/RT 等）和 Star Chart 的转发者公开列表；用户主动开启书签文件夹时间线后，还会在本机短期缓存所选文件夹的推文条目。只有用户主动配置并使用外部 AI 回复服务时，相关提示词与推文正文会直连发送给该服务商；书签缓存不会发送到 X-Tools 或第三方服务器。
 
 ## 数据使用声明 - 合规承诺
 
@@ -68,7 +68,7 @@ The extension also requests host permissions for user-configured AI providers, G
 ## 隐私权政策网址
 
 ```
-https://github.com/Icy-Cat/x-viral-monitor/blob/main/store-assets/privacy-policy.md
+https://x.jieyiai.dev/privacy.html
 ```
 
-> `store-assets/privacy-policy.md` 已同步覆盖流速徽章、星图、回复服务、图片查看器和可选书签文件夹缓存。
+> 公开隐私政策位于 `docs/privacy.html`；`store-assets/privacy-policy.md` 保留为仓库内的完整政策源稿，二者应在每次发布前同步复核。

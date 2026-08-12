@@ -1,0 +1,1085 @@
+{
+  "extName": {
+    "message": "X-Tools",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "病毒偵測與追蹤分析：速度徽章、相互追蹤標記、單向追蹤、取消追蹤警示。所有本地，零數據。",
+    "description": "Extension description"
+  },
+  "popupSubtitle": {
+    "message": "X的病毒檢測和追蹤見解"
+  },
+  "tierNormal": {
+    "message": "普通"
+  },
+  "tierTrending": {
+    "message": "新鮮貨, 發燒貨"
+  },
+  "tierViral": {
+    "message": "病毒的"
+  },
+  "hoverHint": {
+    "message": "將徽章懸停以查看觀看次數、按讚次數、RT、回覆、書籤和病毒評分。"
+  },
+  "thresholdTrending": {
+    "message": "🚀 趨勢閾值"
+  },
+  "thresholdViral": {
+    "message": "🔥 病毒閾值"
+  },
+  "btnSave": {
+    "message": "Submit"
+  },
+  "btnSaved": {
+    "message": "已儲存"
+  },
+  "btnReset": {
+    "message": "重新設定"
+  },
+  "btnAdd": {
+    "message": "新增"
+  },
+  "btnDelete": {
+    "message": "刪除"
+  },
+  "flashSaved": {
+    "message": "已儲存"
+  },
+  "flashReset": {
+    "message": "重新設定"
+  },
+  "featureCopyMdTitle": {
+    "message": "📋 將推文複製為Markdown"
+  },
+  "featureCopyMdDesc": {
+    "message": "在X的原生共享菜單底部添加“復制爲Markdown”條目。以Markdown格式複製推文文字、作者、連結和日期。"
+  },
+  "featureLeaderboardTitle": {
+    "message": "📊 速度排行榜"
+  },
+  "featureLeaderboardDesc": {
+    "message": "可拖曳的浮動面板顯示當前頁面上可見的增長最快的推文。按一下某一列，即可捲動至推文。"
+  },
+  "featureLeaderboardEdgeHideTitle": {
+    "message": "邊緣隱藏排行榜"
+  },
+  "featureLeaderboardEdgeHideDesc": {
+    "message": "啟用後，將排行榜拖動到螢幕邊緣，然後放開以將其藏起來。"
+  },
+  "featureLeaderboardShowTop": {
+    "message": "顯示頂部"
+  },
+  "featureLeaderboardTweets": {
+    "message": "Twitter 推文"
+  },
+  "featureLeaderboardColsHint": {
+    "message": "拖曳以重新排序·勾選以顯示"
+  },
+  "popupColRank": {
+    "message": "排行"
+  },
+  "popupColIcon": {
+    "message": "會員等級圖示"
+  },
+  "popupColHandle": {
+    "message": "使用者名稱"
+  },
+  "popupColPreview": {
+    "message": "Tweet預覽"
+  },
+  "popupColViews": {
+    "message": "觀看次數"
+  },
+  "popupColVelocity": {
+    "message": "速度"
+  },
+  "contentViews": {
+    "message": "觀看次數"
+  },
+  "contentLikes": {
+    "message": "讚"
+  },
+  "contentRetweets": {
+    "message": "Retweets"
+  },
+  "contentReplies": {
+    "message": "回覆"
+  },
+  "contentBookmarks": {
+    "message": "書籤"
+  },
+  "contentVelocity": {
+    "message": "速度"
+  },
+  "contentViralScore": {
+    "message": "病毒評分"
+  },
+  "contentPosted": {
+    "message": "已過帳"
+  },
+  "contentLeaderboardTitle": {
+    "message": "此頁面熱門"
+  },
+  "contentLeaderboardDragToMove": {
+    "message": "拖曳移動"
+  },
+  "contentLeaderboardBackToPrevious": {
+    "message": "返回上一個滾動位置"
+  },
+  "contentLeaderboardEdgeHide": {
+    "message": "在邊緣隱藏"
+  },
+  "contentLeaderboardEdgeShow": {
+    "message": "展開"
+  },
+  "contentLeaderboardSettings": {
+    "message": "開啟排行榜設定"
+  },
+  "contentLeaderboardClose": {
+    "message": "關閉排行榜"
+  },
+  "contentLeaderboardCloseSettings": {
+    "message": "關閉設定"
+  },
+  "contentLeaderboardSettingsPanelTitle": {
+    "message": "排行榜設定"
+  },
+  "contentLeaderboardColumns": {
+    "message": "可見列"
+  },
+  "contentLeaderboardSettingsAutoSave": {
+    "message": "系統會自動儲存變更，並立即套用至此頁面。"
+  },
+  "contentLeaderboardTotalViews": {
+    "message": "總瀏覽數"
+  },
+  "contentCopyMdLabel": {
+    "message": "復制爲Markdown"
+  },
+  "contentCopyMdDone": {
+    "message": "已複製！"
+  },
+  "contentCopyMdAttribution": {
+    "message": "透過X-Tools"
+  },
+  "contentCopyMdNoTweetFound": {
+    "message": "未找到推文"
+  },
+  "contentCopyMdCopyFailed": {
+    "message": "複製失敗"
+  },
+  "contentCopyTweetCommentsLabel": {
+    "message": "複製推文和評論"
+  },
+  "contentCopyTweetCommentsDone": {
+    "message": "Tweet和評論已複製！"
+  },
+  "contentCopyTweetCommentsHeading": {
+    "message": "意見"
+  },
+  "contentFallbackTweetLabel": {
+    "message": "推文"
+  },
+  "flashColumnsSaved": {
+    "message": "列已保存 ✓"
+  },
+  "flashLeaderboardOn": {
+    "message": "排行榜開啓 ✓"
+  },
+  "flashLeaderboardOff": {
+    "message": "排行榜關閉"
+  },
+  "flashLeaderboardEdgeHideOn": {
+    "message": "邊緣隱藏開啟 ✓"
+  },
+  "flashLeaderboardEdgeHideOff": {
+    "message": "Edge-hide OFF"
+  },
+  "flashCopyMdOn": {
+    "message": "Copy-as-Markdown開啓 ✓"
+  },
+  "flashCopyMdOff": {
+    "message": "Copy-as-Markdown OFF"
+  },
+  "flashShowingTop": {
+    "message": "顯示頂部$COUNT$ ✓",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "contentStarChartMenuLabel": {
+    "message": "感謝之星圖表"
+  },
+  "contentStarChartAttribution": {
+    "message": "透過X-Tools"
+  },
+  "contentStarChartTitle": {
+    "message": "感謝之星圖表"
+  },
+  "contentStarChartLoading": {
+    "message": "正在載入支持者..."
+  },
+  "contentStarChartProgress": {
+    "message": "{{COUNT}}支持者已載入"
+  },
+  "contentStarChartRateLimited": {
+    "message": "達到速率限制，等待{{SECONDS}}秒..."
+  },
+  "contentStarChartDone": {
+    "message": "完成— {{COUNT}}支持者"
+  },
+  "contentStarChartDoneTruncated": {
+    "message": "完成— {{COUNT}}支持者（上限，更多可用）"
+  },
+  "contentStarChartError": {
+    "message": "無法載入支持者： {{REASON}}"
+  },
+  "contentStarChartNoTweetFound": {
+    "message": "無法識別推文"
+  },
+  "contentStarChartModuleNotLoaded": {
+    "message": "星圖不可用—請重新載入頁面"
+  },
+  "contentStarChartLegendRT": {
+    "message": "轉推"
+  },
+  "contentStarChartLegendQuote": {
+    "message": "詢價單"
+  },
+  "contentStarChartLegendBoth": {
+    "message": "兩者皆有"
+  },
+  "contentStarChartClose": {
+    "message": "關閉"
+  },
+  "contentStarChartStatRetweets": {
+    "message": "Retweets"
+  },
+  "contentStarChartStatQuotes": {
+    "message": "詢價單"
+  },
+  "contentStarChartStatSupporters": {
+    "message": "支持者"
+  },
+  "contentStarChartStatSpan": {
+    "message": "引用跨度"
+  },
+  "contentStarChartSearchPlaceholder": {
+    "message": "搜索名稱或句柄..."
+  },
+  "contentStarChartRiverTitle": {
+    "message": "Quote River"
+  },
+  "contentStarChartRiverEmpty": {
+    "message": "尚無報價"
+  },
+  "contentStarChartEmpty": {
+    "message": "找不到此推文的支持者"
+  },
+  "contentStarChartReset": {
+    "message": "重置視圖"
+  },
+  "popupStarChartLabel": {
+    "message": "感謝之星圖表"
+  },
+  "popupStarChartHint": {
+    "message": "在任何推文的分享選單中新增星形圖選項。"
+  },
+  "flashStarChartOn": {
+    "message": "星圖已啟用"
+  },
+  "flashStarChartOff": {
+    "message": "星圖已停用"
+  },
+  "featureBookmarkFoldersTitle": {
+    "message": "🔖 書籤資料夾功能表"
+  },
+  "featureBookmarkFoldersDesc": {
+    "message": "將鼠標懸停在推文書籤按鈕上以選擇文件夾、查看保存位置或創建文件夾。需要X Premium。"
+  },
+  "flashBookmarkFoldersOn": {
+    "message": "已啟用書籤資料夾功能表"
+  },
+  "flashBookmarkFoldersOff": {
+    "message": "書籤資料夾功能表已停用"
+  },
+  "contentBookmarkMenuInFolder": {
+    "message": "在資料夾中: "
+  },
+  "contentBookmarkMenuNotInAny": {
+    "message": "不在任何文件夾中"
+  },
+  "contentBookmarkMenuCheckFailed": {
+    "message": "無法檢查目前的資料夾。按一下資料夾以重試。"
+  },
+  "contentBookmarkMenuChecking": {
+    "message": "正在檢查目前的資料夾…"
+  },
+  "contentBookmarkMenuLoadingFolders": {
+    "message": "正在載入書籤資料夾…"
+  },
+  "contentBookmarkMenuLoadFailed": {
+    "message": "無法載入資料夾。可能需要X Premium。"
+  },
+  "contentBookmarkMenuNoFolders": {
+    "message": "尚無資料夾"
+  },
+  "contentBookmarkMenuNewFolderPlaceholder": {
+    "message": "+新增資料夾(Enter)"
+  },
+  "featureBookmarkCountTitle": {
+    "message": "🔖 顯示書籤數量"
+  },
+  "featureBookmarkCountDesc": {
+    "message": "在時間軸上每則推文的書籤按鈕旁邊顯示書籤數量。"
+  },
+  "flashBookmarkCountOn": {
+    "message": "已啟用書籤計數"
+  },
+  "flashBookmarkCountOff": {
+    "message": "書籤計數已停用"
+  },
+  "contentStarChartTitleLabel": {
+    "message": "速度監測器"
+  },
+  "contentStarChartHeroEyebrow": {
+    "message": "感謝你繼續撰寫此文章"
+  },
+  "contentStarChartHeroTitle": {
+    "message": "每盞燈都是一隻穿過柱子的手。"
+  },
+  "contentStarChartStatsSectionTitle": {
+    "message": "概述"
+  },
+  "contentStarChartPeopleSectionTitle": {
+    "message": "支持者"
+  },
+  "contentStarChartFilterAll": {
+    "message": "全部"
+  },
+  "contentStarChartFilterRetweet": {
+    "message": "轉推"
+  },
+  "contentStarChartFilterQuote": {
+    "message": "詢價單"
+  },
+  "contentStarChartFilterBoth": {
+    "message": "兩者皆有"
+  },
+  "contentStarChartRiverPrev": {
+    "message": "上一個報價"
+  },
+  "contentStarChartRiverNext": {
+    "message": "下一個報價"
+  },
+  "popupGrokPromptTitle": {
+    "message": "Grok評論提示"
+  },
+  "popupGrokPromptHint": {
+    "message": "在應插入來源推文的地方使用[推文内容]。在回覆方塊中按一下「AI產生」，選擇範本，然後選擇一個產生的選項來填寫回覆。"
+  },
+  "popupGrokTempChatLabel": {
+    "message": "使用臨時聊天（不要污染Grok歷史記錄）"
+  },
+  "flashGrokTempChatOn": {
+    "message": "臨時聊天已啟用 ✓"
+  },
+  "flashGrokTempChatOff": {
+    "message": "臨時聊天已停用"
+  },
+  "flashGrokPromptSaved": {
+    "message": "Grok提示已保存 ✓"
+  },
+  "flashGrokPromptReset": {
+    "message": "Grok提示重置 ✓"
+  },
+  "badgeStyleLabel": {
+    "message": "🏷️ 徽章樣式"
+  },
+  "badgeStylePillSolid": {
+    "message": "丸固"
+  },
+  "badgeStyleInlineClassic": {
+    "message": "INLINE CLASSIC"
+  },
+  "flashBadgeStyleSaved": {
+    "message": "徽章樣式已儲存 ✓"
+  },
+  "proSignInGoogle": {
+    "message": "Google 登入"
+  },
+  "proSignOut": {
+    "message": "登出"
+  },
+  "proPlanChoose": {
+    "message": "選擇 "
+  },
+  "subscriptionKicker": {
+    "message": "會員方案"
+  },
+  "communityDevKicker": {
+    "message": "開發權限"
+  },
+  "proPlanName": {
+    "message": "會員方案"
+  },
+  "proPlanMonthlyPeriod": {
+    "message": " "
+  },
+  "proPlanMonthlyNote": {
+    "message": "每月·可隨時取消"
+  },
+  "proPlanYearlyPeriod": {
+    "message": "Yr"
+  },
+  "proPlanYearlyNote": {
+    "message": "節省20% ·相當於$4 .79/月"
+  },
+  "proPlanRecommended": {
+    "message": "最超值"
+  },
+  "proPlanField": {
+    "message": "方案"
+  },
+  "proEmailField": {
+    "message": "我的帳號"
+  },
+  "proRenewsField": {
+    "message": "續訂"
+  },
+  "proManageBtn": {
+    "message": "管理訂閱"
+  },
+  "rfTitle": {
+    "message": "速度濾波器（標準+ ）"
+  },
+  "rfLockedHint": {
+    "message": "訂閱（標準或以上）以解鎖速度篩選器。"
+  },
+  "rfEnabled": {
+    "message": "隱藏低速推文"
+  },
+  "rfScopeLegend": {
+    "message": "涵蓋範圍"
+  },
+  "rfScopeHome": {
+    "message": "首頁"
+  },
+  "rfScopeList": {
+    "message": "名單"
+  },
+  "rfScopeProfile": {
+    "message": "個人資料"
+  },
+  "rfScopeStatus": {
+    "message": "Tweet詳情"
+  },
+  "rfShortLegend": {
+    "message": "簡短的推文—如果任何一個閾值通過，則保留"
+  },
+  "rfLongLegend": {
+    "message": "X文章（長格式） —如果超過任何一個閾值，請保留"
+  },
+  "rfRatePerMin": {
+    "message": "觀看次數/分鐘≥"
+  },
+  "rfAbsoluteViews": {
+    "message": "總瀏覽數"
+  },
+  "rfRuleHint": {
+    "message": "規則：保留if (views/min > rate threshold)或(total views > absolute threshold)。否則隱藏。"
+  },
+  "rfReset": {
+    "message": "重置預設值"
+  },
+  "rfSave": {
+    "message": "Submit"
+  },
+  "rfSavedOk": {
+    "message": "已儲存"
+  },
+  "rfResetOk": {
+    "message": "重新設定"
+  },
+  "featureLeaderboardResetPos": {
+    "message": "重置排行榜位置"
+  },
+  "featureLeaderboardResetDone": {
+    "message": "重設—請重新整理頁面。"
+  },
+  "accRateFilter": {
+    "message": "速度濾波器"
+  },
+  "accRateFilterSub": {
+    "message": "标准"
+  },
+  "accLeaderboard": {
+    "message": "排行榜和徽章"
+  },
+  "accPro": {
+    "message": "帳戶/訂閱"
+  },
+  "accOther": {
+    "message": "其他功能和設定"
+  },
+  "heroProActive": {
+    "message": "有效·感謝你的支持！"
+  },
+  "communityDevBadge": {
+    "message": "社羣開發組建"
+  },
+  "communityDevSub": {
+    "message": "所有本地Pro功能均已啓用。官方授權服務和自動更新屬於線上應用程式商店組建。"
+  },
+  "heroFreeTagline": {
+    "message": "大多數功能都是免費的。訂閱進階額外服務。"
+  },
+  "chipTierFree": {
+    "message": "免費"
+  },
+  "chipTierStandard": {
+    "message": "標準"
+  },
+  "chipTierPro": {
+    "message": "PRO"
+  },
+  "chipTierMax": {
+    "message": "最大"
+  },
+  "proScopeTitle": {
+    "message": "訂閱計劃"
+  },
+  "proScopeBody": {
+    "message": "標準（ $3 .99/月）解鎖速度篩選。PRO （ $5 .99/月）增加了進階門檻+ PRO排行榜。MAX （ $7 .99/月）包括所有未來的高級功能。"
+  },
+  "proFreeTitle": {
+    "message": "什麼東西是免費的"
+  },
+  "proFreeBody": {
+    "message": "Velocity徽章、排行榜、書籤數量、長圖片閱讀、圖片增強功能、內容篩選器、Grok助手、Markdown副本和書籤資料夾工具仍可免費使用。"
+  },
+  "proWebsiteLink": {
+    "message": "閱讀網站指南"
+  },
+  "cardFreeFeaturesTitle": {
+    "message": "免費功能"
+  },
+  "cardProFeaturesTitle": {
+    "message": "Pro 版功能"
+  },
+  "cardProFeaturesSub": {
+    "message": "幾項進階額外設施"
+  },
+  "featureBadgeLabel": {
+    "message": "速度徽章"
+  },
+  "featureLeaderboardLabel": {
+    "message": "排行榜面板"
+  },
+  "featureCopyMdLabel": {
+    "message": "復制爲Markdown"
+  },
+  "featureRateFilterLabel": {
+    "message": "速度濾波器"
+  },
+  "chipEnabled": {
+    "message": "啟用"
+  },
+  "btnBack": {
+    "message": "返回"
+  },
+  "btnCancel": {
+    "message": "取消"
+  },
+  "footerPoweredBy": {
+    "message": "技術提供"
+  },
+  "advBadgeThresholdsTitle": {
+    "message": "徽章門檻和樣式"
+  },
+  "advLeaderboardTitle": {
+    "message": "排行榜詳情"
+  },
+  "advOtherFeaturesTitle": {
+    "message": "熱門檢測項目"
+  },
+  "advGrokShortTitle": {
+    "message": "Grok回覆—簡短推文範本"
+  },
+  "advGrokArticleTitle": {
+    "message": "Grok回覆—文章範本"
+  },
+  "aiProviderTitle": {
+    "message": "AI評論提供者"
+  },
+  "aiProviderLabel": {
+    "message": "物流名稱"
+  },
+  "aiPlatformLabel": {
+    "message": "平臺"
+  },
+  "aiBaseUrlLabel": {
+    "message": "基本網址"
+  },
+  "aiModelLabel": {
+    "message": "模特"
+  },
+  "aiReplyCountLabel": {
+    "message": "回覆"
+  },
+  "aiApiKeyLabel": {
+    "message": "API Key"
+  },
+  "aiProviderHint": {
+    "message": "雲端供應商將推文內容傳送到所選的人工智慧服務。Ollama在本地機器上運行。"
+  },
+  "aiProviderHintGrok": {
+    "message": "X Grok使用您目前的X登入狀態。不需要API金鑰。"
+  },
+  "aiProviderHintOllama": {
+    "message": "Ollama在本地運行。確保Ollama正在運行並已下載模型。"
+  },
+  "aiProviderHintCloud": {
+    "message": "雲端供應商會將推文文字和回覆內容傳送至所選AI服務。"
+  },
+  "aiProviderXGrok": {
+    "message": "X Grok"
+  },
+  "aiProviderXGrokDesc": {
+    "message": "使用目前的X工作階段"
+  },
+  "aiProviderOllama": {
+    "message": "Ollama"
+  },
+  "aiProviderOllamaDesc": {
+    "message": "本地模型服務"
+  },
+  "aiProviderOpenAICompatible": {
+    "message": "OpenAI兼容"
+  },
+  "aiProviderOpenAICompatibleDesc": {
+    "message": "OpenAI、DeepSeek、OpenRouter"
+  },
+  "aiServiceConfigTitle": {
+    "message": "服務組態檔"
+  },
+  "aiGenerationSettingsTitle": {
+    "message": "自動生成設置"
+  },
+  "aiCheckLoginStatus": {
+    "message": "檢查登入狀態"
+  },
+  "aiTestConnection": {
+    "message": "測試連接"
+  },
+  "aiTestRunning": {
+    "message": "測試連線中..."
+  },
+  "aiTestOk": {
+    "message": "連線測試通過"
+  },
+  "aiTestFailed": {
+    "message": "連接測試失敗：%s"
+  },
+  "tabPro": {
+    "message": "專業"
+  },
+  "tabFilter": {
+    "message": "篩選器"
+  },
+  "tabLeaderboard": {
+    "message": "排行榜"
+  },
+  "tabAi": {
+    "message": "AI回復"
+  },
+  "tabAbout": {
+    "message": "關於"
+  },
+  "rfSubShort": {
+    "message": "簡短推文"
+  },
+  "rfSubLong": {
+    "message": "X文章（長）"
+  },
+  "themeLabel": {
+    "message": "主題"
+  },
+  "themeSwitchToDark": {
+    "message": "切換到黑暗模式"
+  },
+  "themeSwitchToLight": {
+    "message": "切換至淺色"
+  },
+  "themeFollowSystem": {
+    "message": "追蹤系統"
+  },
+  "languageLabel": {
+    "message": "語言"
+  },
+  "languageHint": {
+    "message": "控制彈出視窗、頁面重疊和預設Grok提示語言。"
+  },
+  "languageZh": {
+    "message": "汉字"
+  },
+  "languageZhTW": {
+    "message": "繁體中文"
+  },
+  "languageEn": {
+    "message": "English"
+  },
+  "languageJa": {
+    "message": "日本語"
+  },
+  "languageVi": {
+    "message": "Tiąng Việt"
+  },
+  "languageKo": {
+    "message": "한국어"
+  },
+  "aboutUpdatesTitle": {
+    "message": "更新說明"
+  },
+  "aboutUpdatesDesc": {
+    "message": "打開當前X頁面上的最新更新彈出窗口。"
+  },
+  "aboutShowUpdateNotes": {
+    "message": "更新說明"
+  },
+  "aboutShowUpdateNotesSent": {
+    "message": "在當前X頁面上打開更新彈出窗口。"
+  },
+  "aboutShowUpdateNotesNoTab": {
+    "message": "請先開啟X頁面，然後再嘗試更新快顯視窗。"
+  },
+  "grokShortTemplateLabel": {
+    "message": "Tweet模板（短帖， < 600字符）"
+  },
+  "grokArticleTemplateLabel": {
+    "message": "文章範本（用於X文章/長篇文章， ≥ 600個字元）"
+  },
+  "grokArticleTemplateHint": {
+    "message": "回覆X篇長篇文章或文章時，系統會自動使用此範本羣組。"
+  },
+  "popupGrokEnterReplyLabel": {
+    "message": "按Enter回復"
+  },
+  "popupGrokEnterReplyHint": {
+    "message": "啟用後， plain Enter會傳送回覆。Shift/Command/Ctrl/Alt + Enter保持其原始行爲。"
+  },
+  "flashGrokEnterReplyOn": {
+    "message": "輸入回覆已啟用"
+  },
+  "flashGrokEnterReplyOff": {
+    "message": "輸入回覆已停用"
+  },
+  "flashAiProviderSaved": {
+    "message": "人工智慧供應商設定已儲存"
+  },
+  "grokDefaultTemplateName": {
+    "message": "自然回復"
+  },
+  "grokCustomTemplateName": {
+    "message": "模板$N$",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "grokArticleFallbackName": {
+    "message": "文章模板"
+  },
+  "grokArticleCustomTemplateName": {
+    "message": "文章模板$N$",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "contentLbHotOnly": {
+    "message": "僅限熱門"
+  },
+  "contentLbHotProTitle": {
+    "message": "Velocity篩選條件是Pro版功能"
+  },
+  "contentLbHotProSub": {
+    "message": "隱藏低瀏覽量的推文，保留實際傳播的內容"
+  },
+  "contentLbHotEnabledToast": {
+    "message": "僅限熱門：未達到熱門文章門檻的帖子將從此頁面中刪除。"
+  },
+  "contentLbHotActiveNotice": {
+    "message": "只開啟「熱門」功能。低於門檻的帖子將被隱藏。"
+  },
+  "contentLbHotScopeTitle": {
+    "message": "適用於"
+  },
+  "contentLbHotScopeHome": {
+    "message": "首頁/為你而設"
+  },
+  "contentLbHotScopeList": {
+    "message": "名單"
+  },
+  "contentLbHotScopeProfile": {
+    "message": "個人資料"
+  },
+  "contentLbHotScopeStatus": {
+    "message": "博文細節"
+  },
+  "contentLbHotScopeCurrent": {
+    "message": "未到期"
+  },
+  "contentLbHotDetails": {
+    "message": "檢視PRO範圍"
+  },
+  "contentLbHotOpenSite": {
+    "message": "開啟網站"
+  },
+  "contentUpdateTitle": {
+    "message": "X工具已更新"
+  },
+  "contentUpdateSubtitle": {
+    "message": "此更新中的一些實用變更很容易被錯過："
+  },
+  "contentUpdateItemAiProviderTitle": {
+    "message": "AI評論提供者"
+  },
+  "contentUpdateItemAiProviderBody": {
+    "message": "開啟設定→AI註解產生，以選擇X Grok、OpenAI相容提供者、DeepSeek、OpenRouter或本機Ollama。"
+  },
+  "contentUpdateItemReplyToolsTitle": {
+    "message": "按Enter回復"
+  },
+  "contentUpdateItemReplyToolsBody": {
+    "message": "新增了使用Enter發送留言的選項。在設定中啟用它→其他功能→按Enter回覆，然後您就不再需要Command + Enter回覆方塊。"
+  },
+  "contentUpdateItemHotOnlyTitle": {
+    "message": "僅限高溫狀態更清晰"
+  },
+  "contentUpdateItemHotOnlyBody": {
+    "message": "啟用「僅限熱門」後，低於閾值的文章將從頁面中刪除。您可以在彈出窗口或浮動面板設置中選擇應用的位置。"
+  },
+  "contentUpdateItemBookmarkToolsTitle": {
+    "message": "更容易找到書籤工具"
+  },
+  "contentUpdateItemBookmarkToolsBody": {
+    "message": "在設定→其他功能中，啟用書籤資料夾功能表和書籤計數，以選擇儲存資料夾、查看儲存的位置，並在時間軸上顯示書籤計數。"
+  },
+  "contentUpdateItemFilterRulesTitle": {
+    "message": "內容篩選更穩定"
+  },
+  "contentUpdateItemFilterRulesBody": {
+    "message": "內容篩選現在可以避免在正常Telegram提及時出現更多誤報，同時在回覆和個人資料簡介中捕捉其他微信/Telegram漏鬥模式。"
+  },
+  "contentUpdateDismiss": {
+    "message": "明白了"
+  },
+  "cfTitle": {
+    "message": "內容篩選"
+  },
+  "cfLockedHint": {
+    "message": "內容篩選是免費的。您可以在此處啟用此功能。"
+  },
+  "cfEnabled": {
+    "message": "隱藏成人/廣告/渠道回復"
+  },
+  "cfLevel": {
+    "message": "濾鏡強度"
+  },
+  "cfLevelLight": {
+    "message": "淺色"
+  },
+  "cfLevelStandard": {
+    "message": "标准"
+  },
+  "cfLevelStrict": {
+    "message": "嚴格"
+  },
+  "cfRuleCounts": {
+    "message": "$COUNT$內建規則有效， $CUSTOM$自訂。",
+    "placeholders": {
+      "COUNT": {
+        "content": "$1"
+      },
+      "CUSTOM": {
+        "content": "$2"
+      }
+    }
+  },
+  "cfScopeHint": {
+    "message": "僅適用於推文詳情頁面上的回覆區域。首頁、搜尋、個人資料和主要推文不會被篩選。"
+  },
+  "cfCustomTitle": {
+    "message": "自訂規則"
+  },
+  "cfWhitelistTitle": {
+    "message": "白名單/黑名單設定"
+  },
+  "cfValue": {
+    "message": "關鍵字/regex/domain"
+  },
+  "cfAddRule": {
+    "message": "新增規則"
+  },
+  "cfDeleteRule": {
+    "message": "刪除規則"
+  },
+  "cfCustomEmpty": {
+    "message": "尚無自訂規則。"
+  },
+  "cfWhitelistFollowing": {
+    "message": "始終允許您關注的帳戶"
+  },
+  "cfWhitelistHandles": {
+    "message": "白名單控點"
+  },
+  "cfBlacklistHandles": {
+    "message": "已屏蔽的句柄"
+  },
+  "cfWhitelistDomains": {
+    "message": "白名單網域"
+  },
+  "cfAllRulesTitle": {
+    "message": "所有規則"
+  },
+  "cfBuiltinRule": {
+    "message": "內建"
+  },
+  "cfCustomRule": {
+    "message": "自訂"
+  },
+  "cfNoRules": {
+    "message": "沒有規則"
+  },
+  "cfRuleHint": {
+    "message": "規則會在瀏覽器中本機執行。未上傳任何內容。首先執行白名單，然後執行硬規則和嚴重程度閾值。"
+  },
+  "cfRulesSourceBundled": {
+    "message": "規則來源：捆綁"
+  },
+  "cfRulesSourceRemote": {
+    "message": "規則來源： REMOTE · UPDATED $AGO$",
+    "placeholders": {
+      "AGO": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesJustNow": {
+    "message": "現在"
+  },
+  "cfRulesMinutesAgo": {
+    "message": "$N$分鐘前",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesHoursAgo": {
+    "message": "$N$小時前",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesDaysAgo": {
+    "message": "$N$天前",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesRefresh": {
+    "message": "檢查更新"
+  },
+  "cfRulesRefreshing": {
+    "message": "正在取回…"
+  },
+  "cfRulesRefreshOk": {
+    "message": "規則已更新。"
+  },
+  "cfRulesRefreshErr": {
+    "message": "擷取失敗，請稍後再試。"
+  },
+  "cfAutoSaved": {
+    "message": "已自動儲存"
+  },
+  "advAppearanceTitle": {
+    "message": "外觀"
+  },
+  "frMutual": {
+    "message": "互关"
+  },
+  "frMine": {
+    "message": "我关注"
+  },
+  "frTheirs": {
+    "message": "关注我"
+  },
+  "frUnfollowed": {
+    "message": "取关了"
+  },
+  "frRateLabel": {
+    "message": "遵循比率"
+  },
+  "frFollowers": {
+    "message": "關注人"
+  },
+  "frFollowing": {
+    "message": "Tôi muốn đăng ký"
+  },
+  "frRefresh": {
+    "message": "刷新"
+  },
+  "frScanFollowing": {
+    "message": "掃描追蹤"
+  },
+  "frScanFollowers": {
+    "message": "掃描追蹤者"
+  },
+  "frScanIdle": {
+    "message": "準備就緒"
+  },
+  "frScanBusy": {
+    "message": "正在掃描{{COUNT}}"
+  },
+  "frScanDone": {
+    "message": "完成·找到{{COUNT}}"
+  },
+  "frRefreshDone": {
+    "message": "已刷新{{COUNT}}帳戶"
+  },
+  "frNeedTemplate": {
+    "message": "訪問您的關注者/關注者頁面一次以初始化"
+  },
+  "frNeedProfileTemplate": {
+    "message": "訪問任何個人資料一次以初始化刷新"
+  },
+  "frRate": {
+    "message": "追蹤率"
+  },
+  "frNeedUserId": {
+    "message": "開啟自己的個人資料一次即可初始化"
+  },
+  "frRateLimited": {
+    "message": "速率受限， {{SECONDS}}秒後重試"
+  },
+  "frScanError": {
+    "message": "掃描失敗，請重試"
+  },
+  "frUnfollowedMe": {
+    "message": "對方已取消追蹤你"
+  },
+  "frIUnfollowed": {
+    "message": "你已取消追蹤對方"
+  }
+}

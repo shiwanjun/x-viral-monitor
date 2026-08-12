@@ -1,11 +1,11 @@
 # ADR-0004: Pro Tier, License, and Trial Architecture
 
-Status: Proposed
+Status: **Superseded** by [ADR-0005](./0005-subscription-auth-architecture.md)
 Date: 2026-05-19
 
 ## Context
 
-X Viral Monitor M1 introduces paid Pro features, starting with the tweet rate
+X-Tools M1 introduces paid Pro features, starting with the tweet rate
 filter migrated from the `x-tweet-rate-filter` proof of concept. The repository
 remains MIT/open source, so paid code is visible to users. The goal is therefore
 not strong DRM. The goal is a pragmatic runtime gate that:
@@ -43,13 +43,13 @@ allowed to combine:
 
 The initial M1 decision is:
 
-- `free`: all existing XVM features remain available.
+- `free`: all existing X-Tools features remain available.
 - `trial`: Pro features enabled during the local trial.
 - `pro`: Pro features enabled for a server-validated Creem license.
 - `rate-filter`: minimum tier `trial`.
 - Rate filtering is disabled by default; the user must explicitly enable it.
-- Tweets hidden by the rate filter do not render XVM viral badges.
-- XVM Pro uses its own independent Creem product and license state; it does not
+- Tweets hidden by the rate filter do not render X-Tools viral badges.
+- X-Tools Membership uses its own independent Creem product and license state; it does not
   share a license key with `x-md-paste`.
 - The trial starts automatically on install.
 - Trial expiry is a soft downgrade to Free plus a small upgrade prompt, not a
@@ -96,7 +96,7 @@ Creem calls must go through a server-side proxy, following the existing
 Recommended storage:
 
 - `chrome.storage.local`, not `sync`, unless product strategy explicitly changes.
-- XVM-specific keys, for example:
+- X-Tools-specific keys, for example:
   - `xvm_license_v1`
   - `xvm_device_id`
   - `xvm_trial_v1`
@@ -115,8 +115,8 @@ The license record should include:
 - productId.
 
 Product ID must be checked when Creem returns it. A valid active license for a
-different product must not unlock XVM Pro unless the user explicitly decides on
-a cross-product bundle. Current default: XVM Pro is independent from
+different product must not unlock X-Tools Membership unless the user explicitly decides on
+a cross-product bundle. Current default: X-Tools Membership is independent from
 `x-md-paste`.
 
 ## Cache and Offline Grace
@@ -138,7 +138,7 @@ M1 target:
 - 7 day offline grace, matching the project decision in thread.
 
 If copied code from `x-md-paste` still uses a different cache/grace duration, it
-must be adjusted for XVM or documented as an intentional deviation before merge.
+must be adjusted for X-Tools or documented as an intentional deviation before merge.
 
 ## Trial
 
@@ -265,7 +265,7 @@ Tradeoffs:
 These product decisions are locked for M1:
 
 - Rate filtering defaults off after install; users opt in.
-- Hidden tweets do not get XVM viral badges.
-- XVM Pro is an independent Creem product, not bundled with `x-md-paste`.
+- Hidden tweets do not get X-Tools viral badges.
+- X-Tools Membership is an independent Creem product, not bundled with `x-md-paste`.
 - Trial starts automatically on install.
 - Trial expiry soft-downgrades to Free and shows an upgrade prompt.

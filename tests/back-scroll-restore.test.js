@@ -19,7 +19,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '..');
 const content = readFileSync(resolve(repo, 'content.js'), 'utf8');
 const MARKER = '// Back-navigation scroll-restore guard.';
-const guardSrc = content.slice(content.indexOf(MARKER));
+const guardStart = content.indexOf(MARKER);
+const guardEnd = content.indexOf('\n})();\n\n})();', guardStart);
+const guardSrc = content.slice(guardStart, guardEnd + '\n})();'.length);
 
 const HIDE_SEL = '[data-xvm-content-filter-hidden], [data-xvm-rate-hidden]';
 

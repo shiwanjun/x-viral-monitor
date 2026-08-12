@@ -9,6 +9,14 @@ secrets/*
 !secrets/README.md
 *.png.bak
 
+# Local environment files — contain real API keys, OAuth secrets, private keys.
+# Only .env.example and .dev.vars.example are safe to commit.
+.env
+.env.*
+!.env.example
+.dev.vars
+!.dev.vars.example
+
 # macOS Finder metadata
 .DS_Store
 

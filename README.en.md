@@ -1,8 +1,8 @@
-# X Viral Monitor
+# X-Tools
 
 [中文说明](README.md)
 
-Chrome extension that displays real-time impression velocity on every tweet in your X (Twitter) timeline.
+X-Tools is a toolkit for X (Twitter) creators: **viral detection** — real-time impression velocity on every tweet in your timeline, so you spot posts before they take off; **follow insights** — mutual-follow marks, one-way follow detection, and unfollow alerts for accounts you followed. Plus a full set of reading and creation helpers.
 
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-green)](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
@@ -10,6 +10,7 @@ Chrome extension that displays real-time impression velocity on every tweet in y
 ## What it does
 
 - Shows impression velocity (views/hour) on each tweet in your timeline
+- **Follow insights** — mutual-follow marks, one-way follow detection, and unfollow alerts on profile pages (planned)
 - **Two badge styles** — pill solid (colored background) or inline classic (plain text), switchable in the popup
 - Color-coded badges indicate traffic levels at a glance
 - Hover tooltip with detailed metrics (views, likes, retweets, replies, bookmarks, viral score)
@@ -23,13 +24,13 @@ Chrome extension that displays real-time impression velocity on every tweet in y
 
 ## Open Source and Official Builds
 
-This repository contains the full X Viral Monitor source code, including the Pro feature gates and license logic. The code is released under the MIT license, so you can audit, modify, and build it yourself.
+This repository contains the full X-Tools source code, including the Pro feature gates and license logic. The code is released under the MIT license, so you can audit, modify, and build it yourself.
 
 The Chrome Web Store version is the **official build**. It provides one-click installation, automatic updates, license activation, and maintainer support. Builds loaded manually from GitHub are community/self-built versions provided "as-is" under the MIT license; they do not include Chrome Web Store automatic updates or an official support commitment.
 
 ### Free vs Pro
 
-| Free features | Pro / trial unlocks |
+| Free features | Subscription unlocks |
 |---|---|
 | Velocity badges, velocity leaderboard, bookmark count display | Velocity filter: hide low-velocity tweets by views/min and total views |
 | Image viewer enhancements and long-image reading | Separate thresholds for short tweets and long-form articles |
@@ -65,7 +66,7 @@ Templates can be edited in the extension popup. **Tweet templates** and **articl
 ### Chrome Extension (recommended)
 
 **Chrome Web Store:**
-[Install X Viral Monitor](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
+[Install X-Tools](https://chromewebstore.google.com/detail/x-viral-monitor/dkplofpecmjmbhgjgleeflcnfgfkdfpd)
 
 **Manual install (latest unpublished build):**
 

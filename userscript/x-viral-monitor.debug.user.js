@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         X Viral Monitor Minimal Badge DEBUG
+// @name         X-Tools Minimal Badge DEBUG
 // @namespace    https://github.com/x-viral-monitor
-// @version      0.1.13-debug.6
+// @version      1.0.0
 // @description  Debug build for iOS Userscripts: Eruda + XVM hook/GraphQL/DOM/badge diagnostics.
 // @match        https://x.com/*
 // @match        https://pro.x.com/*

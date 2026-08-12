@@ -1,0 +1,236 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repo = resolve(here, '..');
+
+// Load the pure-logic IIFE with a minimal window stub (node env).
+const logicSrc = readFileSync(resolve(repo, 'src/follow-radar/logic.js'), 'utf8');
+const sandbox = { window: {} };
+new Function('window', logicSrc)(sandbox.window);
+const L = sandbox.window.__xvmFollowRadarLogic;
+
+describe('follow-radar logic', () => {
+  describe('normalizeHandle', () => {
+    it('lowercases and strips @', () => {
+      expect(L.normalizeHandle('@ElonMusk')).toBe('elonmusk');
+      expect(L.normalizeHandle('  Foo_Bar ')).toBe('foo_bar');
+    });
+    it('rejects invalid handles', () => {
+      expect(L.normalizeHandle(null)).toBeNull();
+      expect(L.normalizeHandle('')).toBeNull();
+      expect(L.normalizeHandle('has space')).toBeNull();
+      expect(L.normalizeHandle('too-long-handle-123456')).toBeNull();
+      expect(L.normalizeHandle('emoji😀')).toBeNull();
+    });
+  });
+
+  describe('classify', () => {
+    it('mutual when both flags set', () => {
+      expect(L.classify({ f: 1, b: 1 })).toBe('mutual');
+    });
+    it('mine / theirs for one-way links', () => {
+      expect(L.classify({ f: 1, b: 0 })).toBe('mine');
+      expect(L.classify({ f: 0, b: 1 })).toBe('theirs');
+    });
+    it('unfollowed only when tombstones exist', () => {
+      expect(L.classify({ f: 0, b: 0, u: 123 })).toBe('unfollowed');
+      expect(L.classify({ f: 0, b: 0, i: 123 })).toBe('unfollowed');
+      expect(L.classify({ f: 0, b: 0 })).toBe('none');
+      expect(L.classify(null)).toBe('none');
+    });
+  });
+
+  describe('computeRate / formatRate', () => {
+    it('following ÷ followers with 1 decimal', () => {
+      expect(L.computeRate({ fc: 100, fd: 320 })).toBe(3.2);
+      expect(L.computeRate({ fc: 1000, fd: 999 })).toBe(1);
+      expect(L.computeRate({ fc: 3, fd: 1 })).toBe(0.3);
+    });
+    it('null when followers unknown or zero', () => {
+      expect(L.computeRate({ fc: 0, fd: 10 })).toBeNull();
+      expect(L.computeRate({})).toBeNull();
+      expect(L.computeRate(null)).toBeNull();
+    });
+    it('formatRate guards null', () => {
+      expect(L.formatRate(3.2)).toBe('3.2x');
+      expect(L.formatRate(null)).toBe('\u2014');
+    });
+  });
+
+  describe('mergeUser transitions', () => {
+    it('records i_unfollowed when f goes 1→0', () => {
+      const { rec, events } = L.mergeUser({ f: 1, b: 0 }, { f: 0, b: 0 }, 1000);
+      expect(rec.f).toBe(0);
+      expect(rec.i).toBe(1000);
+      expect(events).toEqual([{ type: 'i_unfollowed', ts: 1000 }]);
+    });
+    it('records unfollowed_me when b goes 1→0', () => {
+      const { rec, events } = L.mergeUser({ f: 0, b: 1 }, { f: 0, b: 0 }, 2000);
+      expect(rec.b).toBe(0);
+      expect(rec.u).toBe(2000);
+      expect(events).toEqual([{ type: 'unfollowed_me', ts: 2000 }]);
+    });
+    it('clears tombstone when re-linked', () => {
+      const { rec } = L.mergeUser({ f: 0, b: 0, u: 500, i: 600 }, { f: 1, b: 1 }, 3000);
+      expect(rec.u).toBeNull();
+      expect(rec.i).toBeNull();
+      expect(rec.f).toBe(1);
+      expect(rec.b).toBe(1);
+    });
+    it('ignores absent relationship fields (unknown ≠ false)', () => {
+      const { rec, events } = L.mergeUser({ f: 1, b: 1 }, { f: undefined, b: undefined, fc: 5 }, 4000);
+      expect(rec.f).toBe(1);
+      expect(rec.b).toBe(1);
+      expect(rec.fc).toBe(5);
+      expect(events).toEqual([]);
+    });
+    it('updates name and counts without events', () => {
+      const { rec, events } = L.mergeUser({ f: 1, b: 0 }, { f: 1, b: 0, name: 'New Name', fc: 77, fd: 3 }, 5000);
+      expect(rec.n).toBe('New Name');
+      expect(rec.fc).toBe(77);
+      expect(rec.fd).toBe(3);
+      expect(events).toEqual([]);
+    });
+  });
+
+  describe('diffSnapshots', () => {
+    it('detects unfollows in both directions', () => {
+      const prev = {
+        following: { a: 1, b: 1 },
+        followers: { c: 1, b: 1 },
+        ts: 100,
+      };
+      const next = {
+        following: { b: 1 }, // a lost → I unfollowed a
+        followers: { c: 1 }, // b lost → b unfollowed me
+        ts: 200,
+      };
+      const events = L.diffSnapshots(prev, next);
+      expect(events).toContainEqual({ h: 'a', type: 'i_unfollowed', ts: 200 });
+      expect(events).toContainEqual({ h: 'b', type: 'unfollowed_me', ts: 200 });
+    });
+    it('no events when lists unchanged', () => {
+      const snap = { following: { a: 1 }, followers: { b: 1 }, ts: 100 };
+      expect(L.diffSnapshots(snap, { ...snap, ts: 200 })).toEqual([]);
+    });
+  });
+
+  describe('extractUsers', () => {
+    const legacy = (over) => ({
+      screen_name: 'alice',
+      name: 'Alice',
+      followers_count: 10,
+      friends_count: 20,
+      ...over,
+    });
+
+    it('extracts from direct legacy nodes', () => {
+      const users = L.extractUsers({ data: { user: { result: { legacy: legacy({ following: true, followed_by: false }) } } } });
+      expect(users).toHaveLength(1);
+      expect(users[0]).toMatchObject({ handle: 'alice', f: 1, b: 0, fc: 10, fd: 20 });
+    });
+
+    it('keeps relationship flags when a timeline user omits public counts', () => {
+      const users = L.extractUsers({
+        data: { user: { result: { legacy: { screen_name: 'alice', following: true, followed_by: false } } } },
+      });
+      expect(users).toEqual([expect.objectContaining({ handle: 'alice', f: 1, b: 0, fc: undefined, fd: undefined })]);
+    });
+
+    it('extracts from timeline user_results and core wrappers', () => {
+      const json = {
+        data: {
+          timeline: {
+            instructions: [{
+              entries: [
+                { content: { itemContent: { user_results: { result: { legacy: legacy({ screen_name: 'bob' }) } } } } },
+              ],
+            }],
+          },
+        },
+      };
+      const users = L.extractUsers(json);
+      expect(users.map((u) => u.handle)).toEqual(['bob']);
+    });
+
+    it('does not fabricate relationship flags from absent fields', () => {
+      const users = L.extractUsers({ result: { legacy: legacy({}) } });
+      expect(users[0].f).toBeUndefined();
+      expect(users[0].b).toBeUndefined();
+    });
+
+    it('dedupes and normalizes handles', () => {
+      const users = L.extractUsers({
+        a: { legacy: legacy({ screen_name: 'ALICE' }) },
+        b: { legacy: legacy({ screen_name: 'alice' }) },
+      });
+      expect(users).toHaveLength(1);
+      expect(users[0].handle).toBe('alice');
+    });
+  });
+
+  describe('findBottomCursor / findTimelineEntries', () => {
+    const payload = {
+      data: {
+        user: {
+          result: {
+            timeline: {
+              timeline: {
+                instructions: [
+                  { entries: [
+                    { content: { cursorType: 'Top', value: 'top1' } },
+                    { content: { itemContent: { user_results: { result: { legacy: { screen_name: 'x', followers_count: 1 } } } } } },
+                    { content: { cursorType: 'Bottom', value: 'cur-abc' } },
+                  ] },
+                ],
+              },
+            },
+          },
+        },
+      },
+    };
+
+    it('finds the last bottom cursor', () => {
+      expect(L.findBottomCursor(payload)).toBe('cur-abc');
+      expect(L.findBottomCursor({ nope: true })).toBeNull();
+    });
+
+    it('locates entries via known path', () => {
+      const entries = L.findTimelineEntries(payload);
+      expect(entries).toHaveLength(3);
+      expect(entries[2].content.cursorType).toBe('Bottom');
+    });
+
+    it('falls back to generic entries search', () => {
+      const flat = { entries: [{ content: { itemContent: { user_results: { result: {} } } } }] };
+      expect(L.findTimelineEntries({ data: { deep: { flat } } })).toHaveLength(1);
+    });
+  });
+
+  describe('evictUsers', () => {
+    it('keeps the newest entries within cap', () => {
+      const users = {};
+      for (let i = 0; i < 10; i++) users[`u${i}`] = { t: i };
+      L.evictUsers(users, 5);
+      expect(Object.keys(users)).toHaveLength(5);
+      expect(users.u9.t).toBe(9);
+      expect(users.u4).toBeUndefined();
+    });
+    it('no-op under cap', () => {
+      const users = { a: { t: 1 }, b: { t: 2 } };
+      expect(L.evictUsers(users, 100)).toBe(users);
+    });
+  });
+
+  describe('userIdFromVariables', () => {
+    it('parses numeric userId', () => {
+      expect(L.userIdFromVariables('{"userId":"1234567890"}')).toBe('1234567890');
+      expect(L.userIdFromVariables('{"userId":"abc"}')).toBeNull();
+      expect(L.userIdFromVariables('not json')).toBeNull();
+      expect(L.userIdFromVariables(null)).toBeNull();
+    });
+  });
+});

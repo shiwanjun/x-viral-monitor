@@ -1,4 +1,4 @@
-# Chrome Web Store Listing Draft — X Viral Monitor v1.7.0
+# Chrome Web Store Listing Draft — X-Tools v1.7.0
 
 Use this draft for the Chrome Web Store v1.7.0 submission after final human approval.
 
@@ -12,15 +12,15 @@ Spot viral tweets on X, filter low-velocity noise, read long screenshots, and dr
 
 ### Detailed Description
 
-X Viral Monitor turns X (Twitter) into a local control panel for spotting, filtering, reading, and engaging with fast-moving posts. It works on x.com and pro.x.com, with no analytics and no third-party data collection for free features.
+X-Tools turns X (Twitter) into a local control panel for spotting, filtering, reading, and engaging with fast-moving posts. It works on x.com and pro.x.com, with no analytics and no third-party data collection for free features.
 
-NEW IN 1.7.0 — XVM PRO
+NEW IN 1.7.0 — X-Tools Membership
 
 - Hot-only filter: hide low-velocity posts using views-per-minute and total view thresholds.
 - Separate settings for short posts and long X Articles.
 - Scope controls for Home, Lists, Profiles, and Tweet detail pages.
 - Floating panel switch: toggle Hot only directly on X, synced with the popup.
-- Free users see Pro feature hints; trial and Pro users can enable the matching filters.
+- Free users see Pro feature hints; subscribed users can enable the matching filters.
 
 CORE FEATURES
 
@@ -62,9 +62,9 @@ English, Chinese, Japanese
 
 ### 详细描述
 
-X Viral Monitor 把 X (Twitter) 变成一个本地内容控制台：识别正在起量的推文、过滤低质量信息流、阅读长图、整理互动对象。支持 x.com 和 pro.x.com。免费功能不含统计埋点, 不采集第三方数据。
+X-Tools 把 X (Twitter) 变成一个本地内容控制台：识别正在起量的推文、过滤低质量信息流、阅读长图、整理互动对象。支持 x.com 和 pro.x.com。免费功能不含统计埋点, 不采集第三方数据。
 
-v1.7.0 新增 — XVM Pro
+v1.7.0 新增 — X-Tools Membership
 
 - 仅看热帖: 用 views/min 和总浏览量双阈值隐藏低流速推文。
 - 短推和 X Article 长文可分别设置阈值。

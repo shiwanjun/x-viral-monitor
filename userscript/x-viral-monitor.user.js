@@ -1,11 +1,11 @@
 // ==UserScript==
-// @name         X Viral Monitor Minimal Badge
+// @name         X-Tools Minimal Badge
 // @namespace    https://github.com/Icy-Cat/x-viral-monitor
-// @version      0.1.22
+// @version      1.0.0
 // @description  Minimal X velocity badges from GraphQL tweet metrics.
 // @author       IcyCat, Chlience
-// @homepageURL  https://github.com/Icy-Cat/x-viral-monitor
-// @supportURL   https://github.com/Icy-Cat/x-viral-monitor/issues
+// @homepageURL  https://x.jieyiai.dev
+// @supportURL   https://x.jieyiai.dev
 // @match        https://x.com/*
 // @match        https://pro.x.com/*
 // @run-at       document-start

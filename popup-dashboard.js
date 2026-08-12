@@ -1,20 +1,18 @@
 // === Tab router + toast + cross-script glue ===
 //
 // Tab layout (mock A, locked 2026-05-19 after 3rd UI pivot). Routes:
-//   <button role="tab" data-tab="pro|filter|leaderboard|ai|about"> click
+//   <button role="tab" data-tab="pro|filter|leaderboard|follow-radar|ai|about"> click
 //     → body.dataset.tab = …
 //     → CSS [data-tab-panel="…"][data-active="1"] shows the panel
 //
 // Also bridges:
 //   - popup-pro.js renders into #xvm-pro-section (Pro tab) AND writes
 //     body.dataset.tier so #tier-chip (header) recolors.
-//   - "Activate existing license" link inside the Pro tab unhides the
-//     inline #activate-inline form (popup-pro.js wires submit/cancel).
 //   - Coming-soon stubs (lucide list inside Pro tab) are static — no
 //     click handler (display only; M2 work item).
 
 (() => {
-  const TABS = ['pro', 'filter', 'leaderboard', 'ai', 'about'];
+  const TABS = ['pro', 'filter', 'leaderboard', 'follow-radar', 'ai', 'about'];
   const ACTIVE_TAB_KEY = 'xvm_popup_active_tab';
 
   // Critical bug fix (Codex polish item 3): the previous t(key) signature
@@ -120,36 +118,6 @@
     });
   }
 
-  // popup-pro.js dispatches 'xvm-pro-nav' with { view: 'activate' } when
-  // the "Activate existing license" link in the hero is clicked, or
-  // { view: 'pro' } after a successful activation to return to Pro tab.
-  function wireProNav() {
-    window.addEventListener('xvm-pro-nav', (ev) => {
-      const dest = ev?.detail?.view;
-      if (dest === 'activate') {
-        setTab('pro');
-        const form = document.getElementById('activate-inline');
-        if (form) form.hidden = false;
-        const key = document.getElementById('activate-key');
-        if (key) key.focus();
-      } else if (dest === 'pro' || dest === 'dashboard') {
-        setTab('pro');
-        const form = document.getElementById('activate-inline');
-        if (form) form.hidden = true;
-      }
-    });
-  }
-
-  // Activate-form cancel button collapses the inline activate panel.
-  function wireActivateCancel() {
-    const cancel = document.getElementById('activate-cancel');
-    if (!cancel) return;
-    cancel.addEventListener('click', () => {
-      const form = document.getElementById('activate-inline');
-      if (form) form.hidden = true;
-    });
-  }
-
   // Initial tier-chip text comes from popup-pro.js writing body.dataset.tier.
   // We mirror that into the #tier-chip label so it always reads the tier in
   // the user's locale.
@@ -160,21 +128,24 @@
       const tier = document.body.dataset.tier || 'free';
       let label, sub;
       if (document.body.dataset.buildChannel === 'community-dev') label = 'DEV';
+      else if (tier === 'max') label = t('chipTierMax');
       else if (tier === 'pro') label = t('chipTierPro');
-      else if (tier === 'trial') label = t('chipTierTrial');
+      else if (tier === 'standard') label = t('chipTierStandard');
       else label = t('chipTierFree');
-      // Trial: show days-left in chip if available via popup-pro state.
-      // popup-pro.js stores it on window.__xvmProPopup; query optionally.
-      if (tier === 'trial') {
-        const days = window.__xvmProDays;
-        if (days != null) sub = days === 1 ? t('chipTrialOne') : t('chipTrialDays', String(days));
-      }
       chip.textContent = sub ? `${label} · ${sub}` : label;
     };
     refresh();
-    new MutationObserver(refresh).observe(document.body, {
-      attributes: true, attributeFilter: ['data-tier', 'data-build-channel'],
-    });
+    const observeTier = () => {
+      const target = document.body || document.documentElement;
+      if (!target?.nodeType) {
+        document.addEventListener('DOMContentLoaded', observeTier, { once: true });
+        return;
+      }
+      new MutationObserver(refresh).observe(target, {
+        attributes: true, attributeFilter: ['data-tier', 'data-build-channel'],
+      });
+    };
+    observeTier();
     window.addEventListener('xvm-pro-days', refresh);
   }
 
@@ -285,15 +256,20 @@
     document.getElementById('show-update-notes')?.addEventListener('click', showReleaseNotesOnCurrentTab);
   }
 
+  function wireWorkspaceButton() {
+    document.getElementById('open-workspace')?.addEventListener('click', () => {
+      try { chrome.runtime.openOptionsPage(); } catch (_) {}
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     loadInitialTab(); // default — Filter is the primary Pro feature surface
     renderPopupVersion();
     wireTabButtons();
-    wireProNav();
-    wireActivateCancel();
     syncTierChip();
     wireTheme();
     wireReleaseNotesButton();
+    wireWorkspaceButton();
   });
 
   window.__xvmTabs = { setTab, showToast, TABS, applyTheme, ACTIVE_TAB_KEY };

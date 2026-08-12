@@ -1,0 +1,1085 @@
+{
+  "extName": {
+    "message": "X-Tools",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Phát hiện nội dung lan truyền và thông tin theo dõi: huy hiệu tốc độ, đánh dấu theo dõi lẫn nhau, theo dõi một chiều và cảnh báo bỏ theo dõi. Hoàn toàn cục bộ, không thu thập dữ liệu.",
+    "description": "Extension description"
+  },
+  "popupSubtitle": {
+    "message": "Phát hiện nội dung lan truyền và thông tin theo dõi cho X"
+  },
+  "tierNormal": {
+    "message": "Bình thường"
+  },
+  "tierTrending": {
+    "message": "Đang thịnh hành"
+  },
+  "tierViral": {
+    "message": "Lan truyền"
+  },
+  "hoverHint": {
+    "message": "Hover badges to see views, likes, RT, replies, bookmarks and viral score."
+  },
+  "thresholdTrending": {
+    "message": "🚀 Trending threshold"
+  },
+  "thresholdViral": {
+    "message": "🔥 Viral threshold"
+  },
+  "btnSave": {
+    "message": "Lưu"
+  },
+  "btnSaved": {
+    "message": "Đã lưu"
+  },
+  "btnReset": {
+    "message": "Đặt lại"
+  },
+  "btnAdd": {
+    "message": "Thêm"
+  },
+  "btnDelete": {
+    "message": "Xóa"
+  },
+  "flashSaved": {
+    "message": "Saved ✓"
+  },
+  "flashReset": {
+    "message": "Reset ✓"
+  },
+  "featureCopyMdTitle": {
+    "message": "📋 Sao chép bài đăng dạng Markdown"
+  },
+  "featureCopyMdDesc": {
+    "message": "Adds a \"Copy as Markdown\" entry at the bottom of X's native share menu. Copies the tweet text, author, link and date in Markdown format."
+  },
+  "featureLeaderboardTitle": {
+    "message": "📊 Bảng xếp hạng tốc độ"
+  },
+  "featureLeaderboardDesc": {
+    "message": "Draggable floating panel showing the fastest-growing tweets visible on the current page. Click a row to scroll to the tweet."
+  },
+  "featureLeaderboardEdgeHideTitle": {
+    "message": "Edge-hide leaderboard"
+  },
+  "featureLeaderboardEdgeHideDesc": {
+    "message": "When enabled, drag the leaderboard to a screen edge and release to tuck it away."
+  },
+  "featureLeaderboardShowTop": {
+    "message": "Show top"
+  },
+  "featureLeaderboardTweets": {
+    "message": "tweets"
+  },
+  "featureLeaderboardColsHint": {
+    "message": "Drag to reorder · check to show"
+  },
+  "popupColRank": {
+    "message": "Rank"
+  },
+  "popupColIcon": {
+    "message": "Tier icon"
+  },
+  "popupColHandle": {
+    "message": "Username"
+  },
+  "popupColPreview": {
+    "message": "Tweet preview"
+  },
+  "popupColViews": {
+    "message": "Views"
+  },
+  "popupColVelocity": {
+    "message": "Velocity"
+  },
+  "contentViews": {
+    "message": "Views"
+  },
+  "contentLikes": {
+    "message": "Likes"
+  },
+  "contentRetweets": {
+    "message": "Retweets"
+  },
+  "contentReplies": {
+    "message": "Replies"
+  },
+  "contentBookmarks": {
+    "message": "Bookmarks"
+  },
+  "contentVelocity": {
+    "message": "Velocity"
+  },
+  "contentViralScore": {
+    "message": "Viral Score"
+  },
+  "contentPosted": {
+    "message": "Posted"
+  },
+  "contentLeaderboardTitle": {
+    "message": "Hot on this page"
+  },
+  "contentLeaderboardDragToMove": {
+    "message": "Drag to move"
+  },
+  "contentLeaderboardBackToPrevious": {
+    "message": "Return to previous scroll position"
+  },
+  "contentLeaderboardEdgeHide": {
+    "message": "Hide at edge"
+  },
+  "contentLeaderboardEdgeShow": {
+    "message": "Expand"
+  },
+  "contentLeaderboardSettings": {
+    "message": "Open leaderboard settings"
+  },
+  "contentLeaderboardClose": {
+    "message": "Close leaderboard"
+  },
+  "contentLeaderboardCloseSettings": {
+    "message": "Close settings"
+  },
+  "contentLeaderboardSettingsPanelTitle": {
+    "message": "Leaderboard settings"
+  },
+  "contentLeaderboardColumns": {
+    "message": "Visible columns"
+  },
+  "contentLeaderboardSettingsAutoSave": {
+    "message": "Changes are saved automatically and apply to this page immediately."
+  },
+  "contentLeaderboardTotalViews": {
+    "message": "Total views"
+  },
+  "contentCopyMdLabel": {
+    "message": "Copy as Markdown"
+  },
+  "contentCopyMdDone": {
+    "message": "Copied!"
+  },
+  "contentCopyMdAttribution": {
+    "message": "via X-Tools"
+  },
+  "contentCopyMdNoTweetFound": {
+    "message": "No tweet found"
+  },
+  "contentCopyMdCopyFailed": {
+    "message": "Copy failed"
+  },
+  "contentCopyTweetCommentsLabel": {
+    "message": "Copy tweet and comments"
+  },
+  "contentCopyTweetCommentsDone": {
+    "message": "Tweet and comments copied!"
+  },
+  "contentCopyTweetCommentsHeading": {
+    "message": "Comments"
+  },
+  "contentFallbackTweetLabel": {
+    "message": "tweet"
+  },
+  "flashColumnsSaved": {
+    "message": "Columns saved ✓"
+  },
+  "flashLeaderboardOn": {
+    "message": "Leaderboard ON ✓"
+  },
+  "flashLeaderboardOff": {
+    "message": "Leaderboard OFF"
+  },
+  "flashLeaderboardEdgeHideOn": {
+    "message": "Edge-hide ON ✓"
+  },
+  "flashLeaderboardEdgeHideOff": {
+    "message": "Edge-hide OFF"
+  },
+  "flashCopyMdOn": {
+    "message": "Copy-as-Markdown ON ✓"
+  },
+  "flashCopyMdOff": {
+    "message": "Copy-as-Markdown OFF"
+  },
+  "flashShowingTop": {
+    "message": "Showing top $COUNT$ ✓",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "contentStarChartMenuLabel": {
+    "message": "Thank-You Star Chart"
+  },
+  "contentStarChartAttribution": {
+    "message": "via X-Tools"
+  },
+  "contentStarChartTitle": {
+    "message": "Thank-You Star Chart"
+  },
+  "contentStarChartLoading": {
+    "message": "Loading supporters..."
+  },
+  "contentStarChartProgress": {
+    "message": "{{COUNT}} supporters loaded"
+  },
+  "contentStarChartRateLimited": {
+    "message": "Hit rate limit, waiting {{SECONDS}}s..."
+  },
+  "contentStarChartDone": {
+    "message": "Done — {{COUNT}} supporters"
+  },
+  "contentStarChartDoneTruncated": {
+    "message": "Done — {{COUNT}} supporters (capped, more available)"
+  },
+  "contentStarChartError": {
+    "message": "Could not load supporters: {{REASON}}"
+  },
+  "contentStarChartNoTweetFound": {
+    "message": "Could not identify the tweet"
+  },
+  "contentStarChartModuleNotLoaded": {
+    "message": "Star chart not available — please reload the page"
+  },
+  "contentStarChartLegendRT": {
+    "message": "Retweet"
+  },
+  "contentStarChartLegendQuote": {
+    "message": "Quote"
+  },
+  "contentStarChartLegendBoth": {
+    "message": "Both"
+  },
+  "contentStarChartClose": {
+    "message": "Close"
+  },
+  "contentStarChartStatRetweets": {
+    "message": "Retweets"
+  },
+  "contentStarChartStatQuotes": {
+    "message": "Quotes"
+  },
+  "contentStarChartStatSupporters": {
+    "message": "Supporters"
+  },
+  "contentStarChartStatSpan": {
+    "message": "Quote span"
+  },
+  "contentStarChartSearchPlaceholder": {
+    "message": "Search name or handle..."
+  },
+  "contentStarChartRiverTitle": {
+    "message": "Quote River"
+  },
+  "contentStarChartRiverEmpty": {
+    "message": "No quotes yet"
+  },
+  "contentStarChartEmpty": {
+    "message": "No supporters found for this tweet"
+  },
+  "contentStarChartReset": {
+    "message": "Reset view"
+  },
+  "popupStarChartLabel": {
+    "message": "Thank-You Star Chart"
+  },
+  "popupStarChartHint": {
+    "message": "Adds a star-chart option to the share menu of any tweet."
+  },
+  "flashStarChartOn": {
+    "message": "Star chart enabled"
+  },
+  "flashStarChartOff": {
+    "message": "Star chart disabled"
+  },
+  "featureBookmarkFoldersTitle": {
+    "message": "🔖 Menu thư mục dấu trang"
+  },
+  "featureBookmarkFoldersDesc": {
+    "message": "Hover over a tweet bookmark button to pick a folder, see where it is saved, or create a folder. Requires X Premium."
+  },
+  "flashBookmarkFoldersOn": {
+    "message": "Bookmark folder menu enabled"
+  },
+  "flashBookmarkFoldersOff": {
+    "message": "Bookmark folder menu disabled"
+  },
+  "contentBookmarkMenuInFolder": {
+    "message": "In folder:"
+  },
+  "contentBookmarkMenuNotInAny": {
+    "message": "Not in any folder"
+  },
+  "contentBookmarkMenuCheckFailed": {
+    "message": "Couldn’t check current folder. Click a folder to retry."
+  },
+  "contentBookmarkMenuChecking": {
+    "message": "Checking current folder…"
+  },
+  "contentBookmarkMenuLoadingFolders": {
+    "message": "Loading bookmark folders…"
+  },
+  "contentBookmarkMenuLoadFailed": {
+    "message": "Failed to load folders. X Premium may be required."
+  },
+  "contentBookmarkMenuNoFolders": {
+    "message": "No folders yet"
+  },
+  "contentBookmarkMenuNewFolderPlaceholder": {
+    "message": "+ New folder (Enter)"
+  },
+  "featureBookmarkCountTitle": {
+    "message": "🔖 Hiển thị số dấu trang"
+  },
+  "featureBookmarkCountDesc": {
+    "message": "Display the bookmark count next to each tweet's bookmark button on the timeline."
+  },
+  "flashBookmarkCountOn": {
+    "message": "Bookmark count enabled"
+  },
+  "flashBookmarkCountOff": {
+    "message": "Bookmark count disabled"
+  },
+  "contentStarChartTitleLabel": {
+    "message": "VELOCITY MONITOR"
+  },
+  "contentStarChartHeroEyebrow": {
+    "message": "THANK YOU FOR CARRYING THIS POST FURTHER"
+  },
+  "contentStarChartHeroTitle": {
+    "message": "Every light is a hand passing the post along."
+  },
+  "contentStarChartStatsSectionTitle": {
+    "message": "Overview"
+  },
+  "contentStarChartPeopleSectionTitle": {
+    "message": "Supporters"
+  },
+  "contentStarChartFilterAll": {
+    "message": "All"
+  },
+  "contentStarChartFilterRetweet": {
+    "message": "Retweet"
+  },
+  "contentStarChartFilterQuote": {
+    "message": "Quote"
+  },
+  "contentStarChartFilterBoth": {
+    "message": "Both"
+  },
+  "contentStarChartRiverPrev": {
+    "message": "Previous quote"
+  },
+  "contentStarChartRiverNext": {
+    "message": "Next quote"
+  },
+  "popupGrokPromptTitle": {
+    "message": "Grok comment prompt"
+  },
+  "popupGrokPromptHint": {
+    "message": "Use [推文内容] where the source tweet should be inserted. Click AI Generate in a reply box, choose a template, then pick one generated option to fill the reply."
+  },
+  "popupGrokTempChatLabel": {
+    "message": "Use temporary chat (don't pollute Grok history)"
+  },
+  "flashGrokTempChatOn": {
+    "message": "Temporary chat enabled ✓"
+  },
+  "flashGrokTempChatOff": {
+    "message": "Temporary chat disabled"
+  },
+  "flashGrokPromptSaved": {
+    "message": "Grok prompt saved ✓"
+  },
+  "flashGrokPromptReset": {
+    "message": "Grok prompt reset ✓"
+  },
+  "badgeStyleLabel": {
+    "message": "🏷️ Badge style"
+  },
+  "badgeStylePillSolid": {
+    "message": "Pill solid"
+  },
+  "badgeStyleInlineClassic": {
+    "message": "Inline classic"
+  },
+  "flashBadgeStyleSaved": {
+    "message": "Badge style saved ✓"
+  },
+  "proSignInGoogle": {
+    "message": "Đăng nhập với Google"
+  },
+  "proSignOut": {
+    "message": "Đăng xuất"
+  },
+  "proPlanChoose": {
+    "message": "Choose"
+  },
+  "subscriptionKicker": {
+    "message": "Đăng ký"
+  },
+  "communityDevKicker": {
+    "message": "Development access"
+  },
+  "proPlanName": {
+    "message": "Hội viên"
+  },
+  "proPlanMonthlyPeriod": {
+    "message": "/tháng"
+  },
+  "proPlanMonthlyNote": {
+    "message": "Theo tháng · hủy bất cứ lúc nào"
+  },
+  "proPlanYearlyPeriod": {
+    "message": "/năm"
+  },
+  "proPlanYearlyNote": {
+    "message": "Tiết kiệm 20% · tương đương $4.79/tháng"
+  },
+  "proPlanRecommended": {
+    "message": "Giá trị tốt nhất"
+  },
+  "proPlanField": {
+    "message": "Plan"
+  },
+  "proEmailField": {
+    "message": "Account"
+  },
+  "proRenewsField": {
+    "message": "Renews"
+  },
+  "proManageBtn": {
+    "message": "Quản lý đăng ký"
+  },
+  "rfTitle": {
+    "message": "Bộ lọc tốc độ (Hội viên)"
+  },
+  "rfLockedHint": {
+    "message": "Đăng ký để mở khóa bộ lọc tốc độ."
+  },
+  "rfEnabled": {
+    "message": "Ẩn bài đăng có tốc độ thấp"
+  },
+  "rfScopeLegend": {
+    "message": "Phạm vi"
+  },
+  "rfScopeHome": {
+    "message": "Trang chủ"
+  },
+  "rfScopeList": {
+    "message": "Danh sách"
+  },
+  "rfScopeProfile": {
+    "message": "Hồ sơ"
+  },
+  "rfScopeStatus": {
+    "message": "Chi tiết bài đăng"
+  },
+  "rfShortLegend": {
+    "message": "Bài ngắn — giữ nếu đạt một trong hai ngưỡng"
+  },
+  "rfLongLegend": {
+    "message": "Bài viết X — giữ nếu đạt một trong hai ngưỡng"
+  },
+  "rfRatePerMin": {
+    "message": "lượt xem / phút ≥"
+  },
+  "rfAbsoluteViews": {
+    "message": "tổng lượt xem ≥"
+  },
+  "rfRuleHint": {
+    "message": "Giữ nếu (lượt xem/phút > ngưỡng) HOẶC (tổng lượt xem > ngưỡng). Nếu không sẽ ẩn."
+  },
+  "rfReset": {
+    "message": "Đặt lại mặc định"
+  },
+  "rfSave": {
+    "message": "Lưu"
+  },
+  "rfSavedOk": {
+    "message": "Đã lưu ✓"
+  },
+  "rfResetOk": {
+    "message": "Đã đặt lại ✓"
+  },
+  "featureLeaderboardResetPos": {
+    "message": "Reset leaderboard position"
+  },
+  "featureLeaderboardResetDone": {
+    "message": "Reset — please refresh the page."
+  },
+  "accRateFilter": {
+    "message": "Velocity filter"
+  },
+  "accRateFilterSub": {
+    "message": "Standard+"
+  },
+  "accLeaderboard": {
+    "message": "Leaderboard & badges"
+  },
+  "accPro": {
+    "message": "Account / Subscription"
+  },
+  "accOther": {
+    "message": "Other features & settings"
+  },
+  "heroProActive": {
+    "message": "Active · thanks for supporting!"
+  },
+  "communityDevBadge": {
+    "message": "Community DEV Build"
+  },
+  "communityDevSub": {
+    "message": "All local Pro features are enabled. Official license service and auto-updates belong to the Web Store build."
+  },
+  "heroFreeTagline": {
+    "message": "Most features are free. Subscribe for advanced extras."
+  },
+  "chipTierFree": {
+    "message": "FREE"
+  },
+  "chipTierStandard": {
+    "message": "STANDARD"
+  },
+  "chipTierPro": {
+    "message": "PRO"
+  },
+  "chipTierMax": {
+    "message": "MAX"
+  },
+  "proScopeTitle": {
+    "message": "Subscription plans"
+  },
+  "proScopeBody": {
+    "message": "Standard ($3.99/mo) unlocks velocity filtering. Pro ($5.99/mo) adds advanced thresholds + Pro leaderboard. Max ($7.99/mo) includes all future premium features."
+  },
+  "proFreeTitle": {
+    "message": "What stays free"
+  },
+  "proFreeBody": {
+    "message": "Velocity badges, leaderboard, bookmark counts, long-image reading, image enhancements, content filter, Grok helper, Markdown copy, and bookmark-folder tools remain free to use."
+  },
+  "proWebsiteLink": {
+    "message": "Read the website guide"
+  },
+  "cardFreeFeaturesTitle": {
+    "message": "Tính năng miễn phí"
+  },
+  "cardProFeaturesTitle": {
+    "message": "Tính năng hội viên"
+  },
+  "cardProFeaturesSub": {
+    "message": "A few advanced extras"
+  },
+  "featureBadgeLabel": {
+    "message": "Huy hiệu tốc độ"
+  },
+  "featureLeaderboardLabel": {
+    "message": "Bảng xếp hạng"
+  },
+  "featureCopyMdLabel": {
+    "message": "Sao chép dạng Markdown"
+  },
+  "featureRateFilterLabel": {
+    "message": "Bộ lọc tốc độ"
+  },
+  "chipEnabled": {
+    "message": "Đã bật"
+  },
+  "btnBack": {
+    "message": "Quay lại"
+  },
+  "btnCancel": {
+    "message": "Hủy"
+  },
+  "footerPoweredBy": {
+    "message": "Powered by"
+  },
+  "advBadgeThresholdsTitle": {
+    "message": "Badge thresholds & style"
+  },
+  "advLeaderboardTitle": {
+    "message": "Leaderboard details"
+  },
+  "advOtherFeaturesTitle": {
+    "message": "Other features"
+  },
+  "advGrokShortTitle": {
+    "message": "Grok reply — short tweet template"
+  },
+  "advGrokArticleTitle": {
+    "message": "Grok reply — article template"
+  },
+  "aiProviderTitle": {
+    "message": "AI comment provider"
+  },
+  "aiProviderLabel": {
+    "message": "Provider"
+  },
+  "aiPlatformLabel": {
+    "message": "Platform"
+  },
+  "aiBaseUrlLabel": {
+    "message": "Base URL"
+  },
+  "aiModelLabel": {
+    "message": "Model"
+  },
+  "aiReplyCountLabel": {
+    "message": "Replies"
+  },
+  "aiApiKeyLabel": {
+    "message": "API Key"
+  },
+  "aiProviderHint": {
+    "message": "Cloud providers send tweet context to the selected AI service. Ollama runs on your local machine."
+  },
+  "aiProviderHintGrok": {
+    "message": "X Grok uses your current X login state. No API key is needed."
+  },
+  "aiProviderHintOllama": {
+    "message": "Ollama runs locally. Make sure Ollama is running and the model has been downloaded."
+  },
+  "aiProviderHintCloud": {
+    "message": "Cloud providers send tweet text and reply context to the selected AI service."
+  },
+  "aiProviderXGrok": {
+    "message": "X Grok"
+  },
+  "aiProviderXGrokDesc": {
+    "message": "Use the current X session"
+  },
+  "aiProviderOllama": {
+    "message": "Ollama"
+  },
+  "aiProviderOllamaDesc": {
+    "message": "Local model service"
+  },
+  "aiProviderOpenAICompatible": {
+    "message": "OpenAI compatible"
+  },
+  "aiProviderOpenAICompatibleDesc": {
+    "message": "OpenAI, DeepSeek, OpenRouter"
+  },
+  "aiServiceConfigTitle": {
+    "message": "Service configuration"
+  },
+  "aiGenerationSettingsTitle": {
+    "message": "Generation settings"
+  },
+  "aiCheckLoginStatus": {
+    "message": "Check login status"
+  },
+  "aiTestConnection": {
+    "message": "Test connection"
+  },
+  "aiTestRunning": {
+    "message": "Testing connection..."
+  },
+  "aiTestOk": {
+    "message": "Connection test passed"
+  },
+  "aiTestFailed": {
+    "message": "Connection test failed"
+  },
+  "tabPro": {
+    "message": "Hội viên"
+  },
+  "tabFilter": {
+    "message": "Lọc"
+  },
+  "tabLeaderboard": {
+    "message": "Bảng xếp hạng"
+  },
+  "tabAi": {
+    "message": "Trả lời AI"
+  },
+  "tabAbout": {
+    "message": "Giới thiệu"
+  },
+  "rfSubShort": {
+    "message": "Short tweet"
+  },
+  "rfSubLong": {
+    "message": "X Article (long)"
+  },
+  "themeLabel": {
+    "message": "Giao diện"
+  },
+  "themeSwitchToDark": {
+    "message": "Chuyển sang tối"
+  },
+  "themeSwitchToLight": {
+    "message": "Chuyển sang sáng"
+  },
+  "themeFollowSystem": {
+    "message": "Theo hệ thống"
+  },
+  "languageLabel": {
+    "message": "Ngôn ngữ"
+  },
+  "languageHint": {
+    "message": "Áp dụng cho cửa sổ tiện ích, lớp phủ trang và ngôn ngữ mặc định của lời nhắc Grok."
+  },
+  "languageZh": {
+    "message": "中文"
+  },
+  "languageZhTW": {
+    "message": "中文 phồn thể"
+  },
+  "languageEn": {
+    "message": "English"
+  },
+  "languageJa": {
+    "message": "日本語"
+  },
+  "languageVi": {
+    "message": "Tiếng Việt"
+  },
+  "languageKo": {
+    "message": "한국어"
+  },
+  "aboutUpdatesTitle": {
+    "message": "Update notes"
+  },
+  "aboutUpdatesDesc": {
+    "message": "Open the latest update popup on the current X page."
+  },
+  "aboutShowUpdateNotes": {
+    "message": "Show update notes"
+  },
+  "aboutShowUpdateNotesSent": {
+    "message": "Opened the update popup on the current X page."
+  },
+  "aboutShowUpdateNotesNoTab": {
+    "message": "Open an X page first, then try the update popup again."
+  },
+  "grokShortTemplateLabel": {
+    "message": "Tweet template (short posts, <600 chars)"
+  },
+  "grokArticleTemplateLabel": {
+    "message": "Article template (used for X Articles / long posts, ≥600 chars)"
+  },
+  "grokArticleTemplateHint": {
+    "message": "This template group is used automatically when replying to X long-form posts or Articles."
+  },
+  "popupGrokEnterReplyLabel": {
+    "message": "Press Enter to reply"
+  },
+  "popupGrokEnterReplyHint": {
+    "message": "When enabled, plain Enter sends the reply. Shift/Command/Ctrl/Alt+Enter keep their original behavior."
+  },
+  "flashGrokEnterReplyOn": {
+    "message": "Enter to reply enabled"
+  },
+  "flashGrokEnterReplyOff": {
+    "message": "Enter to reply disabled"
+  },
+  "flashAiProviderSaved": {
+    "message": "AI provider settings saved"
+  },
+  "grokDefaultTemplateName": {
+    "message": "Natural replies"
+  },
+  "grokCustomTemplateName": {
+    "message": "Template $N$",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "grokArticleFallbackName": {
+    "message": "Article template"
+  },
+  "grokArticleCustomTemplateName": {
+    "message": "Article template $N$",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "contentLbHotOnly": {
+    "message": "Hot only"
+  },
+  "contentLbHotProTitle": {
+    "message": "Velocity filter is a Pro feature"
+  },
+  "contentLbHotProSub": {
+    "message": "Hide low-views tweets, keep what's actually spreading"
+  },
+  "contentLbHotEnabledToast": {
+    "message": "Hot only is on: posts that do not meet the hot-post threshold will be removed from this page."
+  },
+  "contentLbHotActiveNotice": {
+    "message": "Hot only is on. Posts below the threshold are hidden."
+  },
+  "contentLbHotScopeTitle": {
+    "message": "Applies to"
+  },
+  "contentLbHotScopeHome": {
+    "message": "Home / For you"
+  },
+  "contentLbHotScopeList": {
+    "message": "Lists"
+  },
+  "contentLbHotScopeProfile": {
+    "message": "Profiles"
+  },
+  "contentLbHotScopeStatus": {
+    "message": "Post detail"
+  },
+  "contentLbHotScopeCurrent": {
+    "message": "Current"
+  },
+  "contentLbHotDetails": {
+    "message": "View Pro scope"
+  },
+  "contentLbHotOpenSite": {
+    "message": "Open website"
+  },
+  "contentUpdateTitle": {
+    "message": "X-Tools has been updated"
+  },
+  "contentUpdateSubtitle": {
+    "message": "A few useful changes in this update are easy to miss:"
+  },
+  "contentUpdateItemAiProviderTitle": {
+    "message": "AI comment providers"
+  },
+  "contentUpdateItemAiProviderBody": {
+    "message": "Open Settings → AI comment generation to choose X Grok, OpenAI-compatible providers, DeepSeek, OpenRouter, or local Ollama."
+  },
+  "contentUpdateItemReplyToolsTitle": {
+    "message": "Press Enter to reply"
+  },
+  "contentUpdateItemReplyToolsBody": {
+    "message": "Added an option to send comments with Enter. Enable it in Settings → Other features → Press Enter to reply, then you no longer need Command + Enter in reply boxes."
+  },
+  "contentUpdateItemHotOnlyTitle": {
+    "message": "Hot only state is clearer"
+  },
+  "contentUpdateItemHotOnlyBody": {
+    "message": "When Hot only is enabled, posts below the threshold are removed from the page. You can choose where it applies in the Popup or floating panel settings."
+  },
+  "contentUpdateItemBookmarkToolsTitle": {
+    "message": "Bookmark tools are easier to find"
+  },
+  "contentUpdateItemBookmarkToolsBody": {
+    "message": "In Settings → Other features, enable the bookmark folder menu and bookmark counts to pick save folders, see saved locations, and show bookmark counts on the timeline."
+  },
+  "contentUpdateItemFilterRulesTitle": {
+    "message": "Content filtering is steadier"
+  },
+  "contentUpdateItemFilterRulesBody": {
+    "message": "Content filtering now avoids more false positives around normal Telegram mentions, while catching additional WeChat / Telegram funnel patterns in replies and profile bios."
+  },
+  "contentUpdateDismiss": {
+    "message": "Got it"
+  },
+  "cfTitle": {
+    "message": "Bộ lọc nội dung"
+  },
+  "cfLockedHint": {
+    "message": "Lọc nội dung miễn phí. Bạn có thể bật tại đây."
+  },
+  "cfEnabled": {
+    "message": "Ẩn phản hồi người lớn / quảng cáo / dẫn dụ"
+  },
+  "cfLevel": {
+    "message": "Mức lọc"
+  },
+  "cfLevelLight": {
+    "message": "Nhẹ"
+  },
+  "cfLevelStandard": {
+    "message": "Tiêu chuẩn"
+  },
+  "cfLevelStrict": {
+    "message": "Nghiêm ngặt"
+  },
+  "cfRuleCounts": {
+    "message": "$COUNT$ quy tắc có sẵn, $CUSTOM$ quy tắc tùy chỉnh.",
+    "placeholders": {
+      "COUNT": {
+        "content": "$1"
+      },
+      "CUSTOM": {
+        "content": "$2"
+      }
+    }
+  },
+  "cfScopeHint": {
+    "message": "Chỉ áp dụng cho khu vực phản hồi trên trang chi tiết bài đăng. Trang chủ, tìm kiếm, hồ sơ và bài đăng chính không bị lọc."
+  },
+  "cfCustomTitle": {
+    "message": "Quy tắc tùy chỉnh"
+  },
+  "cfWhitelistTitle": {
+    "message": "Cài đặt danh sách cho phép / chặn"
+  },
+  "cfValue": {
+    "message": "Từ khóa / regex / miền"
+  },
+  "cfAddRule": {
+    "message": "Thêm quy tắc"
+  },
+  "cfDeleteRule": {
+    "message": "Xóa quy tắc"
+  },
+  "cfCustomEmpty": {
+    "message": "Chưa có quy tắc tùy chỉnh."
+  },
+  "cfWhitelistFollowing": {
+    "message": "Luôn cho phép tài khoản bạn theo dõi"
+  },
+  "cfWhitelistHandles": {
+    "message": "Tài khoản được cho phép"
+  },
+  "cfBlacklistHandles": {
+    "message": "Tài khoản bị chặn"
+  },
+  "cfWhitelistDomains": {
+    "message": "Miền được cho phép"
+  },
+  "cfAllRulesTitle": {
+    "message": "Tất cả quy tắc"
+  },
+  "cfBuiltinRule": {
+    "message": "Có sẵn"
+  },
+  "cfCustomRule": {
+    "message": "Tùy chỉnh"
+  },
+  "cfNoRules": {
+    "message": "Không có quy tắc."
+  },
+  "cfRuleHint": {
+    "message": "Quy tắc chạy cục bộ trong trình duyệt. Không có dữ liệu nào được tải lên."
+  },
+  "cfRulesSourceBundled": {
+    "message": "Nguồn quy tắc: đi kèm"
+  },
+  "cfRulesSourceRemote": {
+    "message": "Rules source: remote · updated $AGO$",
+    "placeholders": {
+      "AGO": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesJustNow": {
+    "message": "just now"
+  },
+  "cfRulesMinutesAgo": {
+    "message": "$N$m ago",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesHoursAgo": {
+    "message": "$N$h ago",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesDaysAgo": {
+    "message": "$N$d ago",
+    "placeholders": {
+      "N": {
+        "content": "$1"
+      }
+    }
+  },
+  "cfRulesRefresh": {
+    "message": "Kiểm tra cập nhật"
+  },
+  "cfRulesRefreshing": {
+    "message": "Đang tải…"
+  },
+  "cfRulesRefreshOk": {
+    "message": "Đã cập nhật quy tắc."
+  },
+  "cfRulesRefreshErr": {
+    "message": "Tải thất bại, vui lòng thử lại sau."
+  },
+  "cfAutoSaved": {
+    "message": "Đã tự động lưu"
+  },
+  "advAppearanceTitle": {
+    "message": "Appearance"
+  },
+  "frMutual": {
+    "message": "Theo dõi lẫn nhau"
+  },
+  "frMine": {
+    "message": "Tôi theo dõi"
+  },
+  "frTheirs": {
+    "message": "Theo dõi tôi"
+  },
+  "frUnfollowed": {
+    "message": "Đã bỏ theo dõi"
+  },
+  "frRateLabel": {
+    "message": "Tỷ lệ theo dõi"
+  },
+  "frFollowers": {
+    "message": "Người theo dõi"
+  },
+  "frFollowing": {
+    "message": "Đang theo dõi"
+  },
+  "frRefresh": {
+    "message": "Làm mới"
+  },
+  "frScanFollowing": {
+    "message": "Quét đang theo dõi"
+  },
+  "frScanFollowers": {
+    "message": "Quét người theo dõi"
+  },
+  "frScanIdle": {
+    "message": "Sẵn sàng"
+  },
+  "frScanBusy": {
+    "message": "Đang quét {{COUNT}}"
+  },
+  "frScanDone": {
+    "message": "Hoàn tất · tìm thấy {{COUNT}}"
+  },
+  "frRefreshDone": {
+    "message": "Refreshed {{COUNT}} accounts"
+  },
+  "frNeedTemplate": {
+    "message": "Visit your Following/Followers page once to initialize"
+  },
+  "frNeedProfileTemplate": {
+    "message": "Visit any profile once to initialize refresh"
+  },
+  "frRate": {
+    "message": "Tỷ lệ theo dõi"
+  },
+  "frNeedUserId": {
+    "message": "Open your own profile once to initialize"
+  },
+  "frRateLimited": {
+    "message": "Rate limited, retrying in {{SECONDS}}s"
+  },
+  "frScanError": {
+    "message": "Quét thất bại, vui lòng thử lại"
+  },
+  "frUnfollowedMe": {
+    "message": "They unfollowed you"
+  },
+  "frIUnfollowed": {
+    "message": "You unfollowed them"
+  }
+}

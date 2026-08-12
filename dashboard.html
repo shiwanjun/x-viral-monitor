@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>X-Tools 工作台</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <a class="skip-link" href="#workspace-main">跳到内容</a>
+  <div class="workspace-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <div class="brand"><img src="icons/icon_origin.svg" alt=""><span>X-Tools</span></div>
+      <div class="nav-group"><span class="nav-label">我的数据</span>
+        <button class="nav-item active" data-view="bookmarks"><span>▣</span>书签</button>
+        <button class="nav-item" data-view="radar"><span>◉</span>取关历史 <b id="nav-radar-count">0</b></button>
+      </div>
+      <div class="nav-group"><span class="nav-label">账户</span>
+        <button class="nav-item" data-view="account"><span>◌</span>会员与同步</button>
+        <button class="nav-item" data-view="settings"><span>⚙</span>扩展设置</button>
+      </div>
+      <div class="folder-head"><span>文件夹</span><span id="folder-sync-state" title="书签文件夹由 X 管理">本地同步</span></div>
+      <nav id="folder-nav" class="folder-nav" aria-label="书签文件夹"></nav>
+      <button class="profile" id="profile" type="button" data-view="account"><div class="avatar">X</div><div><strong>正在读取账号</strong><small>本地数据</small></div><span>›</span></button>
+    </aside>
+    <main id="workspace-main" class="main-content">
+      <header class="topbar">
+        <div class="view-heading"><span id="view-eyebrow">本地优先</span><h1 id="view-title">书签库</h1></div>
+        <div class="tabs" role="tablist" aria-label="书签统计"><button class="metric-tab active" data-sort="all">▮ 书签 <b id="bookmark-count">0</b></button><button class="metric-tab" data-sort="authors">♧ 作者 <b id="author-count">0</b></button><button class="metric-tab" data-sort="media">▧ 媒体 <b id="media-count">0</b></button></div>
+        <label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索书签、作者或关键词"><kbd>⌘ K</kbd></label>
+      </header>
+      <section id="bookmark-workspace" class="workspace-view is-active" data-screen-label="书签工作台">
+      <section class="toolbar" aria-label="书签工具">
+        <div class="view-switch" aria-label="视图切换"><button class="selected" data-density="comfortable" aria-pressed="true" aria-label="舒适表格视图">▦</button><button data-density="compact" aria-pressed="false" aria-label="紧凑表格视图">▤</button></div>
+        <div class="tools"><button id="filter-button">▽ 筛选</button><button id="refresh-button">↻ 刷新</button><button id="open-x">在 X 中打开 ↗</button></div>
+      </section>
+      <div id="filter-bar" class="filter-bar" hidden><span>显示</span><button class="filter-choice active" data-media-filter="all">全部书签</button><button class="filter-choice" data-media-filter="media">仅含媒体</button><button class="filter-choice" data-media-filter="text">仅文字</button></div>
+      <section class="table-wrap" aria-labelledby="table-title"><h1 id="table-title" class="sr-only">书签</h1>
+        <div id="empty-state" class="empty-state" hidden><div>⌑</div><h2>这里还没有已同步的书签</h2><p>在 X 的书签文件夹浏览内容后，它会安全地保存在本地并出现在这里。</p><button id="empty-open-x">打开 X 书签</button></div>
+        <table id="bookmark-table"><thead><tr><th class="check"><input id="select-all" type="checkbox" aria-label="全选"></th><th>#</th><th>用户</th><th>文件夹</th><th>推文</th><th>媒体文件</th><th class="num">浏览量</th><th class="num">互动</th></tr></thead><tbody id="bookmark-body"></tbody></table>
+      </section>
+      <footer class="table-footer"><span id="table-summary">正在读取本地书签…</span><div class="pager"><button disabled>‹</button><span>1 / 1 页</span><button disabled>›</button><label>每页<select><option>50</option></select></label></div></footer>
+      </section>
+
+      <section id="radar-workspace" class="workspace-view radar-view" data-screen-label="取关历史工作台" hidden>
+        <div class="workspace-intro"><div><p class="eyebrow">会员洞察</p><h2>取关历史</h2><p>扫描在本机完成；这里集中查看已发现的关系变化，并按需同步到你的账户。</p></div><div class="workspace-actions"><button type="button" class="button secondary" data-action="open-x-following">打开 X 扫描</button><button type="button" class="button primary" data-action="sync-radar">立即同步</button></div></div>
+        <div class="metric-grid">
+          <article class="metric-card"><span>本机记录</span><strong id="radar-event-total">0</strong><small>最多保留 1,000 条</small></article>
+          <article class="metric-card"><span>TA 取关了你</span><strong id="radar-their-total">0</strong><small>来自本地扫描差异</small></article>
+          <article class="metric-card"><span>你取关了 TA</span><strong id="radar-my-total">0</strong><small>来自本地扫描差异</small></article>
+          <article class="metric-card metric-status"><span>云端同步</span><strong id="radar-sync-label">未开启</strong><small id="radar-sync-detail">数据默认只留在此浏览器</small></article>
+        </div>
+        <div id="radar-member-gate" class="member-gate" hidden></div>
+        <div id="radar-history-panel" class="radar-history-panel">
+          <div class="history-controls"><label class="history-search"><span>⌕</span><input id="radar-search" type="search" placeholder="搜索账号或显示名称"></label><div class="segmented" role="group" aria-label="取关方向"><button type="button" class="active" data-radar-filter="all">全部</button><button type="button" data-radar-filter="unfollowed_me">TA 取关我</button><button type="button" data-radar-filter="i_unfollowed">我取关 TA</button></div></div>
+          <div id="radar-history-list" class="radar-history-list"></div>
+          <button id="radar-show-more" class="text-button" type="button" hidden>显示更多</button>
+        </div>
+      </section>
+
+      <section id="account-workspace" class="workspace-view account-view" data-screen-label="账户与会员工作台" hidden>
+        <div class="workspace-intro"><div><p class="eyebrow">账户中心</p><h2>会员与数据同步</h2><p>将订阅状态、取关历史和本地数据控制放在同一个地方。</p></div><div id="account-top-action" class="workspace-actions"></div></div>
+        <div class="account-grid">
+          <article id="account-card" class="account-card"></article>
+          <article id="sync-card" class="account-card"></article>
+        </div>
+        <div class="account-grid lower"><article id="privacy-card" class="account-card"></article><article id="activity-card" class="account-card"></article></div>
+      </section>
+
+      <section id="settings-workspace" class="workspace-view settings-view" data-screen-label="扩展设置" hidden>
+        <div class="workspace-intro"><div><p class="eyebrow">扩展控制</p><h2>调整 X-Tools</h2><p>内容过滤、流速榜、AI 评论和互关标记仍在扩展弹窗内管理。</p></div><div class="workspace-actions"><button type="button" class="button primary" data-action="open-popup">打开扩展设置</button></div></div>
+        <article class="account-card settings-card"><h3>从浏览器工具栏打开 X-Tools</h3><p>工作台专注于已登录账号的数据与同步；功能开关保留在扩展弹窗，以便你在浏览 X 时快速调整。</p><button type="button" class="button secondary" data-action="open-x-home">前往 X 首页</button></article>
+      </section>
+    </main>
+  </div>
+  <template id="folder-template"><button class="folder-item"><span>▱</span><span class="folder-name"></span><b class="folder-size"></b></button></template>
+  <script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,3 +1,8 @@
+// Runs in the page's MAIN world. Chrome can execute MAIN-world content
+// scripts again when an unpacked extension is reloaded while an X tab remains
+// open. Keep every lexical declaration inside this closure so a second load
+// cannot collide with the previous script's top-level `const` bindings.
+(() => {
 // === Tweet Data Store ===
 const tweetDataStore = new Map();
 const DEFAULT_THRESHOLDS = {
@@ -10,7 +15,7 @@ let velocityThresholds = { ...DEFAULT_THRESHOLDS };
 let localizedStrings = {};
 function i18n(key) { return localizedStrings[key] || key; }
 function i18nOr(key, fallback) { return localizedStrings[key] || fallback; }
-const PRODUCT_SITE_PRO_URL = 'https://icy-cat.github.io/x-viral-monitor/#pro';
+const PRODUCT_SITE_PRO_URL = 'https://x.jieyiai.dev';
 
 function applyLocalizedUi() {
   if (!leaderboardEl) return;
@@ -1446,6 +1451,9 @@ let leaderboardSettingsEl = null;
 let leaderboardRaf = 0;
 const leaderboardItemMeta = new Map();
 let pendingLeaderboardJump = null;
+// Author handles of the rows currently rendered (for follow-radar refresh).
+let leaderboardHandles = [];
+let followRadarRerenderTimer = 0;
 const LB_DEFAULT_WIDTH = 280;
 const LB_MIN_WIDTH = 240;
 const LB_MAX_WIDTH = 640;
@@ -1473,6 +1481,12 @@ function ensureLeaderboard() {
     </div>
     <div class="xvm-lb-hot-notice" hidden></div>
     <ul class="xvm-lb-list"></ul>
+    <div class="xvm-lb-fr">
+      <button type="button" class="xvm-lb-fr-btn" data-fr-action="refresh" title="${i18nOr('frRefresh', '刷新关系')}">⟳ <span>${i18nOr('frRefresh', '刷新关系')}</span></button>
+      <button type="button" class="xvm-lb-fr-btn" data-fr-action="scan-following" title="${i18nOr('frScanFollowing', '扫描关注')}">${i18nOr('frScanFollowing', '扫描关注')}</button>
+      <button type="button" class="xvm-lb-fr-btn" data-fr-action="scan-followers" title="${i18nOr('frScanFollowers', '扫描粉丝')}">${i18nOr('frScanFollowers', '扫描粉丝')}</button>
+      <span class="xvm-lb-fr-status" data-fr-status></span>
+    </div>
     <div class="xvm-lb-resize" aria-hidden="true"></div>
     <div class="xvm-lb-resize-v" aria-hidden="true"></div>
   `;
@@ -1503,6 +1517,7 @@ function ensureLeaderboard() {
   installLeaderboardResizeHeight();
   installLeaderboardEdgeToggle();
   installLeaderboardPanelActions();
+  installFollowRadarControls();
   updateLeaderboardEdgeHideUi();
   installLeaderboardBackButton();
   // v1.7.0 #2 — sync leaderboard theme + tier with popup.
@@ -2772,6 +2787,40 @@ function installLeaderboardPanelActions() {
   });
 }
 
+// Follow-radar controls: refresh visible handles / deep-scan lists, plus the
+// xvm-fr-updated listener that refreshes capsule pills and the status line.
+function installFollowRadarControls() {
+  if (!leaderboardEl) return;
+  leaderboardEl.querySelector('.xvm-lb-fr')?.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-fr-action]');
+    if (!btn) return;
+    ev.stopPropagation();
+    const radar = window.__xvmFollowRadar;
+    if (!radar) return;
+    const action = btn.dataset.frAction;
+    if (action === 'refresh') radar.refreshHandles(leaderboardHandles);
+    else if (action === 'scan-following') radar.scanFollowing();
+    else if (action === 'scan-followers') radar.scanFollowers();
+  });
+
+  window.addEventListener('xvm-fr-updated', (e) => {
+    const detail = e.detail || {};
+    const statusEl = leaderboardEl?.querySelector('[data-fr-status]');
+    if (statusEl) statusEl.textContent = detail.status || '';
+    leaderboardEl?.querySelectorAll('[data-fr-action]').forEach((b) => {
+      b.disabled = !!detail.busy;
+    });
+    // Keep the footer "refresh" target set in sync with what's actually
+    // labelled on screen (timeline pills + leaderboard rows).
+    if (Array.isArray(detail.interactive) && detail.interactive.length) {
+      leaderboardHandles = [...new Set([...leaderboardHandles, ...detail.interactive])];
+    }
+    if (!leaderboardEnabled) return;
+    clearTimeout(followRadarRerenderTimer);
+    followRadarRerenderTimer = setTimeout(() => renderLeaderboard(), 800);
+  });
+}
+
 function normalizeLeaderboardCountInput(v) {
   const n = Number.parseInt(v, 10);
   if (!Number.isFinite(n)) return 10;
@@ -3104,6 +3153,7 @@ function collectRanked() {
       velocity,
       views: data.views || 0,
       handle,
+      authorHandle: authorHandle || '',
       text: data.text,
     };
     rememberLeaderboardItem(entry);
@@ -3204,12 +3254,17 @@ function renderLeaderboard() {
     el.style.display = 'block';
     if (leaderboardHiddenEdge) positionHiddenLeaderboard(leaderboardHiddenEdge);
     const visibleCols = leaderboardColumns.filter((c) => c.visible && LB_COLUMN_RENDERERS[c.id]);
+    leaderboardHandles = top.map((t) => t.authorHandle).filter(Boolean);
     list.innerHTML = top.map((t, i) => {
       const tier = t.velocity >= velocityThresholds.viral ? 'red'
         : t.velocity >= velocityThresholds.trending ? 'orange'
           : 'green';
       const cells = visibleCols.map((c) => LB_COLUMN_RENDERERS[c.id](t, i)).join('');
-      return `<li class="xvm-lb-item xvm-lb-${tier}" data-id="${t.id}">${cells}</li>`;
+      const pill = window.__xvmFollowRadar ? window.__xvmFollowRadar.pillFor(t.authorHandle, 'leaderboard') : null;
+      const pillHtml = pill
+        ? `<span class="xvm-fr-pill ${pill.cls}" title="${lbEscapeHtml(pill.title)}">${lbEscapeHtml(pill.label)}</span>`
+        : '';
+      return `<li class="xvm-lb-item xvm-lb-${tier}" data-id="${t.id}">${cells}${pillHtml}</li>`;
     }).join('');
 
     list.querySelectorAll('.xvm-lb-item').forEach((li) => {
@@ -3776,7 +3831,7 @@ function showReleaseNotesModal(version) {
 
   const title = document.createElement('h2');
   title.id = 'xvm-update-title';
-  title.textContent = i18nOr('contentUpdateTitle', 'X Viral Monitor 已更新');
+  title.textContent = i18nOr('contentUpdateTitle', 'X-Tools 已更新');
 
   const subtitle = document.createElement('p');
   subtitle.className = 'xvm-update-subtitle';
@@ -5079,4 +5134,6 @@ else document.addEventListener('DOMContentLoaded', startMenuObserver);
     };
     requestAnimationFrame(step);
   });
+})();
+
 })();

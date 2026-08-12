@@ -1,76 +1,62 @@
-// === XVM Pro license bridge (ISOLATED world) ===
+// === XVM session bridge (ISOLATED world) — Waffo subscription + Better Auth ===
 //
-// Owns chrome.storage.local for license state and trial timestamp, and the
-// Worker proxy calls for Creem license activate/validate/deactivate. Pushes
-// the resolved tier to MAIN world via window.postMessage so gate.js
-// (MAIN world) can answer feature modules without touching chrome.storage
-// or fetch.
+// Owns chrome.storage.local only for the Better Auth session. Calls the xtool
+// Worker for the authoritative subscription status and pushes that tier to MAIN world via
+// window.postMessage so gate.js can answer feature modules without touching
+// chrome.storage or fetch.
 //
-// ADR-0004 边界:
-//   - extension code contains NO server-side secret (Worker holds CREEM_API_KEY)
-//   - tier resolution lives in a single computation path (resolveTier)
-//   - feature modules NEVER read license/trial/storage directly — they only
+// Architecture boundary:
+//   - extension code contains NO server-side secret (Worker holds Waffo
+//     private key, Better Auth secret, Google OAuth secret)
+//   - no subscription result is cached or validated locally
+//   - feature modules NEVER read session/storage directly — they only
 //     receive postMessage updates routed through gate.js
 //
 // Message contract (event.data.type):
-//   ← XVM_TIER_REQUEST                              (from MAIN/gate.js on init)
-//   → XVM_TIER_UPDATE { tier, daysLeft, source }    (to MAIN/gate.js)
-//   ← XVM_LICENSE_ACTIVATE  { key }                 (from popup)
-//   → XVM_LICENSE_ACTIVATE_RESULT { ok, error? }
-//   ← XVM_LICENSE_DEACTIVATE
-//   → XVM_LICENSE_DEACTIVATE_RESULT { ok }
-//   ← XVM_LICENSE_STATUS_REQUEST
-//   → XVM_LICENSE_STATUS { record, tier, daysLeft, source }
+//   ← XVM_TIER_REQUEST                                    (from MAIN/gate.js on init)
+//   → XVM_TIER_UPDATE { tier, daysLeft, source }          (to MAIN/gate.js)
+//   ← XVM_AUTH_TOKEN { token, userId, email }             (from auth-callback/background)
+//   → XVM_AUTH_TOKEN_RESULT { ok, tier?, error? }
+//   ← XVM_SUB_STATUS_REQUEST
+//   → XVM_SUB_STATUS { record, tier, daysLeft, source }
+//   ← XVM_SIGN_OUT
+//   → XVM_SIGN_OUT_RESULT { ok }
+//   ← XVM_CHECKOUT_START { plan }                         (from popup)
+//   → XVM_CHECKOUT_RESULT { ok, checkoutUrl?, error? }
 //
-// Worker URL is a build-time placeholder; deploy step (worker/DEPLOY.md)
-// produces the real URL which is sed'd into this file before zip.
+// Worker deploys as "xtool" on Cloudflare:
+//   https://x.jieyiai.dev  (custom domain — test and prod both use this)
 
 (() => {
   if (window.__xvmLicenseBridge) return; // idempotent on hot reload
   window.__xvmLicenseBridge = true;
 
   // ─── Configuration ──────────────────────────────────────────────────
-  // Placeholder replaced at build time. If you see __XVM_LICENSE_WORKER__
-  // in production, the build script failed to substitute.
-  const LICENSE_PROXY_URL = 'https://xvm-license.lengkuxiaomao.workers.dev';
+  // The auth backend (xtool Worker), reachable via the x.jieyiai.dev
+  // custom domain. Both test and production use the same domain.
+  const AUTH_BACKEND_URL = 'https://x.jieyiai.dev';
 
-  // All tier-resolution logic lives in tier-logic.js (loaded BEFORE us per
-  // manifest content_scripts order). Pulling from globalThis keeps both
-  // contexts (isolated + popup) on a single source of truth.
+  // Tier mapping lives in tier-logic.js (loaded before us per manifest order).
   const TL = globalThis.__xvmTierLogic;
-  const ENT = globalThis.__xvmEntitlement;
   if (!TL) {
-    console.error('[xvm pro] tier-logic.js not loaded before isolated.js — manifest content_scripts order broken');
+    console.error('[xvm] tier-logic.js not loaded before isolated.js — manifest content_scripts order broken');
     return;
   }
-  if (!ENT) {
-    console.error('[xvm pro] entitlement.js not loaded before isolated.js — manifest content_scripts order broken');
-    return;
-  }
-  const { isXvmProduct, trialStatus, licenseStatusFrom, resolveTierFrom } = TL;
-  const { verifyEntitlementEnvelope } = ENT;
+  const { subscriptionStatusFrom } = TL;
 
-  const STORAGE_KEY    = 'xvm_license_v1';
-  const TRIAL_KEY      = 'xvm_trial_v1';
-  const DEVICE_ID_KEY  = 'xvm_device_id';
+  // Storage keys. Session replaces the old license_v1 record.
+  const SESSION_KEY   = 'xvm_session_v1';   // { token, userId, email, signedInAt }
+  const DEVICE_ID_KEY = 'xvm_device_id';
   const RATE_FILTER_KEY = 'xvm_rate_filter_v1';
   const CONTENT_FILTER_KEY = 'xvm_content_filter_v1';
   const CONTENT_FILTER_RULES_KEY = 'xvm_content_filter_rules_remote_v1';
-  const REVALIDATE_RETRY_MS = 5 * 60 * 1000;
 
-  // Remote rules: fetched from the repo's canonical rules.json so we can
-  // ship new filter heuristics without rebuilding the extension. Cached in
-  // chrome.storage with a 6h TTL; cold-start falls back to the bundled
-  // rules.js when cache is empty AND fetch fails.
+  // Remote content-filter rules (unchanged from license-proxy era).
   const REMOTE_RULES_URL = 'https://raw.githubusercontent.com/Icy-Cat/x-viral-monitor/main/src/premium/content-filter/rules.json';
   const REMOTE_RULES_TTL_MS = 6 * 60 * 60 * 1000;
-  // Even on failure, never re-attempt more than once per 5 min. Multi-tab
-  // users would otherwise hammer raw.githubusercontent.com per page load.
   const REMOTE_RULES_MIN_RETRY_MS = 5 * 60 * 1000;
   const REMOTE_RULES_SCHEMA_MAX = 2;
   const REMOTE_RULES_CURRENT_VERSION = 2;
-
-  const KEY_RE = /^[A-Za-z0-9_\-]{8,128}$/;
 
   // ─── chrome.storage wrappers (best-effort no-op outside extension) ──
   function safeStorageGet(key, fallback) {
@@ -98,195 +84,104 @@
     });
   }
 
-  // ─── Trial state machine ────────────────────────────────────────────
-  // trialStatus pure helper imported from tier-logic.js above.
-  async function ensureTrialStarted() {
-    let rec = await safeStorageGet(TRIAL_KEY, null);
-    if (!rec || !Number.isFinite(rec.startAt)) {
-      rec = { startAt: Date.now() };
-      await safeStorageSet({ [TRIAL_KEY]: rec });
-    }
-    return rec;
-  }
-
-  // ─── Creem proxy ────────────────────────────────────────────────────
-  async function callProxy(action, body) {
-    if (LICENSE_PROXY_URL === '__XVM_LICENSE_WORKER__') {
-      throw new Error('worker_url_unset');
-    }
-    try {
-      if (chrome?.runtime?.sendMessage) {
-        const proxied = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: 'XVM_LICENSE_PROXY', action, body }, resolve);
-        });
-        if (proxied?.ok) return proxied.payload;
-      }
-    } catch (_) {}
-    const res = await fetch(`${LICENSE_PROXY_URL}/${action}`, {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+  // ─── Auth + subscription API calls (to xtool Worker) ────────────────
+  // All calls use the Better Auth bearer token stored in the session record.
+  // The token is obtained after Google OAuth completes (see auth-client.js
+  // and auth-callback.html).
+  function authedFetch(path, options = {}) {
+    return safeStorageGet(SESSION_KEY, null).then((session) => {
+      if (!session?.token) throw new Error('not_signed_in');
+      const headers = { ...((options.headers) || {}), Authorization: `Bearer ${session.token}` };
+      return fetch(`${AUTH_BACKEND_URL}${path}`, { ...options, headers });
     });
-    return res.json();
   }
 
-  async function getDeviceId() {
-    let id = await safeStorageGet(DEVICE_ID_KEY, null);
-    if (!id) {
-      id = crypto.randomUUID();
-      await safeStorageSet({ [DEVICE_ID_KEY]: id });
-    }
-    return id;
-  }
+  // Fetch the authoritative subscription status. Results deliberately stay
+  // in memory: feature access must never depend on a local cache or signature.
+  async function refreshSubscriptionStatus() {
+    const session = await safeStorageGet(SESSION_KEY, null);
+    if (!session?.token) return { ok: false, error: 'not_signed_in' };
 
-  function buildInstanceName(deviceId) {
-    const ua = navigator.userAgent || '';
-    const browser = /Edg\//.test(ua) ? 'Edge'
-      : /Chrome\//.test(ua) ? 'Chrome'
-      : /Firefox\//.test(ua) ? 'Firefox' : 'Browser';
-    const os = /Windows/.test(ua) ? 'Win'
-      : /Mac OS/.test(ua) ? 'Mac'
-      : /Linux/.test(ua) ? 'Linux' : 'Other';
-    return `${browser} / ${os} — ${deviceId.slice(0, 8)}`;
-  }
-
-  // ─── License operations ─────────────────────────────────────────────
-  async function activate(rawKey) {
-    const key = String(rawKey || '').trim();
-    if (!KEY_RE.test(key)) return { ok: false, error: 'invalid_format' };
-    const deviceId = await getDeviceId();
-    const instanceName = buildInstanceName(deviceId);
-    let envelope;
+    let res;
     try {
-      envelope = await callProxy('activate', { key, instance_name: instanceName });
+      res = await fetch(`${AUTH_BACKEND_URL}/api/subscription/status`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
     } catch (e) {
       return { ok: false, error: 'network', message: String(e?.message || e) };
     }
-    if (!envelope?.ok) return { ok: false, error: 'activation_failed', detail: envelope };
-    const data = envelope.data || {};
-    // Client-side product scoping — reject licenses belonging to another
-    // product on the same shared Worker (e.g. an x-md-paste license that
-    // the Worker's whitelist would otherwise accept).
-    if (!isXvmProduct(data.product_id)) {
-      return { ok: false, error: 'wrong_product', detail: { actual: data.product_id } };
+    if (res.status === 401) {
+      // Token expired/invalid — clear session.
+      await safeStorageRemove(SESSION_KEY);
+      pushTier();
+      return { ok: false, error: 'auth_expired' };
     }
-    const entitlement = await verifyEntitlementEnvelope(envelope, {
-      productId: data.product_id,
-      instanceId: data.instance?.id || '',
-      key,
-    }, isXvmProduct);
-    if (!entitlement.ok) {
-      return { ok: false, error: entitlement.error, detail: entitlement.detail || null };
+    if (!res.ok) {
+      return { ok: false, error: 'status_failed', status: res.status };
     }
-    const inst = data.instance || {};
+    const data = await res.json();
+    if (!data?.ok) return { ok: false, error: data?.error || 'unknown' };
+
     const record = {
-      key,
-      instanceId: inst.id || null,
-      instanceName: inst.name || instanceName,
-      deviceId,
-      activatedAt: Date.now(),
-      lastChecked: Date.now(),
-      lastTriedAt: Date.now(),
-      status: data.status || 'active',
-      activationLimit: data.activation_limit ?? null,
-      activationUsage: data.activation ?? null,
-      expiresAt: data.expires_at ? new Date(data.expires_at).getTime() : null,
-      productId: data.product_id || null,
-      entitlementPayload: envelope.entitlement_payload || '',
-      entitlementSig: envelope.entitlement_sig || '',
-      entitlementExpiresAt: entitlement.entitlement.exp * 1000,
+      userId: session.userId,
+      email: session.email,
+      plan: data.plan,
+      status: data.status,
+      currentPeriodEnd: data.expiresAt,
     };
-    await safeStorageSet({ [STORAGE_KEY]: record });
-    pushTier();
     return { ok: true, record };
   }
 
-  async function deactivate() {
-    const stored = await safeStorageGet(STORAGE_KEY, null);
-    if (stored?.key && stored?.instanceId) {
-      try { await callProxy('deactivate', { key: stored.key, instance_id: stored.instanceId }); }
-      catch (_) {}
-    }
-    await safeStorageRemove(STORAGE_KEY);
+  // ─── Tier resolver ──────────────────────────────────────────────────
+  async function getSubscriptionStatus() {
+    const result = await refreshSubscriptionStatus();
+    if (!result.ok) return { tier: 'free', source: result.error || 'unavailable' };
+    return subscriptionStatusFrom(result.record, Date.now());
+  }
+
+  async function resolveTier() {
+    const status = await getSubscriptionStatus();
+    return { ...status, daysLeft: 0, record: null };
+  }
+
+  // ─── Auth operations ────────────────────────────────────────────────
+  // Store a bearer token obtained after Google OAuth (from auth-callback).
+  async function storeAuthToken(token, userId, email) {
+    if (!token) return { ok: false, error: 'no_token' };
+    const session = {
+      token,
+      userId: userId || null,
+      email: email || null,
+      signedInAt: Date.now(),
+    };
+    await safeStorageSet({ [SESSION_KEY]: session });
     pushTier();
     return { ok: true };
   }
 
-  async function revalidateInBackground(stored) {
-    let envelope;
-    try {
-      envelope = await callProxy('validate', { key: stored.key, instance_id: stored.instanceId });
-    } catch (_) {
-      await safeStorageSet({ [STORAGE_KEY]: { ...stored, lastTriedAt: Date.now() } });
-      return;
-    }
-    const data = envelope?.data || {};
-    if (envelope?.ok && !isXvmProduct(data.product_id)) {
-      await safeStorageRemove(STORAGE_KEY);
-      pushTier();
-      return;
-    }
-    let entitlement = { ok: false, error: 'missing_entitlement' };
-    if (envelope?.ok) {
-      entitlement = await verifyEntitlementEnvelope(envelope, {
-        productId: data.product_id,
-        instanceId: stored.instanceId,
-        key: stored.key,
-      }, isXvmProduct);
-      if (!entitlement.ok) {
-        await safeStorageSet({ [STORAGE_KEY]: { ...stored, lastTriedAt: Date.now() } });
-        pushTier();
-        return;
-      }
-    }
-    const updated = {
-      ...stored,
-      status: data.status || stored.status || 'active',
-      activationLimit: data.activation_limit ?? stored.activationLimit,
-      activationUsage: data.activation ?? stored.activationUsage,
-      expiresAt: data.expires_at ? new Date(data.expires_at).getTime() : stored.expiresAt,
-      productId: data.product_id || stored.productId,
-      entitlementPayload: envelope?.entitlement_payload || stored.entitlementPayload || '',
-      entitlementSig: envelope?.entitlement_sig || stored.entitlementSig || '',
-      entitlementExpiresAt: entitlement.entitlement?.exp ? entitlement.entitlement.exp * 1000 : stored.entitlementExpiresAt,
-      lastTriedAt: Date.now(),
-    };
-    if (envelope?.ok && (data.status === 'active' || !data.status)) {
-      updated.lastChecked = Date.now();
-    }
-    await safeStorageSet({ [STORAGE_KEY]: updated });
+  async function signOut() {
+    await safeStorageRemove(SESSION_KEY);
     pushTier();
+    return { ok: true };
   }
 
-  function shouldRevalidate(info, stored) {
-    if (!stored?.key || !stored?.instanceId) return false;
-    if (!['offline-grace', 'stale', 'invalid_entitlement', 'missing_product'].includes(info?.source)) return false;
-    return Date.now() - (stored.lastTriedAt || 0) > REVALIDATE_RETRY_MS;
-  }
-
-  // ─── License status + tier resolver ─────────────────────────────────
-  // Pure logic lives in tier-logic.js. We only do storage I/O + the
-  // side-effecting background revalidate.
-  async function getLicenseStatus() {
-    const stored = await safeStorageGet(STORAGE_KEY, null);
-    const status = licenseStatusFrom(stored, Date.now());
-    // Stale-cache side-effect: kick off background revalidate. The pure
-    // helper just reports the verdict; we own the I/O.
-    if (shouldRevalidate(status, stored)) {
-      revalidateInBackground(stored).catch(() => {});
+  // ─── Checkout ───────────────────────────────────────────────────────
+  async function startCheckout(plan) {
+    const session = await safeStorageGet(SESSION_KEY, null);
+    if (!session?.token) return { ok: false, error: 'not_signed_in' };
+    let res;
+    try {
+      res = await fetch(`${AUTH_BACKEND_URL}/api/checkout/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ plan }),
+      });
+    } catch (e) {
+      return { ok: false, error: 'network', message: String(e?.message || e) };
     }
-    return status;
-  }
-
-  async function resolveTier() {
-    const stored = await safeStorageGet(STORAGE_KEY, null);
-    const trial = await safeStorageGet(TRIAL_KEY, null);
-    const r = resolveTierFrom(stored, trial, Date.now());
-    // Side-effect: if the verdict served from offline-grace, kick revalidate.
-    if (shouldRevalidate(r, stored)) {
-      revalidateInBackground(stored).catch(() => {});
-    }
-    return r;
+    const data = await res.json();
+    if (!data?.ok) return { ok: false, error: data?.error || 'checkout_failed' };
+    return { ok: true, checkoutUrl: data.checkoutUrl };
   }
 
   // ─── Push tier to MAIN world ────────────────────────────────────────
@@ -308,30 +203,36 @@
       pushTier();
       return;
     }
-    if (t === 'XVM_LICENSE_STATUS_REQUEST') {
-      const lic = await getLicenseStatus();
-      const r = await resolveTier();
+    if (t === 'XVM_SUB_STATUS_REQUEST') {
+      const result = await refreshSubscriptionStatus();
+      const sub = result.ok ? subscriptionStatusFrom(result.record, Date.now()) : { tier: 'free', source: result.error || 'unavailable' };
       window.postMessage({
-        type: 'XVM_LICENSE_STATUS',
-        record: lic.record,
-        tier: r.tier,
-        daysLeft: r.daysLeft,
-        source: r.source,
+        type: 'XVM_SUB_STATUS',
+        tier: sub.tier,
+        daysLeft: 0,
+        source: sub.source,
+        plan: result.record?.plan || 'none',
       }, '*');
       return;
     }
-    if (t === 'XVM_LICENSE_ACTIVATE' && typeof event.data.key === 'string') {
-      const res = await activate(event.data.key);
-      window.postMessage({
-        type: 'XVM_LICENSE_ACTIVATE_RESULT',
-        ok: !!res.ok,
-        error: res.error || null,
-      }, '*');
+    if (t === 'XVM_AUTH_TOKEN') {
+      const res = await storeAuthToken(event.data.token, event.data.userId, event.data.email);
+      window.postMessage({ type: 'XVM_AUTH_TOKEN_RESULT', ok: !!res.ok, error: res.error || null }, '*');
       return;
     }
-    if (t === 'XVM_LICENSE_DEACTIVATE') {
-      const res = await deactivate();
-      window.postMessage({ type: 'XVM_LICENSE_DEACTIVATE_RESULT', ok: !!res.ok }, '*');
+    if (t === 'XVM_SIGN_OUT') {
+      const res = await signOut();
+      window.postMessage({ type: 'XVM_SIGN_OUT_RESULT', ok: !!res.ok }, '*');
+      return;
+    }
+    if (t === 'XVM_CHECKOUT_START' && typeof event.data.plan === 'string') {
+      const res = await startCheckout(event.data.plan);
+      window.postMessage({ type: 'XVM_CHECKOUT_RESULT', ok: !!res.ok, checkoutUrl: res.checkoutUrl || null, error: res.error || null }, '*');
+      return;
+    }
+    if (t === 'XVM_REFRESH_SUBSCRIPTION') {
+      const res = await refreshSubscriptionStatus();
+      window.postMessage({ type: 'XVM_REFRESH_SUBSCRIPTION_RESULT', ok: !!res.ok, error: res.error || null }, '*');
       return;
     }
     if (t === 'XVM_CONTENT_FILTER_RULES_REFRESH') {
@@ -341,10 +242,7 @@
     }
   });
 
-  // ─── Rate filter settings bridge ────────────────────────────────────
-  // Popup (extension context) owns xvm_rate_filter_v1; filter.js (MAIN
-  // world) needs to react to changes. We forward the storage value as
-  // XVM_RATE_SETTINGS_UPDATE postMessage at boot + on every change.
+  // ─── Rate filter settings bridge (unchanged) ────────────────────────
   async function pushRateSettings() {
     const settings = await safeStorageGet(RATE_FILTER_KEY, null);
     if (settings && typeof settings === 'object') {
@@ -359,20 +257,11 @@
     }
   }
 
-  // ─── Remote content-filter rules ────────────────────────────────────
-  // Validate the shape AND contents. A broken/malicious remote payload
-  // should not wipe out the cached-or-bundled rules and should not be
-  // able to inject a regex that catastrophically backtracks per reply.
+  // ─── Remote content-filter rules (unchanged) ────────────────────────
   const RULE_TYPES_ALLOWED = new Set(['keyword', 'regex', 'domain', 'short-symbol']);
   const RULE_FIELDS_ALLOWED = new Set(['name', 'screen_name', 'bio', 'location', 'content', 'url']);
   const RULE_SEVERITIES_ALLOWED = new Set(['low', 'medium', 'high', 'block']);
-  // Spam rule unions can legitimately get long (we've shipped a
-  // 278-char content-funnel union; the previous 240 cap silently
-  // rejected the whole payload). 400 still blocks obviously-crafted
-  // catastrophic regexes paired with the nested-quantifier heuristic.
   const REGEX_MAX_LEN = 400;
-  // Catastrophic backtracking heuristic: nested unbounded quantifiers
-  // like (.+)+ / (.*)*. Not exhaustive but blocks the obvious foot-guns.
   const REGEX_NESTED_QUANTIFIER = /\([^()]*[+*][^()]*\)[+*?]/;
 
   function isValidRule(rule) {
@@ -395,8 +284,6 @@
     if (!p.levels || typeof p.levels !== 'object') return false;
     if (!Array.isArray(p.rules)) return false;
     if (typeof p.version === 'number' && p.version > REMOTE_RULES_SCHEMA_MAX) return false;
-    // Reject the whole payload if ANY rule is invalid. Partial trust is a
-    // bigger surface to reason about than all-or-nothing.
     return p.rules.every(isValidRule);
   }
 
@@ -419,10 +306,7 @@
     const cachedValid = cached && isValidRulesPayload(cached.payload);
     const now = Date.now();
     if (!force) {
-      // Successful fetch within TTL → skip.
       if (cachedValid && cached.fetchedAt && (now - cached.fetchedAt) < REMOTE_RULES_TTL_MS) return;
-      // Recent attempt (success or failure) within retry floor → skip so
-      // a flapping network or down origin can't trigger a request per page.
       if (cachedValid && cached.lastAttemptedAt && (now - cached.lastAttemptedAt) < REMOTE_RULES_MIN_RETRY_MS) return;
     }
     let payload = null;
@@ -432,9 +316,7 @@
         const json = await res.json();
         if (isValidRulesPayload(json)) payload = json;
       }
-    } catch (_) {
-      // Network error: fall through to mark the attempt.
-    }
+    } catch (_) {}
     if (payload) {
       const record = { fetchedAt: now, lastAttemptedAt: now, payload };
       await safeStorageSet({ [CONTENT_FILTER_RULES_KEY]: record });
@@ -445,17 +327,14 @@
         fetchedAt: record.fetchedAt,
       }, '*');
     } else if (cachedValid) {
-      // Failed fetch — keep payload, just record the attempt so we throttle.
       await safeStorageSet({ [CONTENT_FILTER_RULES_KEY]: { ...cached, lastAttemptedAt: now } });
     } else {
-      // No cache and fetch failed — write a stub so retry-throttle applies.
       await safeStorageSet({ [CONTENT_FILTER_RULES_KEY]: { lastAttemptedAt: now } });
     }
   }
 
-  // ─── Bootstrap: ensure trial started, push tier so MAIN can render ──
+  // ─── Bootstrap ──────────────────────────────────────────────────────
   (async () => {
-    await ensureTrialStarted();
     pushTier();
     pushRateSettings();
     pushContentFilterSettings();
@@ -463,12 +342,11 @@
     fetchRemoteContentFilterRules().catch(() => {});
   })();
 
-  // Re-push on storage change so tier flips immediately if the license
-  // status / trial start changes from another page.
+  // Re-check when the authenticated session changes from another page.
   try {
     chrome?.storage?.onChanged?.addListener?.((changes, area) => {
       if (area !== 'local') return;
-      if (STORAGE_KEY in changes || TRIAL_KEY in changes) pushTier();
+      if (SESSION_KEY in changes) pushTier();
       if (RATE_FILTER_KEY in changes) pushRateSettings();
       if (CONTENT_FILTER_KEY in changes) pushContentFilterSettings();
       if (CONTENT_FILTER_RULES_KEY in changes) pushCachedContentFilterRules();

@@ -12,7 +12,7 @@ const DEFAULT_COLUMNS = [
 ];
 const KNOWN_COLUMN_IDS = DEFAULT_COLUMNS.map((c) => c.id);
 const LANGUAGE_KEY = 'language';
-const SUPPORTED_LANGUAGE_IDS = ['auto', 'zh_CN', 'en', 'ja'];
+const SUPPORTED_LANGUAGE_IDS = ['auto', 'zh_CN', 'zh_TW', 'en', 'ja', 'vi', 'ko'];
 
 function normalizeLanguage(raw) {
   return SUPPORTED_LANGUAGE_IDS.includes(raw) ? raw : 'auto';
@@ -22,8 +22,11 @@ function getBrowserLocaleId() {
   try {
     const ui = chrome?.i18n?.getUILanguage?.() || navigator.language || '';
     const lower = ui.toLowerCase();
+    if (lower.startsWith('zh-tw') || lower.startsWith('zh-hk') || lower.startsWith('zh-hant')) return 'zh_TW';
     if (lower.startsWith('zh')) return 'zh_CN';
     if (lower.startsWith('ja')) return 'ja';
+    if (lower.startsWith('vi')) return 'vi';
+    if (lower.startsWith('ko')) return 'ko';
   } catch (_) {}
   return 'en';
 }
@@ -56,16 +59,18 @@ const localeBundleCache = new Map();
 
 async function loadLocaleBundle(languageId) {
   if (localeBundleCache.has(languageId)) return localeBundleCache.get(languageId);
-  try {
-    const res = await fetch(chrome.runtime.getURL(`_locales/${languageId}/messages.json`));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    localeBundleCache.set(languageId, json);
-    return json;
-  } catch (_) {
-    localeBundleCache.set(languageId, null);
-    return null;
-  }
+  const load = async (id) => {
+    try {
+      const res = await fetch(chrome.runtime.getURL(`_locales/${id}/messages.json`));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  };
+  const json = await load(languageId);
+  localeBundleCache.set(languageId, json);
+  return json;
 }
 
 const GROK_DEFAULTS_BY_LANGUAGE = {
@@ -245,6 +250,11 @@ const DEFAULT_FEATURES = {
   badgeStyle: 'pill-solid',
   leaderboardCount: 10,
   leaderboardColumns: DEFAULT_COLUMNS,
+  followRadarEnabled: true,
+  followRadarTimelineEnabled: true,
+  followRadarLeaderboardEnabled: true,
+  followRadarShowRelations: true,
+  followRadarShowRate: true,
   grokCommentPrompt: LOCALIZED_GROK_DEFAULTS.grokCommentPrompt,
   grokPromptTemplates: LOCALIZED_GROK_DEFAULTS.grokPromptTemplates,
   grokArticlePromptTemplates: LOCALIZED_GROK_DEFAULTS.grokArticlePromptTemplates,
@@ -462,6 +472,13 @@ async function pushSettings(raw) {
     leaderboardCount: normalizeLeaderboardCount(raw?.leaderboardCount),
     leaderboardColumns: normalizeLeaderboardColumns(raw?.leaderboardColumns),
     badgeStyle: raw?.badgeStyle === 'inline-classic' ? 'inline-classic' : 'pill-solid',
+    followRadar: {
+      enabled: raw?.followRadarEnabled !== false,
+      timeline: raw?.followRadarTimelineEnabled !== false,
+      leaderboard: raw?.followRadarLeaderboardEnabled !== false,
+      relations: raw?.followRadarShowRelations !== false,
+      rate: raw?.followRadarShowRate !== false,
+    },
     language: normalizeLanguage(raw?.language),
     effectiveLanguage: getEffectiveLanguageId(raw?.language),
     messages: await getLocalizedMessages(raw?.language),
@@ -1320,6 +1337,25 @@ window.addEventListener('message', (event) => {
     return;
   }
 
+  if (type === 'XVM_FOLLOW_RADAR_LOAD') {
+    safeChromeCall(() => {
+      chrome.storage.local.get({ followRadarV1: null }, (items) => {
+        window.postMessage({
+          type: 'XVM_FOLLOW_RADAR_LOADED',
+          data: items.followRadarV1 || null,
+        }, '*');
+      });
+    });
+    return;
+  }
+
+  if (type === 'XVM_FOLLOW_RADAR_SAVE' && event.data && typeof event.data.data === 'object') {
+    safeChromeCall(() => {
+      chrome.storage.local.set({ followRadarV1: event.data.data });
+    });
+    return;
+  }
+
   if (type === 'XVM_GROK_SETTINGS_REQUEST') {
     safeChromeCall(() => {
       chrome.storage.sync.get({
@@ -1447,7 +1483,7 @@ safeChromeCall(() => {
     const aiTouched = changes.aiProvider || changes.aiOpenAIPlatform || changes.aiBaseUrl || changes.aiModel || changes.aiReplyCount || changes.aiLanguage;
     const grokTouched = changes.grokCommentPrompt || changes.grokPromptTemplates || changes.grokArticlePromptTemplates || changes.grokSelectedPromptId || changes.grokSelectedArticlePromptId || changes.grokTemporaryChat || changes.grokEnterToReply || changes.language || aiTouched;
     const bookmarkTimelineInjectTouched = changes.featureBookmarkTimelineInject || changes.bookmarkTimelineInjectFolderIds || changes.bookmarkTimelineInjectEvery;
-    if (!changes.trending && !changes.viral && !changes.featureVelocityLeaderboard && !changes.featureCopyAsMarkdown && !changes.featureStarChart && !changes.featureBookmarkFolders && !bookmarkTimelineInjectTouched && !changes.showBookmarkCount && !changes.leaderboardEdgeHideEnabled && !changes.badgeStyle && !changes.leaderboardCount && !changes.leaderboardColumns && !changes.language && !grokTouched) return;
+    if (!changes.trending && !changes.viral && !changes.featureVelocityLeaderboard && !changes.featureCopyAsMarkdown && !changes.featureStarChart && !changes.featureBookmarkFolders && !bookmarkTimelineInjectTouched && !changes.showBookmarkCount && !changes.leaderboardEdgeHideEnabled && !changes.badgeStyle && !changes.leaderboardCount && !changes.leaderboardColumns && !changes.language && !changes.followRadarEnabled && !changes.followRadarTimelineEnabled && !changes.followRadarLeaderboardEnabled && !changes.followRadarShowRelations && !changes.followRadarShowRate && !grokTouched) return;
 
     safeChromeCall(() => {
       chrome.storage.sync.get(STORAGE_DEFAULTS, (items) => {
