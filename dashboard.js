@@ -271,6 +271,12 @@ if (!globalThis.chrome?.storage?.local) {
 
   async function syncRadar() {
     if (!isMember()) return;
+    // The standalone localhost/file preview uses deliberately fake storage.
+    // It must never send its sample events to the production member API.
+    if (state.session?.token === 'preview-token') {
+      renderWorkspace();
+      return { ok: true, preview: true };
+    }
     const response = await authedFetch('/api/follow-radar/events', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events: state.radarEvents }),
     });
