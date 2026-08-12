@@ -3260,11 +3260,9 @@ function renderLeaderboard() {
         : t.velocity >= velocityThresholds.trending ? 'orange'
           : 'green';
       const cells = visibleCols.map((c) => LB_COLUMN_RENDERERS[c.id](t, i)).join('');
-      const pill = window.__xvmFollowRadar ? window.__xvmFollowRadar.pillFor(t.authorHandle, 'leaderboard') : null;
-      const pillHtml = pill
-        ? `<span class="xvm-fr-pill ${pill.cls}" title="${lbEscapeHtml(pill.title)}">${lbEscapeHtml(pill.label)}</span>`
-        : '';
-      return `<li class="xvm-lb-item xvm-lb-${tier}" data-id="${t.id}">${cells}${pillHtml}</li>`;
+      // Follow relationship capsules belong to the timeline tweet header,
+      // not the velocity leaderboard. Keep this panel focused on ranking.
+      return `<li class="xvm-lb-item xvm-lb-${tier}" data-id="${t.id}">${cells}</li>`;
     }).join('');
 
     list.querySelectorAll('.xvm-lb-item').forEach((li) => {

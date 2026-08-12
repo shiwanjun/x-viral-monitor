@@ -2651,9 +2651,9 @@ img.xvm-liv-img {
   color: #c23c1c;
 }
 
-/* ═══ Follow radar — 关注关系胶囊（流速榜行内） ═══ */
+/* ═══ Follow radar — 时间线推文右上角关系胶囊 ═══ */
 .xvm-fr-pill {
-  margin-left: auto;
+  margin-left: 6px;
   flex: none;
   padding: 1px 7px;
   border-radius: 999px;
@@ -2704,7 +2704,7 @@ img.xvm-liv-img {
   color: #8a7a6a;
 }
 
-/* 时间线推文：胶囊紧跟用户名行显示（和 x互关雷达一致） */
+/* 时间线推文：胶囊位于右上角操作行，紧邻“…”菜单左侧 */
 article[data-testid="tweet"] [data-testid="User-Name"] {
   /* 用户名行是 flex，胶囊作为最后一个子元素自然贴在用户名右侧 */
   flex-wrap: wrap;
@@ -2713,7 +2713,6 @@ article[data-testid="tweet"] [data-testid="User-Name"] {
 article[data-testid="tweet"] .xvm-fr-pill {
   pointer-events: none;
   align-self: center;
-  margin-left: 6px;
   font-size: 11px;
   line-height: 16px;
   padding: 1px 7px;

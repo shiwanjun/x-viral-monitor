@@ -27,6 +27,18 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('const TIMELINE_REFRESH_COOLDOWN_MS');
       expect(radarSrc).toContain('refreshHandles(batch, { automatic: true })');
     });
+
+    it('将胶囊插入推文右上角菜单前，并为取关历史增加会员门控', () => {
+      expect(radarSrc).toContain("find((node) => node.closest('article[data-testid=\"tweet\"]') === article)");
+      expect(radarSrc).toContain('host.insertBefore(pill, caret)');
+      expect(radarSrc).toContain('isFollowHistoryMember()');
+    });
+
+    it('不再把关系胶囊渲染到流速榜', () => {
+      const contentSrc = readFileSync(resolve(repo, 'content.js'), 'utf8');
+      expect(contentSrc).toContain('Follow relationship capsules belong to the timeline tweet header');
+      expect(contentSrc).not.toContain('pillFor(t.authorHandle, \'leaderboard\')');
+    });
   });
 
   describe('normalizeHandle', () => {

@@ -263,16 +263,23 @@
   // Inject / refresh a pill next to the username row of a tweet (mirrors the
   // x互关雷达 placement the user wants). We inject into the User-Name row.
   function ensureTimelinePill(article, handle) {
+    const caret = [...article.querySelectorAll('[data-testid="caret"]')]
+      .find((node) => node.closest('article[data-testid="tweet"]') === article);
+    const actionRow = caret?.parentElement;
     const nameRow = article.querySelector('[data-testid="User-Name"]');
-    if (!nameRow) return false;
+    const host = actionRow || nameRow;
+    if (!host) return false;
     let pill = article.querySelector('.xvm-fr-pill');
     if (!pill) {
       pill = document.createElement('span');
       pill.className = 'xvm-fr-pill';
-      // Insert as the last child of the User-Name row so it appears right
-      // after the username + timestamp cluster.
-      nameRow.appendChild(pill);
     }
+    // Move an existing pill too; this matters after hot reloads where an old
+    // version may have inserted it beside the username row. If X is still
+    // mounting the caret, leave an existing pill where it is until the next
+    // pass instead of moving it back to the username row.
+    if (actionRow && pill.parentElement !== host) host.insertBefore(pill, caret);
+    else if (!pill.parentElement) host.appendChild(pill);
     pill.setAttribute('data-xvm-fr-handle', handle);
     const data = pillFor(handle, 'timeline');
     if (!data) {
@@ -547,23 +554,24 @@
       : '';
     const nameLine = rec?.n ? `${rec.n} (@${h})` : `@${h}`;
     const title = `${nameLine}${statsLine ? `\n${statsLine}` : ''}`;
+    const rateLabel = (label) => rate == null ? label : `${label} ${L.formatRate(rate)}`;
     switch (kind) {
       case 'mutual':
         if (!settings.relations) return null;
-        return { cls: 'xvm-fr-mutual', label: tt('frMutual', '互关'), title };
+        return { cls: 'xvm-fr-mutual', label: rateLabel(tt('frMutual', '互关')), title };
       case 'mine':
         if (!settings.relations) return null;
-        return { cls: 'xvm-fr-mine', label: tt('frMine', '我关注'), title };
+        return { cls: 'xvm-fr-mine', label: rateLabel(tt('frMine', '我关注')), title };
       case 'theirs':
         if (!settings.relations) return null;
-        return { cls: 'xvm-fr-theirs', label: tt('frTheirs', '关注我'), title };
+        return { cls: 'xvm-fr-theirs', label: rateLabel(tt('frTheirs', '关注我')), title };
       case 'unfollowed': {
-        if (!settings.relations) return null;
+        if (!settings.relations || !isFollowHistoryMember()) return null;
         const byThem = rec?.u;
         const byMe = rec?.i;
         const when = new Date(byThem || byMe || Date.now()).toLocaleDateString();
         const who = byThem ? tt('frUnfollowedMe', 'TA 取关了你') : tt('frIUnfollowed', '你取关了 TA');
-        return { cls: 'xvm-fr-unfollowed', label: tt('frUnfollowed', '取关了'), title: `${title}\n${who} · ${when}` };
+        return { cls: 'xvm-fr-unfollowed', label: rateLabel(tt('frUnfollowed', '取消关注')), title: `${title}\n${who} · ${when}` };
       }
       default:
         // No relationship — show the profile's follow ratio when known.
@@ -575,6 +583,17 @@
         };
     }
   }
+
+  function isFollowHistoryMember() {
+    if (window.__xvmIsCommunityDevBuild === true) return true;
+    const tier = window.__xvmPro?.getCurrentTier?.() || 'free';
+    return ['standard', 'pro', 'max'].includes(tier);
+  }
+
+  window.__xvmPro?.onTierChange?.(() => {
+    applyToTimeline();
+    scheduleEmit();
+  });
 
   // ─── Init ───────────────────────────────────────────────────────────
   let timelineObserver = null;
