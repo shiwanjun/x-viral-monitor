@@ -119,14 +119,13 @@
       if (visited.has(node)) return;
       visited.add(node);
       budget--;
-      const legacy = node.legacy;
+      const legacy = node.legacy && typeof node.legacy === 'object' ? node.legacy : {};
       const core = node.core;
       // X 近期的时间线 UserResults 把 screen_name/name 从 legacy 挪到了
       // core，关系字段仍在 result.relationship_perspectives。旧逻辑只认
       // legacy.screen_name，会把整条用户记录跳过，导致时间线没有任何胶囊。
       const screenName = core?.screen_name || legacy?.screen_name;
-      if (legacy && typeof legacy === 'object'
-        && typeof screenName === 'string') {
+      if (typeof screenName === 'string') {
         const handle = normalizeHandle(screenName);
         if (handle && !seen.has(handle)) {
           seen.add(handle);

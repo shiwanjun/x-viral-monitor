@@ -33,6 +33,23 @@
   const TARGETED_PACING_MS = 600;
   const PERSIST_DEBOUNCE_MS = 800;
   const EMIT_DEBOUNCE_MS = 600;
+  // X rotates operation ids, so keep a known-good fallback and self-discover
+  // the current id from the loaded web bundle when the page has not requested
+  // UserByScreenName yet (which is normal on the home timeline).
+  const FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE = {
+    queryId: 'SAMkL5y_N9pmahSw8yy6gw',
+    authorization: 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+    features: JSON.stringify({
+      responsive_web_graphql_timeline_navigation_enabled: false,
+      responsive_web_graphql_exclude_directive_enabled: true,
+      verified_phone_label_enabled: false,
+      responsive_web_twitter_blue_verified_badge_is_enabled: true,
+      responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+      withAuxiliaryUserLabels: true,
+    }),
+  };
+  const TIMELINE_REFRESH_COOLDOWN_MS = 2500;
+  const TIMELINE_REFRESH_BATCH = 30;
   // Toggle verbose console logging from the page console:
   //   localStorage.setItem('xvmFrDebug', '1')
   const FR_DEBUG = (() => { try { return localStorage.getItem('xvmFrDebug') === '1'; } catch (_) { return false; } })();
@@ -46,6 +63,8 @@
   let emitTimer = 0;
   let scanControl = { active: false, kind: null, count: 0, page: 0 };
   let statusText = '';
+  let timelineRefreshTimer = 0;
+  let timelineRefreshPending = new Set();
 
   // ─── i18n (XVM_SETTINGS_UPDATE broadcast, same as starchart.js) ─────
   window.addEventListener('message', (ev) => {
@@ -218,6 +237,11 @@
         const t = (s.textContent || '').trim();
         if (t.startsWith('@')) { handle = t.slice(1).toLowerCase(); break; }
       }
+      if (!handle) {
+        const link = nameBlock.querySelector('a[role="link"][href^="/"]');
+        const m = (link?.getAttribute('href') || '').match(/^\/([A-Za-z0-9_]{1,15})(?:\/|$|\?)/);
+        if (m) handle = m[1].toLowerCase();
+      }
     }
     // Fallback: href on the profile link.
     if (!handle) {
@@ -271,20 +295,75 @@
     }
     let anyShown = false;
     let withData = 0;
+    const visibleHandles = [];
     for (const article of articles) {
       if (article.closest('.xvm-lb')) continue; // skip leaderboard rows
       const cell = article.closest('[data-testid="cellInnerDiv"]') || article;
       const handle = absorbFromCell(cell);
       if (!handle) continue;
+      visibleHandles.push(handle);
       if (ensureTimelinePill(article, handle)) { anyShown = true; withData++; }
     }
+    scheduleTimelineRefresh(visibleHandles);
     if (articles.length) dbg('applyToTimeline:', articles.length, 'articles,', withData, 'with pill data,', Object.keys(state.users).length, 'users cached');
     return anyShown;
   }
 
   // ─── Active GraphQL calls ───────────────────────────────────────────
   function radarTemplate(op) {
-    return state.meta.templates?.[op] || window.__XVMStarChart?._internal?.getTemplate?.(op) || null;
+    const stored = state.meta.templates?.[op];
+    if (stored?.queryId && stored.queryId !== 'REPLACE_AT_RUNTIME') return stored;
+    const chart = window.__XVMStarChart?._internal?.getTemplate?.(op);
+    if (chart?.queryId && chart.queryId !== 'REPLACE_AT_RUNTIME') return chart;
+    return op === 'UserByScreenName' ? FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE : null;
+  }
+
+  function discoverUserByScreenNameTemplate() {
+    if (state.meta.templates?.UserByScreenName?.queryId) return;
+    const urls = [...new Set([
+      ...Array.from(document.scripts || []).map((s) => s.src),
+      ...performance.getEntriesByType('resource').map((e) => e.name),
+    ].filter((u) => /abs\.twimg\.com\/responsive-web\/client-web\/.*\.js/.test(u)))];
+    if (!urls.length) return;
+    Promise.all(urls.slice(0, 12).map(async (url) => {
+      try {
+        const text = await fetch(url, { credentials: 'omit' }).then((r) => r.ok ? r.text() : '');
+        const marker = text.search(/operationName[:=]["']UserByScreenName["']/);
+        if (marker < 0) return null;
+        const part = text.slice(Math.max(0, marker - 5000), marker + 500);
+        const queryId = part.match(/queryId[:=]["']([A-Za-z0-9_-]{15,30})["']/)?.[1]
+          || text.slice(marker).match(/queryId[:=]["']([A-Za-z0-9_-]{15,30})["']/)?.[1];
+        return queryId ? { queryId } : null;
+      } catch (_) { return null; }
+    })).then((found) => {
+      const template = found.find(Boolean);
+      if (!template || state.meta.templates?.UserByScreenName?.queryId) return;
+      state.meta.templates = { ...(state.meta.templates || {}), UserByScreenName: {
+        ...FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE, ...template,
+      } };
+      schedulePersist();
+    }).catch(() => {});
+  }
+
+  function scheduleTimelineRefresh(handles) {
+    if (!settings.enabled || !settings.timeline) return;
+    for (const h of handles || []) {
+      const rec = state.users[L.normalizeHandle(h)];
+      if (!rec || ![0, 1].includes(rec.f) || ![0, 1].includes(rec.b)) {
+        timelineRefreshPending.add(h);
+      }
+    }
+    if (!timelineRefreshPending.size || timelineRefreshTimer) return;
+    timelineRefreshTimer = setTimeout(() => {
+      timelineRefreshTimer = 0;
+      const batch = [...timelineRefreshPending].slice(0, TIMELINE_REFRESH_BATCH);
+      if (scanControl.active) {
+        scheduleTimelineRefresh([]);
+        return;
+      }
+      batch.forEach((h) => timelineRefreshPending.delete(h));
+      refreshHandles(batch, { automatic: true });
+    }, TIMELINE_REFRESH_COOLDOWN_MS);
   }
   function getCsrf() {
     const m = document.cookie.match(/(?:^|;\s*)ct0=([^;]+)/);
@@ -294,7 +373,7 @@
     const tpl = radarTemplate(op);
     if (!tpl) throw new Error(`no-template:${op}`);
     if (!tpl.queryId || tpl.queryId === 'REPLACE_AT_RUNTIME') throw new Error(`no-queryid:${op}`);
-    const auth = tpl.authorization || window.__xvmNet?.getBearer?.() || '';
+    const auth = window.__xvmNet?.getBearer?.() || tpl.authorization || '';
     if (!auth) throw new Error('no-auth');
     const url = new URL(`/i/api/graphql/${tpl.queryId}/${op}`, location.origin);
     url.searchParams.set('variables', JSON.stringify(variables));
@@ -412,26 +491,21 @@
     } finally {
       scanControl.active = false;
       schedulePersist();
+      scheduleTimelineRefresh([]);
       emitStatus();
     }
     return true;
   }
 
   // ─── Targeted refresh: re-check visible leaderboard handles ─────────
-  async function refreshHandles(handles) {
+  async function refreshHandles(handles, options = {}) {
     const hList = [...new Set((handles || [])
       .map((h) => L.normalizeHandle(h))
       .filter(Boolean))].slice(0, 30);
     if (!hList.length) return;
     if (scanControl.active) return;
     const tpl = radarTemplate('UserByScreenName');
-    if (!tpl?.queryId || tpl.queryId === 'REPLACE_AT_RUNTIME') {
-      // This operation is captured from a profile request, not from the
-      // Following/Followers list requests used by the deep scans.
-      setStatus(tt('frNeedProfileTemplate', '先打开一次任意账号主页以初始化刷新'));
-      emitStatus();
-      return;
-    }
+    if (!tpl?.queryId || tpl.queryId === 'REPLACE_AT_RUNTIME') return;
     scanControl = { active: true, kind: 'targeted', count: 0, page: 0 };
     emitStatus();
     try {
@@ -447,11 +521,14 @@
         } catch (_) { /* per-handle failures are tolerated */ }
         await sleep(TARGETED_PACING_MS);
       }
-      setStatus(tt('frRefreshDone', '已刷新 {{COUNT}} 个账号')
-        .replace('{{COUNT}}', String(scanControl.count)));
+      if (!options.automatic) {
+        setStatus(tt('frRefreshDone', '已刷新 {{COUNT}} 个账号')
+          .replace('{{COUNT}}', String(scanControl.count)));
+      }
     } finally {
       scanControl.active = false;
       schedulePersist();
+      scheduleTimelineRefresh([]);
       emitStatus();
     }
   }
@@ -527,6 +604,7 @@
     // replay buffer helps, but subscribing first removes that race entirely.
     subscribe();
     startTimelineObserver();
+    discoverUserByScreenNameTemplate();
     const data = await loadFromStorage();
     if (data && typeof data === 'object') {
       state = {

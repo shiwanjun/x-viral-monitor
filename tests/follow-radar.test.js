@@ -8,11 +8,27 @@ const repo = resolve(here, '..');
 
 // Load the pure-logic IIFE with a minimal window stub (node env).
 const logicSrc = readFileSync(resolve(repo, 'src/follow-radar/logic.js'), 'utf8');
+const radarSrc = readFileSync(resolve(repo, 'src/follow-radar/radar.js'), 'utf8');
 const sandbox = { window: {} };
 new Function('window', logicSrc)(sandbox.window);
 const L = sandbox.window.__xvmFollowRadarLogic;
 
 describe('follow-radar logic', () => {
+  describe('首页自动关系查询', () => {
+    it('为 UserByScreenName 提供无需先访问个人主页的备用模板', () => {
+      expect(radarSrc).toContain("const FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE");
+      expect(radarSrc).toContain('authorization: \'Bearer ');
+      expect(radarSrc).toMatch(/queryId:\s*'[^']+'/);
+      expect(radarSrc).toMatch(/op === ['"]UserByScreenName['"]\s*\?\s*FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE/);
+    });
+
+    it('时间线渲染时会将可见作者加入自动刷新队列', () => {
+      expect(radarSrc).toContain('scheduleTimelineRefresh(visibleHandles)');
+      expect(radarSrc).toContain('const TIMELINE_REFRESH_COOLDOWN_MS');
+      expect(radarSrc).toContain('refreshHandles(batch, { automatic: true })');
+    });
+  });
+
   describe('normalizeHandle', () => {
     it('lowercases and strips @', () => {
       expect(L.normalizeHandle('@ElonMusk')).toBe('elonmusk');
@@ -177,6 +193,16 @@ describe('follow-radar logic', () => {
       const users = L.extractUsers({ result: { legacy: legacy({}) } });
       expect(users[0].f).toBeUndefined();
       expect(users[0].b).toBeUndefined();
+    });
+
+    it('accepts relationship user records whose legacy wrapper is absent', () => {
+      const users = L.extractUsers({
+        result: {
+          core: { screen_name: 'alice', name: 'Alice' },
+          relationship_perspectives: { following: true, followed_by: true },
+        },
+      });
+      expect(users[0]).toMatchObject({ handle: 'alice', f: 1, b: 1 });
     });
 
     it('dedupes and normalizes handles', () => {
