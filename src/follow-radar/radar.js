@@ -676,11 +676,20 @@
   let timelineTick = 0;
   function startTimelineObserver() {
     if (timelineObserver) return;
+    // The MAIN-world script runs at document_start.  X can load this module
+    // before <body> exists; observing null aborts the whole radar IIFE and
+    // leaves __xvmFollowRadar undefined.  Fall back to documentElement and
+    // retry after DOMContentLoaded for the rare pre-documentElement case.
+    const observeRoot = document.body || document.documentElement;
+    if (!observeRoot) {
+      document.addEventListener('DOMContentLoaded', startTimelineObserver, { once: true });
+      return;
+    }
     // X re-mounts tweet nodes constantly (virtualised list). A MutationObserver
     // on body catches inserts; we also run a periodic sweep because X sometimes
     // reuses nodes without firing childList mutations.
     timelineObserver = new MutationObserver(() => { scheduleTimelineTick(); });
-    timelineObserver.observe(document.body, { childList: true, subtree: true });
+    timelineObserver.observe(observeRoot, { childList: true, subtree: true });
     scheduleTimelineTick();
   }
   function scheduleTimelineTick() {

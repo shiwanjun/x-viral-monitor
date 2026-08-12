@@ -41,6 +41,12 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('el.style.display = pill ? \'\' : \'none\'');
     });
 
+    it('document_start 时 body 尚未创建也不会让雷达初始化崩溃', () => {
+      expect(radarSrc).toContain('const observeRoot = document.body || document.documentElement');
+      expect(radarSrc).toContain("document.addEventListener('DOMContentLoaded', startTimelineObserver, { once: true })");
+      expect(radarSrc).toContain('timelineObserver.observe(observeRoot');
+    });
+
     it('不再把关系胶囊渲染到流速榜', () => {
       const contentSrc = readFileSync(resolve(repo, 'content.js'), 'utf8');
       expect(contentSrc).toContain('Follow relationship capsules belong to the timeline tweet header');
