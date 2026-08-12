@@ -730,7 +730,7 @@
         handle: h,
         record: rec || null,
         classify: L.classify(rec),
-        pill: pillFor(h),
+        pill: pillFor(h, 'timeline'),
         templates: state.meta.templates,
         myUserId: state.meta.myUserId,
         userCount: Object.keys(state.users).length,

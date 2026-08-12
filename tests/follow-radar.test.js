@@ -28,6 +28,7 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('refreshHandles(batch, { automatic: true })');
       expect(radarSrc).toContain("/i/api/1.1/friendships/lookup.json");
       expect(radarSrc).toContain('queueRelationshipLookup(users)');
+      expect(radarSrc).toContain("pill: pillFor(h, 'timeline')");
     });
 
     it('将胶囊插入推文右上角菜单前，并为取关历史增加会员门控', () => {
