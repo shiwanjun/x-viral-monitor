@@ -55,6 +55,10 @@
   //   localStorage.setItem('xvmFrDebug', '1')
   const FR_DEBUG = (() => { try { return localStorage.getItem('xvmFrDebug') === '1'; } catch (_) { return false; } })();
   function dbg(...args) { if (FR_DEBUG) console.log('[xvm-fr]', ...args); }
+  function authorizationToken(value) {
+    if (!value) return '';
+    try { return decodeURIComponent(String(value)); } catch (_) { return String(value); }
+  }
 
   let msgs = {};
   let settings = { enabled: true, timeline: true, leaderboard: true, relations: true, rate: true };
@@ -211,7 +215,10 @@
   }
 
   async function lookupRelationships(entries) {
-    const auth = window.__xvmNet?.getBearer?.();
+    // On a cold home-timeline load no X API request may have exposed a bearer
+    // token to the net hook yet.  Use the same known-good fallback as the
+    // UserByScreenName request instead of silently abandoning the lookup.
+    const auth = authorizationToken(window.__xvmNet?.getBearer?.() || FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE.authorization);
     if (!auth || !entries.length) return;
     const url = new URL('/i/api/1.1/friendships/lookup.json', location.origin);
     url.searchParams.set('user_id', entries.map(([, id]) => id).join(','));
@@ -276,11 +283,15 @@
   // other directions X never renders anything on the timeline, so we rely on
   // passive capture / active scan. Reading the badge here keeps "关注我"
   // accurate without an extra request.
-  function absorbFromCell(cell) {
+  function absorbFromCell(cell, article = null) {
     if (!cell) return null;
+    // A virtualised cellInnerDiv can contain more than one tweet.  Prefer the
+    // current article, otherwise the first author's handle can be assigned to
+    // every tweet in that cell and its capsule will never match the relation.
+    const scope = article?.querySelector?.('[data-testid="User-Name"]') ? article : cell;
     // Reuse the same proven approach as content.js getAuthorInfo: scan spans
     // inside [data-testid="User-Name"] for one starting with "@".
-    const nameBlock = cell.querySelector('[data-testid="User-Name"]');
+    const nameBlock = scope.querySelector('[data-testid="User-Name"]');
     let handle = null;
     if (nameBlock) {
       const spans = nameBlock.querySelectorAll('span');
@@ -296,14 +307,14 @@
     }
     // Fallback: href on the profile link.
     if (!handle) {
-      const link = cell.querySelector('a[role="link"][href^="/"]');
+      const link = scope.querySelector('a[role="link"][href^="/"]');
       if (link) {
         const m = (link.getAttribute('href') || '').match(/^\/([A-Za-z0-9_]{1,15})(?:\/|$|\?)/);
         if (m) handle = m[1].toLowerCase();
       }
     }
     if (!handle || !/^[a-z0-9_]{1,15}$/.test(handle)) return null;
-    const cellText = cell.textContent || '';
+    const cellText = scope.textContent || '';
     const followsYou = /follows you|关注了你|正在关注你|フォローされています|Đang theo dõi bạn|회원님을 팔로우합니다/.test(cellText);
     const u = { handle };
     if (followsYou) u.b = 1;
@@ -371,7 +382,7 @@
     for (const article of articles) {
       if (article.closest('.xvm-lb')) continue; // skip leaderboard rows
       const cell = article.closest('[data-testid="cellInnerDiv"]') || article;
-      const handle = absorbFromCell(cell);
+      const handle = absorbFromCell(cell, article);
       if (!handle) continue;
       visibleHandles.push(handle);
       if (ensureTimelinePill(article, handle)) { anyShown = true; withData++; }
@@ -445,7 +456,7 @@
     const tpl = radarTemplate(op);
     if (!tpl) throw new Error(`no-template:${op}`);
     if (!tpl.queryId || tpl.queryId === 'REPLACE_AT_RUNTIME') throw new Error(`no-queryid:${op}`);
-    const auth = window.__xvmNet?.getBearer?.() || tpl.authorization || '';
+    const auth = authorizationToken(window.__xvmNet?.getBearer?.() || tpl.authorization || '');
     if (!auth) throw new Error('no-auth');
     const url = new URL(`/i/api/graphql/${tpl.queryId}/${op}`, location.origin);
     url.searchParams.set('variables', JSON.stringify(variables));
