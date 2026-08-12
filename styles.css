@@ -2662,14 +2662,15 @@ img.xvm-liv-img {
   line-height: 16px;
   letter-spacing: 0.02em;
   white-space: nowrap;
-  border: 1px solid transparent;
+  border: 1px solid rgba(31, 43, 61, 0.22);
+  box-shadow: 0 1px 4px rgba(31, 43, 61, 0.14);
   pointer-events: none;
 }
-.xvm-fr-mutual     { color: #58e44e; background: rgba(88, 228, 78, 0.12);  border-color: rgba(88, 228, 78, 0.38); }
-.xvm-fr-mine       { color: #48b6ff; background: rgba(72, 182, 255, 0.12); border-color: rgba(72, 182, 255, 0.38); }
-.xvm-fr-theirs     { color: #3ee6c8; background: rgba(62, 230, 200, 0.12); border-color: rgba(62, 230, 200, 0.38); }
-.xvm-fr-unfollowed { color: #ff6b6b; background: rgba(255, 107, 107, 0.13); border-color: rgba(255, 107, 107, 0.45); }
-.xvm-fr-rate       { color: #9aa0b4; background: transparent; border-color: transparent; }
+.xvm-fr-mutual     { color: #7a3100; background: #ffd2ad; border-color: #ff9848; }
+.xvm-fr-mine       { color: #073c86; background: #bcd9ff; border-color: #72aef4; }
+.xvm-fr-theirs     { color: #075d56; background: #bdf3ec; border-color: #72d6cb; }
+.xvm-fr-unfollowed { color: #8b1e29; background: #ffd0d5; border-color: #f28b97; }
+.xvm-fr-rate       { color: #24344a; background: #e7edf5; border-color: #a7b8cc; }
 
 /* 关注雷达操作条（流速榜页脚） */
 .xvm-lb-fr {

@@ -630,7 +630,12 @@
       : '';
     const nameLine = rec?.n ? `${rec.n} (@${h})` : `@${h}`;
     const title = `${nameLine}${statsLine ? `\n${statsLine}` : ''}`;
-    const rateLabel = (label) => rate == null ? label : `${label} ${L.formatRate(rate)}`;
+    // Keep the capsule visible while the profile lookup is still pending. X
+    // virtualises timeline rows, so hiding the unknown state makes some
+    // tweets look as if the feature did not run. The dash is replaced by the
+    // real ratio as soon as UserByScreenName/friendships data arrives.
+    const shortRate = rate == null ? '\u2014' : String(rate);
+    const rateLabel = (label) => `${label} ${shortRate}`;
     switch (kind) {
       case 'mutual':
         if (!settings.relations) return null;
@@ -650,12 +655,13 @@
         return { cls: 'xvm-fr-unfollowed', label: rateLabel(tt('frUnfollowed', '取消关注')), title: `${title}\n${who} · ${when}` };
       }
       default:
-        // No relationship — show the profile's follow ratio when known.
-        if (!settings.rate || rate == null) return null;
+        // No relationship — always show the profile's follow ratio. A dash is
+        // intentional while X has not returned public counts yet.
+        if (!settings.rate) return null;
         return {
           cls: 'xvm-fr-rate',
-          label: `${tt('frRate', '关注率')} ${L.formatRate(rate)}`,
-          title: `${title}\n${tt('frRateLabel', '关注/粉丝比')} ${L.formatRate(rate)}`,
+          label: `${tt('frRate', '关注率')} ${shortRate}`,
+          title: `${title}\n${tt('frRateLabel', '关注/粉丝比')} ${shortRate}`,
         };
     }
   }

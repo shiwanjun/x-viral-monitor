@@ -47,6 +47,13 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('timelineObserver.observe(observeRoot');
     });
 
+    it('关系未知时也显示关注率占位，关系确定后始终追加比例', () => {
+      expect(radarSrc).toContain("const shortRate = rate == null ? '\\u2014' : String(rate)");
+      expect(radarSrc).toContain("const rateLabel = (label) => `${label} ${shortRate}`");
+      expect(radarSrc).toContain("if (!settings.rate) return null");
+      expect(radarSrc).toContain("label: `${tt('frRate', '关注率')} ${shortRate}`");
+    });
+
     it('不再把关系胶囊渲染到流速榜', () => {
       const contentSrc = readFileSync(resolve(repo, 'content.js'), 'utf8');
       expect(contentSrc).toContain('Follow relationship capsules belong to the timeline tweet header');
