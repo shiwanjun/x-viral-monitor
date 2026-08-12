@@ -53,6 +53,6 @@ describe('website-to-extension auth handoff', () => {
     expect(site).toMatch(/if \(siteSession\?\.user\)/);
     expect(site).toMatch(/void syncWebsiteLoginToExtension\(\)/);
     expect(site).toMatch(/extensionLoginRequested/);
-    expect(site).toMatch(/location\.assign\('\/workspace\.html'\)/);
+    expect(site).toMatch(/location\.assign\('\/workspace'\)/);
   });
 });
