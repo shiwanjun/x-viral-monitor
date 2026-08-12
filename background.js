@@ -499,6 +499,22 @@ chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) =>
     chrome.storage.local.remove([SESSION_KEY, SUBSCRIPTION_KEY], () => sendResponse({ ok: true }));
     return true;
   }
+  if (message?.type === 'XVM_WEBSITE_AUTH_OPEN_WORKSPACE') {
+    if (!isOfficialWebsiteSender(sender)) {
+      sendResponse({ ok: false, error: 'untrusted_sender' });
+      return false;
+    }
+    chrome.storage.local.get(SESSION_KEY, (items) => {
+      if (!items?.[SESSION_KEY]?.token) {
+        sendResponse({ ok: false, error: 'not_signed_in' });
+        return;
+      }
+      chrome.runtime.openOptionsPage()
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    });
+    return true;
+  }
   if (message?.type !== 'XVM_WEBSITE_AUTH_HANDOFF') return false;
   if (!isOfficialWebsiteSender(sender)) {
     sendResponse({ ok: false, error: 'untrusted_sender' });

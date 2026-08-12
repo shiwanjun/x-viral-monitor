@@ -35,6 +35,7 @@ describe('website-to-extension auth handoff', () => {
     expect(background).toMatch(/isOfficialWebsiteSender/);
     expect(background).toMatch(/XVM_WEBSITE_AUTH_HANDOFF/);
     expect(background).toMatch(/XVM_WEBSITE_AUTH_PROBE/);
+    expect(background).toMatch(/XVM_WEBSITE_AUTH_OPEN_WORKSPACE/);
   });
 
   it('starts Google login on the official website instead of a callback page in the extension', () => {
@@ -52,5 +53,6 @@ describe('website-to-extension auth handoff', () => {
     expect(site).toMatch(/if \(siteSession\?\.user\)/);
     expect(site).toMatch(/void syncWebsiteLoginToExtension\(\)/);
     expect(site).toMatch(/extensionLoginRequested/);
+    expect(site).toMatch(/XVM_WEBSITE_AUTH_OPEN_WORKSPACE/);
   });
 });
