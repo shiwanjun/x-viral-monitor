@@ -85,6 +85,49 @@ function isOfficialWebsiteSender(sender) {
   catch (_) { return false; }
 }
 
+// The website receives this compact projection only after its origin has been
+// checked by Chrome. Raw X responses, cookies and extension bearer tokens never
+// leave the extension process.
+function makeWebsiteDashboardSnapshot(items = {}) {
+  const folderNames = new Map((Array.isArray(items?.bookmarkFoldersCache?.folders)
+    ? items.bookmarkFoldersCache.folders : [])
+    .map((folder) => [String(folder?.id || ''), String(folder?.name || '')]));
+  const records = items?.bookmarkTimelineCache?.folders || {};
+  const folders = Object.keys(records).map((id) => ({
+    id,
+    name: folderNames.get(id) || `未分类 ${id.slice(-4)}`,
+  }));
+  const rows = [];
+  folders.forEach((folder) => {
+    const entries = Array.isArray(records?.[folder.id]?.entries) ? records[folder.id].entries : [];
+    entries.slice(0, 120).forEach((entry, index) => {
+      const result = entry?.content?.itemContent?.tweet_results?.result || {};
+      const tweet = result?.tweet || result?.legacy || result;
+      const legacy = tweet?.legacy || result?.legacy || {};
+      const user = result?.core?.user_results?.result || tweet?.core?.user_results?.result || {};
+      const userLegacy = user?.legacy || {};
+      const media = legacy?.extended_entities?.media || legacy?.entities?.media || [];
+      rows.push({
+        id: String(result?.rest_id || tweet?.rest_id || entry?.entryId || `${folder.id}-${index}`),
+        folderId: folder.id,
+        folderName: folder.name,
+        name: String(userLegacy.name || 'X 用户'),
+        handle: userLegacy.screen_name ? `@${userLegacy.screen_name}` : '@x_user',
+        avatar: String(userLegacy.profile_image_url_https || ''),
+        text: String(legacy.full_text || legacy.text || '这条书签的内容正在等待同步。'),
+        views: Number(result?.views?.count || legacy?.view_count || 0),
+        engagement: Number(legacy.favorite_count || 0) + Number(legacy.retweet_count || 0) + Number(legacy.reply_count || 0),
+        media: media.map((item) => item?.media_url_https || item?.media_url).filter(Boolean).slice(0, 3),
+      });
+    });
+  });
+  return {
+    folders,
+    rows: rows.slice(0, 300),
+    refreshedAt: Math.max(0, ...Object.values(records).map((record) => Number(record?.refreshedAt) || 0)),
+  };
+}
+
 async function exchangeExtensionHandoff(code) {
   if (!/^[a-f0-9]{64}$/.test(String(code || ''))) throw new Error('invalid_handoff');
   const res = await fetch(`${AUTH_BACKEND_URL}/api/extension-handoff/exchange`, {
@@ -512,6 +555,16 @@ chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) =>
       chrome.runtime.openOptionsPage()
         .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+    });
+    return true;
+  }
+  if (message?.type === 'XVM_WEBSITE_DASHBOARD_SNAPSHOT') {
+    if (!isOfficialWebsiteSender(sender)) {
+      sendResponse({ ok: false, error: 'untrusted_sender' });
+      return false;
+    }
+    chrome.storage.local.get(['bookmarkTimelineCache', 'bookmarkFoldersCache'], (items) => {
+      sendResponse({ ok: true, snapshot: makeWebsiteDashboardSnapshot(items) });
     });
     return true;
   }
