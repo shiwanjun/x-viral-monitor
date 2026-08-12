@@ -48,6 +48,10 @@ interface WorkerEnv extends AuthEnv {
 const app = new Hono<{ Bindings: WorkerEnv }>();
 const HANDOFF_TTL_MS = 60_000;
 
+function configured(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function allowedExtensionIds(env: WorkerEnv) {
   return String(env.EXTENSION_IDS || "")
     .split(",").map((id) => id.trim()).filter((id) => /^[a-p]{32}$/.test(id));
@@ -211,7 +215,18 @@ app.post("/api/checkout/start", async (c) => {
     : interval === "yearly" ? c.env.WAFFO_PRODUCT_MEMBERSHIP_YEARLY
     : null;
   if (!productId) {
-    return c.json({ ok: false, error: "invalid_plan" }, 400, corsHeaders(c.env, c.req.header("Origin") || ""));
+    const configurationMissing = !configured(c.env.WAFFO_PRODUCT_MEMBERSHIP_MONTHLY)
+      || !configured(c.env.WAFFO_PRODUCT_MEMBERSHIP_YEARLY)
+      || !configured(c.env.WAFFO_MERCHANT_ID)
+      || !configured(c.env.WAFFO_PRIVATE_KEY);
+    return c.json({
+      ok: false,
+      error: configurationMissing ? "payments_not_configured" : "invalid_plan",
+    }, configurationMissing ? 503 : 400, corsHeaders(c.env, c.req.header("Origin") || ""));
+  }
+
+  if (!configured(c.env.WAFFO_MERCHANT_ID) || !configured(c.env.WAFFO_PRIVATE_KEY)) {
+    return c.json({ ok: false, error: "payments_not_configured" }, 503, corsHeaders(c.env, c.req.header("Origin") || ""));
   }
 
   const waffoConfig: WaffoConfig = {

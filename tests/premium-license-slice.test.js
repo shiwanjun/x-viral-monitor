@@ -48,4 +48,11 @@ describe('subscription-only access', () => {
     expect(worker).toMatch(/tier,\s*plan,\s*status,\s*expiresAt/);
     expect(worker).not.toMatch(/ENTITLEMENT_SIGNING_PRIVATE_JWK|makeSignedEntitlement/);
   });
+
+  it('在 Waffo 配置缺失时拒绝创建结账，而不是将请求发给支付服务', () => {
+    expect(worker).toMatch(/function configured\(value: unknown\)/);
+    expect(worker).toMatch(/payments_not_configured/);
+    expect(worker).toMatch(/WAFFO_PRODUCT_MEMBERSHIP_MONTHLY/);
+    expect(worker).toMatch(/WAFFO_PRODUCT_MEMBERSHIP_YEARLY/);
+  });
 });

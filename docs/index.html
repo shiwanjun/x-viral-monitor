@@ -1512,12 +1512,15 @@
           await startGoogleSignIn(callback);
           return;
         }
-        const data = await res.json();
+        const data = await res.json().catch(() => null);
         if (data?.ok && data.checkoutUrl) location.href = data.checkoutUrl;
         else throw new Error(data?.error || 'checkout_failed');
-      } catch (_) {
+      } catch (error) {
         location.href = '#pricing';
-        alert('Unable to start checkout. Please try again.');
+        const message = error?.message === 'payments_not_configured'
+          ? '支付暂未配置完成，请联系 X-Tools 支持后重试。'
+          : '无法发起支付，请稍后重试。';
+        alert(message);
       }
     }
 

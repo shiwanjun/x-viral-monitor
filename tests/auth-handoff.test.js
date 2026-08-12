@@ -55,4 +55,9 @@ describe('website-to-extension auth handoff', () => {
     expect(site).toMatch(/extensionLoginRequested/);
     expect(site).toMatch(/location\.assign\('\/workspace'\)/);
   });
+
+  it('官网在支付尚未配置时给出明确提示', () => {
+    expect(site).toMatch(/payments_not_configured/);
+    expect(site).toMatch(/支付暂未配置完成/);
+  });
 });
