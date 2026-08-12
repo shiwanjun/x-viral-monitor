@@ -55,7 +55,10 @@ describe('follow-radar logic', () => {
     });
 
     it('会扫描用户卡片页面并复用关系胶囊', () => {
-      expect(radarSrc).toContain('querySelectorAll(\'[data-testid="UserCell"]\')');
+      expect(radarSrc).toContain('querySelectorAll(\'[data-testid="UserCell"], li[role="listitem"]\')');
+      expect(radarSrc).toContain('li[role="listitem"]');
+      expect(radarSrc).toContain('UserCell cards in the current X build omit User-Name');
+      expect(radarSrc).toContain("const match = (link.getAttribute('href') || '').match(/^\\/([A-Za-z0-9_]{1,15})$/)");
       expect(radarSrc).toContain('function applyToUserCards()');
       expect(radarSrc).toContain("pillFor(handle, 'profile')");
       expect(radarSrc).toContain('applyToUserCards();');

@@ -397,24 +397,35 @@
   // ─── User cards on profile/followers/following/search pages ─────────
   function userCardHandle(card) {
     const nameBlock = card.querySelector('[data-testid="User-Name"]');
-    if (!nameBlock) return null;
-    for (const span of nameBlock.querySelectorAll('span')) {
-      const text = (span.textContent || '').trim();
-      if (text.startsWith('@')) return L.normalizeHandle(text);
+    if (nameBlock) {
+      for (const span of nameBlock.querySelectorAll('span')) {
+        const text = (span.textContent || '').trim();
+        if (text.startsWith('@')) return L.normalizeHandle(text);
+      }
+      const link = nameBlock.querySelector('a[role="link"][href^="/"]');
+      const match = (link?.getAttribute('href') || '').match(/^\/([A-Za-z0-9_]{1,15})(?:\/|$|\?)/);
+      if (match) return L.normalizeHandle(match[1]);
     }
-    const link = nameBlock.querySelector('a[role="link"][href^="/"]');
-    const match = (link?.getAttribute('href') || '').match(/^\/([A-Za-z0-9_]{1,15})(?:\/|$|\?)/);
-    return match ? L.normalizeHandle(match[1]) : null;
+    // UserCell cards in the current X build omit User-Name entirely. Their
+    // profile links are repeated for avatar/name; use an exact /handle href
+    // and exclude reserved application routes.
+    const reserved = new Set(['home', 'explore', 'notifications', 'messages', 'i', 'settings', 'compose']);
+    for (const link of card.querySelectorAll('a[role="link"][href^="/"]')) {
+      const match = (link.getAttribute('href') || '').match(/^\/([A-Za-z0-9_]{1,15})$/);
+      const handle = match && L.normalizeHandle(match[1]);
+      if (handle && !reserved.has(handle)) return handle;
+    }
+    return null;
   }
 
   function ensureUserCardPill(card, handle) {
     const nameBlock = card.querySelector('[data-testid="User-Name"]');
-    if (!nameBlock) return false;
-    let pill = nameBlock.querySelector('.xvm-fr-pill');
+    const host = nameBlock || card.querySelector('div[dir="ltr"]')?.parentElement || card;
+    let pill = host.querySelector('.xvm-fr-pill');
     if (!pill) {
       pill = document.createElement('span');
       pill.className = 'xvm-fr-pill xvm-fr-user-pill';
-      nameBlock.appendChild(pill);
+      host.appendChild(pill);
     }
     pill.setAttribute('data-xvm-fr-handle', handle);
     pill.setAttribute('data-xvm-fr-surface', 'profile');
@@ -428,7 +439,7 @@
 
   function applyToUserCards() {
     if (!settings.enabled) return false;
-    const cards = document.querySelectorAll('[data-testid="UserCell"]');
+    const cards = document.querySelectorAll('[data-testid="UserCell"], li[role="listitem"]');
     const handles = [];
     let shown = 0;
     for (const card of cards) {
