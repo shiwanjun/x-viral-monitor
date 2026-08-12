@@ -109,6 +109,24 @@
     const MAX_DEPTH = 14;
     const NODE_BUDGET = 200000;
     let budget = NODE_BUDGET;
+    function boolField(obj, key) {
+      return obj && typeof obj[key] === 'boolean' ? obj[key] : undefined;
+    }
+    function relationshipField(node, legacy, core, key) {
+      const candidates = [
+        node?.relationship_perspectives,
+        node?.relationshipPerspectives,
+        node?.relationship,
+        node,
+        legacy,
+        core,
+      ];
+      for (const candidate of candidates) {
+        const value = boolField(candidate, key);
+        if (value !== undefined) return value;
+      }
+      return undefined;
+    }
     function walk(node, depth) {
       if (node == null || depth > MAX_DEPTH || budget <= 0) return;
       if (Array.isArray(node)) {
@@ -135,10 +153,13 @@
           // flag the timeline actually carries. Only trust explicit booleans
           // — an absent field means "unknown", not "false".
           const rp = node.relationship_perspectives;
-          const fFinal = (rp && typeof rp.following === 'boolean') ? rp.following : legacy.following;
-          const bFinal = (rp && typeof rp.followed_by === 'boolean') ? rp.followed_by : legacy.followed_by;
+          const fFinal = relationshipField(node, legacy, core, 'following');
+          const bFinal = relationshipField(node, legacy, core, 'followed_by');
           out.push({
             handle,
+            id: typeof node.rest_id === 'string' ? node.rest_id
+              : (typeof node.id_str === 'string' ? node.id_str
+                : (typeof legacy.id_str === 'string' ? legacy.id_str : undefined)),
             name: core?.name || legacy.name || '',
             f: typeof fFinal === 'boolean' ? (fFinal ? 1 : 0) : undefined,
             b: typeof bFinal === 'boolean' ? (bFinal ? 1 : 0) : undefined,

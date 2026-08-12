@@ -26,12 +26,16 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('scheduleTimelineRefresh(visibleHandles)');
       expect(radarSrc).toContain('const TIMELINE_REFRESH_COOLDOWN_MS');
       expect(radarSrc).toContain('refreshHandles(batch, { automatic: true })');
+      expect(radarSrc).toContain("/i/api/1.1/friendships/lookup.json");
+      expect(radarSrc).toContain('queueRelationshipLookup(users)');
     });
 
     it('将胶囊插入推文右上角菜单前，并为取关历史增加会员门控', () => {
       expect(radarSrc).toContain("find((node) => node.closest('article[data-testid=\"tweet\"]') === article)");
-      expect(radarSrc).toContain('host.insertBefore(pill, caret)');
+      expect(radarSrc).toContain('host.insertBefore(pill, anchor)');
+      expect(radarSrc).toContain('style.flexDirection === \'row\'');
       expect(radarSrc).toContain('isFollowHistoryMember()');
+      expect(radarSrc).toContain('el.style.display = pill ? \'\' : \'none\'');
     });
 
     it('不再把关系胶囊渲染到流速榜', () => {
@@ -215,6 +219,34 @@ describe('follow-radar logic', () => {
         },
       });
       expect(users[0]).toMatchObject({ handle: 'alice', f: 1, b: 1 });
+    });
+
+    it('keeps the X user id for the authenticated relationship lookup fallback', () => {
+      const users = L.extractUsers({
+        result: {
+          rest_id: '42',
+          core: { screen_name: 'alice' },
+          relationship_perspectives: {},
+        },
+      });
+      expect(users[0]).toMatchObject({ handle: 'alice', id: '42' });
+    });
+
+    it('reads relationship flags when X places them directly on the user node', () => {
+      const users = L.extractUsers({
+        result: {
+          rest_id: '42',
+          core: { screen_name: 'alice' },
+          following: true,
+          followed_by: true,
+        },
+      });
+      expect(users[0]).toMatchObject({ handle: 'alice', f: 1, b: 1 });
+    });
+
+    it('falls back to legacy.id_str when the modern id is absent', () => {
+      const users = L.extractUsers({ result: { core: { screen_name: 'alice' }, legacy: { id_str: '42' } } });
+      expect(users[0].id).toBe('42');
     });
 
     it('dedupes and normalizes handles', () => {

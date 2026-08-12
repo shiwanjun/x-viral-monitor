@@ -31,6 +31,7 @@
   const USERS_CAP = 6000;
   const SCAN_PACING_MS = 900;
   const TARGETED_PACING_MS = 600;
+  const RELATIONSHIP_LOOKUP_BATCH = 100;
   const PERSIST_DEBOUNCE_MS = 800;
   const EMIT_DEBOUNCE_MS = 600;
   // X rotates operation ids, so keep a known-good fallback and self-discover
@@ -65,6 +66,7 @@
   let statusText = '';
   let timelineRefreshTimer = 0;
   let timelineRefreshPending = new Set();
+  let relationshipLookupPending = new Map();
 
   // ─── i18n (XVM_SETTINGS_UPDATE broadcast, same as starchart.js) ─────
   window.addEventListener('message', (ev) => {
@@ -113,6 +115,7 @@
       if (!h) continue;
       interactive.push(h);
       const pill = pillFor(h, 'timeline');
+      el.style.display = pill ? '' : 'none';
       el.className = `xvm-fr-pill ${pill ? pill.cls : 'xvm-fr-rate'}`;
       el.textContent = pill ? pill.label : '';
       if (pill?.title) el.setAttribute('title', pill.title);
@@ -147,9 +150,10 @@
   // ─── Passive capture ────────────────────────────────────────────────
   function recordUser(u, now = Date.now()) {
     const cur = state.users[u.handle];
-    const before = JSON.stringify({ f: cur?.f, b: cur?.b, fc: cur?.fc, fd: cur?.fd });
+    const before = JSON.stringify({ id: cur?.id, f: cur?.f, b: cur?.b, fc: cur?.fc, fd: cur?.fd });
     const { rec, events } = L.mergeUser(cur, u, now);
-    const after = JSON.stringify({ f: rec.f, b: rec.b, fc: rec.fc, fd: rec.fd });
+    if (u.id) rec.id = String(u.id);
+    const after = JSON.stringify({ id: rec.id, f: rec.f, b: rec.b, fc: rec.fc, fd: rec.fd });
     if (before === after && !events.length) return false;
     state.users[u.handle] = rec;
     for (const e of events) pushEvent(u.handle, rec.n || u.name, e.type, e.ts, rec);
@@ -183,12 +187,59 @@
     for (const u of users) {
       if (recordUser(u, now)) changed = true;
     }
+    queueRelationshipLookup(users);
     if (users.length) dbg('ingest from', url.slice(0, 80), '→', users.length, 'users, sample:', users.slice(0, 2).map(u => `${u.handle}(f=${u.f},b=${u.b})`).join(', '));
     if (changed) {
       L.evictUsers(state.users, USERS_CAP);
       schedulePersist();
       scheduleEmit();
     }
+  }
+
+  function queueRelationshipLookup(users) {
+    for (const u of users || []) {
+      const h = L.normalizeHandle(u?.handle);
+      const id = u?.id || state.users[h]?.id;
+      if (h && id && (state.users[h]?.f == null || state.users[h]?.b == null)) {
+        relationshipLookupPending.set(h, String(id));
+      }
+    }
+    if (!relationshipLookupPending.size) return;
+    const entries = [...relationshipLookupPending.entries()].slice(0, RELATIONSHIP_LOOKUP_BATCH);
+    entries.forEach(([h]) => relationshipLookupPending.delete(h));
+    lookupRelationships(entries).catch(() => {});
+  }
+
+  async function lookupRelationships(entries) {
+    const auth = window.__xvmNet?.getBearer?.();
+    if (!auth || !entries.length) return;
+    const url = new URL('/i/api/1.1/friendships/lookup.json', location.origin);
+    url.searchParams.set('user_id', entries.map(([, id]) => id).join(','));
+    const res = await fetch(url.toString(), {
+      credentials: 'include',
+      headers: {
+        authorization: auth,
+        'x-csrf-token': getCsrf(),
+        'x-twitter-active-user': 'yes',
+        'x-twitter-auth-type': 'OAuth2Session',
+      },
+    });
+    if (!res.ok) return;
+    const rows = await res.json();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const h = L.normalizeHandle(row?.screen_name);
+      if (!h) continue;
+      const connections = Array.isArray(row.connections) ? row.connections : [];
+      const normalizedConnections = connections.map((c) => String(c).toLowerCase());
+      recordUser({ handle: h, f: normalizedConnections.includes('following') ? 1 : 0, b: normalizedConnections.includes('followed_by') ? 1 : 0 });
+    }
+    if (relationshipLookupPending.size) {
+      const next = [...relationshipLookupPending.entries()].slice(0, RELATIONSHIP_LOOKUP_BATCH);
+      next.forEach(([h]) => relationshipLookupPending.delete(h));
+      lookupRelationships(next).catch(() => {});
+    }
+    schedulePersist();
+    scheduleEmit();
   }
 
   function subscribe() {
@@ -263,11 +314,23 @@
   // Inject / refresh a pill next to the username row of a tweet (mirrors the
   // x互关雷达 placement the user wants). We inject into the User-Name row.
   function ensureTimelinePill(article, handle) {
-    const caret = [...article.querySelectorAll('[data-testid="caret"]')]
+    const caret = [...article.querySelectorAll('[data-testid="caret"], button[aria-label*="More"], button[aria-label*="更多"], button[title*="More"], button[title*="更多"]')]
       .find((node) => node.closest('article[data-testid="tweet"]') === article);
-    const actionRow = caret?.parentElement;
     const nameRow = article.querySelector('[data-testid="User-Name"]');
-    const host = actionRow || nameRow;
+    let host = null;
+    if (caret && nameRow) {
+      let node = caret.parentElement;
+      while (node && node !== article) {
+        const style = getComputedStyle(node);
+        if (style.display === 'flex' && style.flexDirection === 'row'
+          && node.contains(nameRow) && node.contains(caret)) {
+          host = node;
+          break;
+        }
+        node = node.parentElement;
+      }
+    }
+    host ||= caret?.parentElement || nameRow;
     if (!host) return false;
     let pill = article.querySelector('.xvm-fr-pill');
     if (!pill) {
@@ -278,7 +341,9 @@
     // version may have inserted it beside the username row. If X is still
     // mounting the caret, leave an existing pill where it is until the next
     // pass instead of moving it back to the username row.
-    if (actionRow && pill.parentElement !== host) host.insertBefore(pill, caret);
+    let anchor = caret;
+    while (anchor?.parentElement && anchor.parentElement !== host) anchor = anchor.parentElement;
+    if (caret && anchor?.parentElement === host && pill.parentElement !== host) host.insertBefore(pill, anchor);
     else if (!pill.parentElement) host.appendChild(pill);
     pill.setAttribute('data-xvm-fr-handle', handle);
     const data = pillFor(handle, 'timeline');
@@ -525,7 +590,7 @@
           }, tpl.features);
           ingest(json, '');
           scanControl.count++;
-        } catch (_) { /* per-handle failures are tolerated */ }
+        } catch (err) { dbg('refresh failed', h, String(err?.message || err)); }
         await sleep(TARGETED_PACING_MS);
       }
       if (!options.automatic) {
@@ -671,6 +736,10 @@
         userCount: Object.keys(state.users).length,
         timelineArticles: articles.length,
         matchingArticles: onScreen.length,
+        settings: { ...settings },
+        pendingRefresh: [...timelineRefreshPending],
+        pendingRelationshipLookup: [...relationshipLookupPending.keys()],
+        ready: loaded,
       };
     },
   };
