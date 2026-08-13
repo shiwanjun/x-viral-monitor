@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { extensionId: '', connected: false, kind: 'all', folderId: '', tagId: '', search: '', media: '', from: 0, to: 0, cursor: null, cursorStack: [], rows: [], selected: new Set(), counts: {}, tags: [], folders: [], quota: { used: 0, limit: 1000, locked: 0 }, sync: {}, view: 'table' };
+  const state = { extensionId: '', connected: false, siteSession: null, extensionStatus: null, kind: 'all', folderId: '', tagId: '', search: '', media: '', from: 0, to: 0, cursor: null, cursorStack: [], rows: [], selected: new Set(), counts: {}, tags: [], folders: [], quota: { used: 0, limit: 1000, locked: 0 }, sync: {}, view: 'table' };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
@@ -20,12 +20,30 @@
   function banner(mode, title, copy, action = '重试') { const el = $('#connection-banner'); el.className = `banner ${mode}`; el.querySelector('strong').textContent = title; el.querySelector('small').textContent = copy; $('#banner-action').textContent = action; }
   function errorText(code) { return ({ unauthorized: '请先登录 X-Tools', membership_required: '此功能需要 Pro 会员', account_mismatch: '检测到 X 账号切换，请切回已绑定账号', quota_exceeded: '已达到当前会员额度', rate_limited: 'X 暂时限流，已自动暂停', cursor_conflict: '云端游标冲突，请重新拉取', x_tab_required: '请先打开一个 X 页面', missing_query_template: '请先访问对应的 X 页面，让扩展发现查询模板' })[code] || code || '操作失败'; }
 
+  function initials(user) { const value = String(user?.name || user?.email || 'XT').trim(); return [...value].slice(0, 2).join('').toUpperCase(); }
+  function renderAccount() {
+    const user = state.siteSession?.user || null; const extension = state.extensionStatus;
+    const isPro = Boolean(extension?.isPro); const signedIn = Boolean(user);
+    $('#account-name').textContent = signedIn ? (user.name || 'X-Tools 用户') : '未登录 X-Tools';
+    $('#account-email').textContent = signedIn ? (user.email || '官网账号已登录') : '登录后同步会员与标签';
+    $('#account-tier').textContent = signedIn ? `${isPro ? 'PRO · 100K' : 'FREE · 1K'}${extension?.signedIn ? ' · 扩展已连接' : ' · 扩展待同步'}` : 'FREE · 本地模式';
+    $('#account-avatar').textContent = initials(user); $('#account-avatar').style.backgroundImage = user?.image ? `url(${JSON.stringify(user.image).slice(1, -1)})` : '';
+    $('#account-action').textContent = signedIn ? '退出' : '登录';
+    $('#auth-button').classList.toggle('is-authenticated', signedIn); $('#auth-button b').textContent = signedIn ? (isPro ? 'Pro 会员' : '已登录') : '登录';
+  }
+  async function refreshSiteSession() { try { const response = await fetch('/api/auth/get-session', { credentials: 'include', headers: { Accept: 'application/json' } }); state.siteSession = response.ok ? await response.json() : null; } catch (_) { state.siteSession = null; } renderAccount(); }
+  async function startSignIn() {
+    if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') { toast('本地预览不共享线上登录 Cookie，请在官网 /workspace 登录'); return; }
+    try { const response = await fetch('/api/auth/sign-in/social', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ provider: 'google', callbackURL: location.href }) }); const data = await response.json(); const url = data?.url || data?.redirectURL || data?.redirect; if (!response.ok || !url) throw new Error(); location.assign(url); } catch (_) { toast('暂时无法开始登录，请稍后重试'); }
+  }
+  async function handleAccountAction() { if (!state.siteSession?.user) return startSignIn(); await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' }).catch(() => null); if (state.extensionId) await externalMessage(state.extensionId, { type: 'XVM_WEBSITE_AUTH_SIGN_OUT' }); state.siteSession = null; renderAccount(); toast('已退出登录'); }
+
   async function refreshStatus() {
     const result = await send({ type: 'XVM_LIBRARY_STATUS' });
     if (!result.ok) { banner('error', '扩展未连接', '请安装或重新加载最新版 X-Tools，然后刷新此页面。', '重新检测'); renderEmpty(true); return; }
-    state.counts = result.counts || {}; state.tags = result.tags || []; state.folders = result.folders || []; state.quota = result.quota || state.quota; state.sync = result.sync || {};
+    state.extensionStatus = result; state.counts = result.counts || {}; state.tags = result.tags || []; state.folders = result.folders || []; state.quota = result.quota || state.quota; state.sync = result.sync || {};
     banner(result.sync?.status === 'rate_limited' ? 'error' : 'ok', result.sync?.status === 'running' ? '正在同步' : '扩展已连接', result.sync?.status === 'rate_limited' ? 'X 已限流，扩展将指数退避后继续。' : `本地数据库可用 · ${result.account?.accountId ? `已绑定 X ID ${result.account.accountId}` : '等待绑定 X 账号'}`, result.sync?.status === 'running' ? '暂停' : '刷新');
-    $('#account-name').textContent = result.account?.accountId ? `X · ${result.account.accountId}` : '等待 X 账号'; $('#account-tier').textContent = result.isPro ? 'Pro · 100K' : 'Free · 1K';
+    renderAccount();
     $('#cloud-state').textContent = result.cloudBackup ? (result.readOnly ? '只读保留' : '已开启') : '未开启'; $('#cloud-toggle').textContent = result.cloudBackup ? '管理' : '开启';
     $('#last-sync').textContent = result.sync?.lastSyncedAt ? `最近 ${date(result.sync.lastSyncedAt)}` : '尚未同步'; renderFacets(); renderQuota(); await query(true);
   }
@@ -84,10 +102,11 @@
   $('#media-filter').onchange = (event) => { state.media = event.target.value; query(true); }; $('#date-from').onchange = (event) => { state.from = event.target.value ? new Date(`${event.target.value}T00:00:00`).getTime() : 0; query(true); }; $('#date-to').onchange = (event) => { state.to = event.target.value ? new Date(`${event.target.value}T23:59:59`).getTime() : 0; query(true); };
   $('#clear-filters').onclick = () => { state.media = ''; state.from = 0; state.to = 0; $('#media-filter').value = ''; $('#date-from').value = ''; $('#date-to').value = ''; query(true); };
   $('#sync').onclick = () => sync('incremental'); $('#empty-sync').onclick = () => sync('incremental'); $('#full-sync').onclick = () => sync('full'); $('#banner-action').onclick = () => state.sync.status === 'running' ? send({ type: 'XVM_LIBRARY_SYNC_PAUSE' }).then(refreshStatus) : refreshStatus();
-  $('#add-tag').onclick = () => createFacet('tag'); $('#add-folder').onclick = () => createFacet('folder'); $('#export').onclick = exportRows; $('#settings').onclick = () => location.href = '/#pricing';
+  $('#add-tag').onclick = () => createFacet('tag'); $('#add-folder').onclick = () => createFacet('folder'); $('#export').onclick = exportRows;
+  $('#account-action').onclick = handleAccountAction; $('#auth-button').onclick = handleAccountAction;
   $('#ai-classify').onclick = aiClassify;
   $('#cloud-toggle').onclick = () => openDialog({ eyebrow: 'PRO · 隐私授权', title: '开启云备份', copy: '将上传标准化元数据、标签、文件夹和删除状态；不会上传 X Cookie、Bearer、原始 GraphQL 响应、AI Key 或媒体文件。', body: '<label><input id="cloud-consent" type="checkbox"> 我理解并授权云端备份</label>', confirm: '授权并开启', onConfirm: async () => { if (!$('#cloud-consent').checked) { toast('请先确认授权'); return; } const result = await send({ type: 'XVM_LIBRARY_MUTATE', payload: { action: 'set_cloud_backup', enabled: true } }); toast(result.ok ? '云备份已开启并开始同步' : errorText(result.error)); if (result.ok) refreshStatus(); } });
   $('#save-filter').onclick = () => toast('保存智能筛选需要 Pro 会员'); $('#more').onclick = () => toast('本地归档默认保留 30 天');
   $('#next').onclick = () => { if (!state.nextCursor) return; state.cursorStack.push(state.cursor); state.cursor = state.nextCursor; query(); }; $('#prev').onclick = () => { state.cursor = state.cursorStack.pop() ?? null; query(); };
-  refreshStatus();
+  Promise.allSettled([refreshSiteSession(), refreshStatus()]);
 })();

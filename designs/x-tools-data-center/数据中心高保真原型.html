@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>X-Tools 数据中心</title>
   <meta name="description" content="统一管理 X 书签、点赞、原创推文与回复。">
-  <link rel="stylesheet" href="workspace.css">
+  <link rel="stylesheet" href="workspace.css?v=4">
 </head>
 <body>
   <div class="shell">
@@ -25,7 +25,11 @@
       <div id="folders" class="facet-list"><button class="facet active" data-folder=""><i></i>全部文件夹</button></div>
       <div class="facet-head"><p class="nav-title">标签</p><button id="add-tag" title="新建标签">＋</button></div>
       <div id="tags" class="facet-list"></div>
-      <div class="account"><div class="avatar">XT</div><div><strong id="account-name">等待扩展</strong><small id="account-tier">本地数据</small></div><button id="settings" aria-label="设置">•••</button></div>
+      <div class="account" id="account-panel">
+        <div class="avatar" id="account-avatar">XT</div>
+        <div class="account-copy"><strong id="account-name">未登录</strong><small id="account-email">登录后同步会员与标签</small><span id="account-tier">FREE · 本地模式</span></div>
+        <button id="account-action" class="account-action" type="button">登录</button>
+      </div>
     </aside>
 
     <main>
@@ -33,6 +37,7 @@
         <div><p class="eyebrow">X-TOOLS / LIBRARY</p><h1 id="page-title">全部内容</h1></div>
         <label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索正文、作者或文件夹…"></label>
         <button class="icon-button" id="filter-toggle" aria-label="高级筛选">☷</button>
+        <button class="auth-button" id="auth-button" type="button"><span class="auth-dot"></span><b>登录</b></button>
         <button class="sync-button" id="sync"><span>↻</span><b>增量同步</b></button>
       </header>
 
@@ -73,6 +78,6 @@
 
   <dialog id="dialog"><form method="dialog"><button class="dialog-close" value="cancel">×</button><p class="eyebrow" id="dialog-eyebrow">X-TOOLS</p><h2 id="dialog-title">操作</h2><p id="dialog-copy"></p><div id="dialog-body"></div><menu><button value="cancel">取消</button><button id="dialog-confirm" value="default">确认</button></menu></form></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="workspace.js" defer></script>
+  <script src="workspace.js?v=4" defer></script>
 </body>
 </html>
