@@ -1351,7 +1351,32 @@ window.addEventListener('message', (event) => {
 
   if (type === 'XVM_FOLLOW_RADAR_SAVE' && event.data && typeof event.data.data === 'object') {
     safeChromeCall(() => {
-      chrome.storage.local.set({ followRadarV1: event.data.data });
+      // 多个 X 标签页会同时维护可见用户。整包覆盖会让关系数量随着最后
+      // 写入的标签页在 0、几百、几千之间跳变；改为按 handle 增量合并。
+      chrome.storage.local.get({ followRadarV1: null }, (items) => {
+        const previous = items.followRadarV1 || {};
+        const incoming = event.data.data || {};
+        const users = { ...(previous.users || {}) };
+        Object.entries(incoming.users || {}).forEach(([handle, record]) => {
+          const old = users[handle] || {};
+          const newer = Number(record?.t || 0) >= Number(old?.t || 0);
+          users[handle] = newer
+            ? { ...old, ...Object.fromEntries(Object.entries(record || {}).filter(([, value]) => value !== undefined)) }
+            : { ...record, ...old };
+        });
+        const events = new Map();
+        [...(previous.events || []), ...(incoming.events || [])].forEach((item) => {
+          const id = item?.id || `${item?.type}:${item?.h}:${item?.ts}`;
+          if (id) events.set(id, item);
+        });
+        const next = {
+          users,
+          snap: Number(incoming.snap?.ts || 0) >= Number(previous.snap?.ts || 0) ? (incoming.snap || previous.snap || null) : previous.snap,
+          events: [...events.values()].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-1000),
+          meta: { ...(previous.meta || {}), ...(incoming.meta || {}) },
+        };
+        chrome.storage.local.set({ followRadarV1: next });
+      });
     });
     return;
   }

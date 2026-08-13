@@ -28,7 +28,8 @@ function makeFakeResponse(url) {
 function loadHook() {
   const fetchCalls = [];
   const fakeWindow = {
-    fetch: async (url) => {
+    fetch: async function (url) {
+      if (this !== fakeWindow) throw new TypeError('Illegal invocation');
       fetchCalls.push(url);
       return makeFakeResponse(url);
     },
@@ -71,6 +72,11 @@ function loadHook() {
 }
 
 describe('x-net-hook response replay buffer', () => {
+  it('导出的 originalFetch 已绑定 Window，不会触发 Illegal invocation', async () => {
+    const { net, fetchCalls } = loadHook();
+    await net.originalFetch('https://x.com/i/api/graphql/abc/Bookmarks');
+    expect(fetchCalls).toEqual(['https://x.com/i/api/graphql/abc/Bookmarks']);
+  });
   it('replays a recent matching response to a late onResponse subscriber', async () => {
     const { net, win } = loadHook();
     const URL = 'https://x.com/i/api/graphql/abc/HomeTimeline?variables=...';

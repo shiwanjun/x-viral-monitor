@@ -9,6 +9,7 @@ describe('数据中心公共契约', () => {
     expect(manifest.permissions).toContain('unlimitedStorage');
     expect(manifest.content_scripts[0].js).toContain('lib/library-bridge.js');
     expect(manifest.content_scripts[1].js).toContain('lib/library-capture.js');
+    expect(manifest.content_scripts[1].js.indexOf('lib/library-normalize.js')).toBeLessThan(manifest.content_scripts[1].js.indexOf('lib/library-capture.js'));
     expect(manifest.options_ui).toBeUndefined();
   });
 
@@ -29,6 +30,9 @@ describe('数据中心公共契约', () => {
     expect(capture).toContain('window.__xvmGrok.generate');
     expect(read('../lib/library-bridge.js')).toContain('XVM_LIBRARY_AI_COMMAND');
     expect(read('../background.js')).toContain('templates: selectedTemplates');
+    expect(read('../background.js')).toContain('runBackgroundLibrarySync');
+    expect(read('../background.js')).toContain('COMMUNITY_X_CONFIG_URL');
+    expect(read('../lib/library-bridge.js')).toContain('XVM_LIBRARY_AUTH');
     expect(read('../background.js')).toContain("throw new Error('missing_query_template')");
   });
 

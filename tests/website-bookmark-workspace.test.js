@@ -28,4 +28,10 @@ describe('官网统一数据中心', () => {
     expect(workspace).toContain('不上传 Cookie 或媒体文件');
     expect(script).toContain('不会上传 X Cookie、Bearer、原始 GraphQL 响应、AI Key 或媒体文件');
   });
+
+  it('增量同步由扩展后台执行且无需保持 X 页面打开', () => {
+    expect(background).toContain('runBackgroundLibrarySync');
+    expect(background).toContain('LIBRARY_AUTH_KEY');
+    expect(script).toContain('同步已开始，可关闭 X 页面');
+  });
 });

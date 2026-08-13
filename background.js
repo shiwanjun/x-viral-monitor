@@ -1,4 +1,4 @@
-if (typeof importScripts === 'function') importScripts('lib/library-db.js');
+if (typeof importScripts === 'function') importScripts('lib/library-db.js', 'lib/library-normalize.js');
 
 const PLACEHOLDER = '[推文内容]';
 const DEFAULT_PROVIDER = 'x-grok';
@@ -85,17 +85,112 @@ const LIBRARY_BINDING_KEY = 'xvm_library_bound_account_v1';
 const LIBRARY_SYNC_KEY = 'xvm_library_sync_status_v1';
 const LIBRARY_MIGRATED_KEY = 'xvm_library_bookmarks_migrated_v1';
 const LIBRARY_DEVICE_KEY = 'xvm_library_device_id_v1';
+const LIBRARY_AUTH_KEY = 'xvm_library_x_auth_v1';
+const COMMUNITY_X_CONFIG_URL = 'https://raw.githubusercontent.com/fa0311/twitter-openapi/refs/heads/main/src/config/placeholder.json';
 const pendingLibraryActions = new Map();
 const pendingLibraryAi = new Map();
 
 async function storedLibraryTemplates({ resume = false } = {}) {
-  const keys = ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies', 'DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'].map((operation) => `xvm_library_template_${operation}`);
+  const keys = ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies', 'Following', 'Followers', 'DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'].map((operation) => `xvm_library_template_${operation}`);
   const values = await chrome.storage.local.get(keys);
   const context = await libraryContext();
   return keys.map((key) => values?.[key]).filter((template) => template?.operation && template?.queryId && template?.baseUrl).map((template) => {
     const progress = context.sync?.operations?.[template.operation] || {};
     return { ...template, highWaterId: progress.highWaterId || '', resumeCursor: resume ? progress.cursor || '' : '' };
   });
+}
+
+async function refreshCommunityLibraryTemplates(accountId) {
+  const response = await fetch(COMMUNITY_X_CONFIG_URL, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`template_http_${response.status}`);
+  const config = await response.json();
+  const operations = ['Bookmarks', 'Likes', 'UserTweets', 'UserTweetsAndReplies', 'Following', 'Followers'];
+  const stored = {};
+  for (const operation of operations) {
+    const item = config?.[operation];
+    if (!item?.queryId) continue;
+    const variables = { ...(item.variables || {}) };
+    if (operation.startsWith('UserTweets') || ['Likes', 'Following', 'Followers'].includes(operation)) variables.userId = String(accountId);
+    stored[`xvm_library_template_${operation}`] = {
+      operation,
+      queryId: item.queryId,
+      baseUrl: `https://x.com/i/api/graphql/${item.queryId}/${operation}`,
+      variables,
+      params: {
+        ...(item.features ? { features: JSON.stringify(item.features) } : {}),
+        ...(item.fieldToggles ? { fieldToggles: JSON.stringify(item.fieldToggles) } : {}),
+      },
+      method: 'GET',
+      capturedAt: Date.now(),
+      source: 'community-config',
+    };
+  }
+  await chrome.storage.local.set(stored);
+  return Object.values(stored);
+}
+
+function buildBackgroundReplay(template, cursor, auth) {
+  const variables = { ...(template.variables || {}), count: Math.min(100, Number(template.variables?.count || 100)) };
+  if (cursor) variables.cursor = cursor; else delete variables.cursor;
+  const url = new URL(template.baseUrl);
+  url.searchParams.set('variables', JSON.stringify(variables));
+  Object.entries(template.params || {}).forEach(([key, value]) => { if (value) url.searchParams.set(key, value); });
+  return {
+    url: url.href,
+    init: {
+      method: 'GET', credentials: 'include',
+      headers: {
+        authorization: auth.authorization,
+        'x-csrf-token': auth.csrfToken,
+        'x-twitter-active-user': 'yes',
+        'x-twitter-auth-type': 'OAuth2Session',
+      },
+    },
+  };
+}
+
+async function runBackgroundLibrarySync(selectedTemplates, { mode, accountId, auth, context }) {
+  const deviceId = await ensureDeviceId();
+  const operationStates = { ...(context.sync?.operations || {}) };
+  let accepted = 0;
+  for (const template of selectedTemplates) {
+    const progress = operationStates[template.operation] || {};
+    const maxPages = mode === 'full' ? 2000 : 5;
+    const highWaterId = mode === 'incremental' ? String(progress.highWaterId || '') : '';
+    let cursor = mode === 'full' ? String(progress.cursor || '') : '';
+    let pages = 0;
+    let captured = 0;
+    let backoff = 2500;
+    while (pages < maxPages) {
+      const request = buildBackgroundReplay(template, cursor, auth);
+      const response = await fetch(request.url, request.init);
+      if (response.status === 429) {
+        const sync = { ...(await libraryContext()).sync, status: 'rate_limited', updatedAt: Date.now(), retryMs: backoff };
+        await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+        backoff = Math.min(60_000, backoff * 2);
+        continue;
+      }
+      if (!response.ok) throw new Error(`x_http_${response.status}`);
+      const json = await response.json();
+      const records = XvmLibraryNormalize.findTweets(json)
+        .map((tweet) => XvmLibraryNormalize.normalizeTweet(tweet, XvmLibraryNormalize.kindForOperation(template.operation), accountId))
+        .filter(Boolean).map((record) => ({ ...record, accountId, deviceId }));
+      const reachedHighWater = Boolean(highWaterId && records.some((record) => record.post.id === highWaterId));
+      const result = await XvmLibraryDb.putCaptures(records);
+      accepted += result.accepted || 0; captured += records.length; pages += 1;
+      cursor = XvmLibraryNormalize.cursorFrom(json);
+      operationStates[template.operation] = {
+        status: cursor && !reachedHighWater ? 'running' : 'done', pages, captured, cursor,
+        highWaterId: pages === 1 ? (records[0]?.post?.id || highWaterId) : highWaterId,
+        reachedHighWater, updatedAt: Date.now(),
+      };
+      await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...(await libraryContext()).sync, status: 'running', mode, operations: operationStates, updatedAt: Date.now() } });
+      if (!cursor || !records.length || reachedHighWater) break;
+      await new Promise((resolve) => setTimeout(resolve, 2600));
+    }
+  }
+  return { accepted, operations: operationStates };
 }
 
 async function availableLibraryOperations() {
@@ -185,6 +280,50 @@ async function relationshipStatus() {
     result[key] = (result[key] || 0) + 1; return result;
   }, { mutual: 0, mine: 0, theirs: 0, unfollowed: 0, none: 0 });
   return { ok: true, users, events, counts, cloudSync: Boolean(values?.followRadarCloudSync), meta: radar.meta || {} };
+}
+
+async function runBackgroundRelationshipScan(kinds = ['following', 'followers']) {
+  const context = await libraryContext();
+  const accountId = context.boundAccount?.accountId;
+  if (!accountId) throw new Error('x_account_required');
+  const [values, sessionValues] = await Promise.all([
+    chrome.storage.local.get('followRadarV1'),
+    chrome.storage.session.get(LIBRARY_AUTH_KEY),
+  ]);
+  const auth = sessionValues?.[LIBRARY_AUTH_KEY];
+  if (!auth?.authorization || !auth?.csrfToken || auth.accountId !== accountId) throw new Error('x_auth_required');
+  await refreshCommunityLibraryTemplates(accountId);
+  const templates = await storedLibraryTemplates();
+  const radar = values.followRadarV1 || { users: {}, events: [], meta: {} };
+  const users = { ...(radar.users || {}) };
+  const snapshot = { following: {}, followers: {}, ts: Date.now() };
+  for (const kind of kinds) {
+    const operation = kind === 'following' ? 'Following' : 'Followers';
+    const template = templates.find((item) => item.operation === operation);
+    if (!template) throw new Error('missing_query_template');
+    let cursor = ''; let pages = 0;
+    do {
+      const request = buildBackgroundReplay(template, cursor, auth);
+      const response = await fetch(request.url, request.init);
+      if (!response.ok) throw new Error(`x_http_${response.status}`);
+      const json = await response.json();
+      for (const incoming of XvmLibraryNormalize.extractUsers(json)) {
+        const old = users[incoming.handle] || {};
+        users[incoming.handle] = { ...old, ...Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== undefined && value !== '')), [kind === 'following' ? 'f' : 'b']: 1, t: Date.now() };
+        snapshot[kind][incoming.handle] = Date.now();
+      }
+      cursor = XvmLibraryNormalize.cursorFrom(json); pages += 1;
+      if (cursor) await new Promise((resolve) => setTimeout(resolve, 1000));
+    } while (cursor && pages < 2000);
+  }
+  const previousSnap = radar.snap || {};
+  const events = new Map((radar.events || []).map((event) => [event.id || `${event.type}:${event.h}:${event.ts}`, event]));
+  const now = Date.now();
+  if (kinds.includes('followers')) Object.keys(previousSnap.followers || {}).forEach((handle) => { if (!snapshot.followers[handle]) { const record = users[handle] || {}; record.u ||= now; record.b = 0; record.t = now; users[handle] = record; const item = { id: `unfollowed_me:${handle}:${now}`, h: handle, n: record.n || '', type: 'unfollowed_me', ts: now, fc: record.fc ?? null, fd: record.fd ?? null }; events.set(item.id, item); } });
+  if (kinds.includes('following')) Object.keys(previousSnap.following || {}).forEach((handle) => { if (!snapshot.following[handle]) { const record = users[handle] || {}; record.i ||= now; record.f = 0; record.t = now; users[handle] = record; const item = { id: `i_unfollowed:${handle}:${now}`, h: handle, n: record.n || '', type: 'i_unfollowed', ts: now, fc: record.fc ?? null, fd: record.fd ?? null }; events.set(item.id, item); } });
+  const mergedSnap = { following: kinds.includes('following') ? snapshot.following : (previousSnap.following || {}), followers: kinds.includes('followers') ? snapshot.followers : (previousSnap.followers || {}), ts: now };
+  await chrome.storage.local.set({ followRadarV1: { ...radar, users, snap: mergedSnap, events: [...events.values()].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-1000), meta: { ...(radar.meta || {}), backgroundScannedAt: now } } });
+  return { ok: true, users: Object.keys(users).length };
 }
 
 function radarEventId(event = {}) {
@@ -310,15 +449,40 @@ async function startLibrarySync(payload = {}) {
   const mode = payload.mode || 'incremental';
   const resume = mode === 'full' && context.sync?.mode === 'full' && ['running', 'paused', 'failed', 'rate_limited'].includes(context.sync?.status);
   const requested = Array.isArray(payload.operations) ? payload.operations : [];
-  const templates = await storedLibraryTemplates({ resume });
-  const selectedTemplates = requested.length ? templates.filter((template) => requested.includes(template.operation)) : templates;
+  let templates = await storedLibraryTemplates({ resume });
+  const boundId = context.boundAccount?.accountId;
+  if (boundId) {
+    try { await refreshCommunityLibraryTemplates(boundId); templates = await storedLibraryTemplates({ resume }); } catch (_) {}
+  }
+  let selectedTemplates = requested.length ? templates.filter((template) => requested.includes(template.operation)) : templates;
+  // BookmarkFolderTimeline 与 Bookmarks 是同一集合的两种入口；没有文件夹
+  // 模板时不应阻止书签同步。其它分类至少要有一个可执行模板。
+  selectedTemplates = selectedTemplates.filter((template, index, list) => list.findIndex((item) => item.operation === template.operation) === index);
   if (!selectedTemplates.length) throw new Error('missing_query_template');
   const next = { ...context.sync, status: 'running', mode, operations: resume ? (context.sync?.operations || {}) : {}, startedAt: Date.now(), updatedAt: Date.now(), error: null };
   try {
-    const delivered = await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: selectedTemplates.map((template) => template.operation), templates: selectedTemplates });
-    if (!delivered) throw new Error('x_tab_required');
     await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
-    return { ok: true, sync: next, operations: selectedTemplates.map((template) => template.operation) };
+    const stored = await chrome.storage.session.get(LIBRARY_AUTH_KEY);
+    const authEnvelope = stored?.[LIBRARY_AUTH_KEY];
+    const authFresh = authEnvelope?.authorization && authEnvelope?.csrfToken
+      && Date.now() - Number(authEnvelope.capturedAt || 0) < 24 * 60 * 60 * 1000;
+    if (boundId && authFresh && authEnvelope.accountId === boundId) {
+      // 在扩展 service worker 内同步；无需保持 X 标签页打开。
+      runBackgroundLibrarySync(selectedTemplates, { mode, accountId: boundId, auth: authEnvelope, context })
+        .then(async (result) => {
+          const current = await libraryContext();
+          await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...current.sync, status: 'idle', operations: result.operations, lastSyncedAt: Date.now(), updatedAt: Date.now(), error: null } });
+          if (current.sync?.cloudBackup && current.isPro) pushLibraryCloud().catch(() => {});
+        })
+        .catch(async (error) => {
+          const current = await libraryContext();
+          await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...current.sync, status: 'failed', error: String(error?.message || error), updatedAt: Date.now() } });
+        });
+      return { ok: true, background: true, sync: next, operations: selectedTemplates.map((template) => template.operation) };
+    }
+    const delivered = await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: selectedTemplates.map((template) => template.operation), templates: selectedTemplates });
+    if (!delivered) throw new Error('x_auth_required');
+    return { ok: true, background: false, sync: next, operations: selectedTemplates.map((template) => template.operation) };
   } catch (error) {
     await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...context.sync, status: 'failed', mode, error: String(error?.message || error), updatedAt: Date.now() } });
     throw error;
@@ -403,9 +567,7 @@ async function handleLibraryRequest(message) {
   }
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS') return relationshipStatus();
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SCAN') {
-    const delivered = await broadcastLibraryCommand({ type: 'XVM_FOLLOW_RADAR_SCAN_COMMAND', kinds: message.payload?.kinds || ['following', 'followers'] });
-    if (!delivered) throw new Error('x_tab_required');
-    return { ok: true };
+    return runBackgroundRelationshipScan(message.payload?.kinds || ['following', 'followers']);
   }
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SYNC') return syncRelationshipCloud();
   if (message.type === 'XVM_LIBRARY_MUTATE') return libraryMutate(message.payload || {});
@@ -848,6 +1010,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'XVM_LIBRARY_TEMPLATE') {
     chrome.storage.local.set({ [`xvm_library_template_${message.template?.operation}`]: message.template || null }, () => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message.type === 'XVM_LIBRARY_AUTH') {
+    (async () => {
+      const accountId = await ensureLibraryBinding(message.accountId);
+      const authorization = String(message.auth?.authorization || '');
+      const csrfToken = String(message.auth?.csrfToken || '');
+      if (!authorization || !csrfToken) throw new Error('x_auth_required');
+      await chrome.storage.session.set({ [LIBRARY_AUTH_KEY]: {
+        accountId, authorization, csrfToken, capturedAt: Number(message.auth?.capturedAt || Date.now()),
+      } });
+      sendResponse({ ok: true });
+    })().catch((error) => sendResponse(libraryError(error)));
     return true;
   }
   if (message.type === 'XVM_LIBRARY_PAGE_READY') {

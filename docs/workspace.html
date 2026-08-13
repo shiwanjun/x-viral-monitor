@@ -7,6 +7,7 @@
   <meta name="description" content="统一管理 X 书签、点赞、原创推文与回复。">
   <link rel="stylesheet" href="/workspace.css?v=7">
   <link rel="stylesheet" href="/workspace-insights.css?v=1">
+  <style>.relation-avatar img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}</style>
   <link rel="stylesheet" href="/workspace-controls.css?v=2">
 </head>
 <body>
@@ -72,7 +73,7 @@
         </div>
         <div id="view-gallery" class="view gallery" hidden></div>
         <div id="view-stats" class="view stats" hidden><div class="chart" id="kind-chart"></div><div class="stats-copy"><h2>内容构成</h2><p>统计仅基于当前浏览器可见额度，不上传原始响应。</p><div id="stats-legend"></div></div></div>
-        <div id="empty" class="empty" hidden><span>◫</span><h2>还没有可显示的数据</h2><p>打开 X 的书签、点赞或个人页面，扩展会自动收集；也可以点击增量同步。</p><button id="empty-sync">开始同步</button></div>
+        <div id="empty" class="empty" hidden><span>◫</span><h2>还没有可显示的数据</h2><p>首次使用请打开一次 X 完成登录绑定；之后可直接在这里后台同步。</p><button id="empty-sync">开始同步</button></div>
         <footer><span id="range">0 条</span><div><button id="prev" disabled>← 上一页</button><button id="next" disabled>下一页 →</button></div></footer>
       </section>
 
@@ -80,13 +81,13 @@
       </section>
 
       <section id="relations-screen" class="screen insight-screen" data-screen-label="关系工作台" hidden>
-        <section class="insight-hero"><div><p class="eyebrow">X-TOOLS / RELATIONSHIPS</p><h2>关注关系</h2><p>查看互关、我关注和关注我的用户，关注率为对方关注数 ÷ 粉丝数。</p></div><div class="insight-actions"><button id="relationship-cloud" class="secondary-button">云同步 <b>PRO</b></button><button class="sync-button" data-open-x="following">打开 X 扫描</button></div></section>
+        <section class="insight-hero"><div><p class="eyebrow">X-TOOLS / RELATIONSHIPS</p><h2>关注关系</h2><p>查看互关、我关注和关注我的用户，关注率为对方关注数 ÷ 粉丝数。</p></div><div class="insight-actions"><button id="relationship-cloud" class="secondary-button">云同步 <b>PRO</b></button><button class="sync-button" data-sync-section="relations">后台扫描</button></div></section>
         <section class="relation-metrics"><article><span>互相关注</span><strong id="relation-mutual">0</strong><small>双方均已关注</small></article><article><span>我关注</span><strong id="relation-mine">0</strong><small>对方未关注我</small></article><article><span>关注我</span><strong id="relation-theirs">0</strong><small>我尚未关注</small></article><article><span>历史取关</span><strong id="relation-unfollowed">0</strong><small>保留关系快照</small></article></section>
         <section class="insight-card"><div class="insight-toolbar"><label class="search"><span>⌕</span><input id="relation-search" type="search" placeholder="搜索用户名或账号"></label><div class="segmented"><button class="active" data-relation-filter="all">全部</button><button data-relation-filter="mutual">互关</button><button data-relation-filter="mine">我关注</button><button data-relation-filter="theirs">关注我</button></div></div><div id="relation-list" class="relation-list"></div></section>
       </section>
 
       <section id="unfollow-screen" class="screen insight-screen" data-screen-label="取关历史工作台" hidden>
-        <section class="insight-hero"><div><p class="eyebrow">PRO / FOLLOW HISTORY</p><h2>取关历史</h2><p>扫描在本机完成；会员可筛选完整历史并开启可选云端同步。</p></div><div class="insight-actions"><button id="relationship-sync" class="secondary-button">立即同步</button><button class="sync-button" data-open-x="followers">打开 X 扫描</button></div></section>
+        <section class="insight-hero"><div><p class="eyebrow">PRO / FOLLOW HISTORY</p><h2>取关历史</h2><p>扫描在本机完成；会员可筛选完整历史并开启可选云端同步。</p></div><div class="insight-actions"><button id="relationship-sync" class="secondary-button">立即同步</button><button class="sync-button" data-sync-section="unfollow">后台扫描</button></div></section>
         <section id="unfollow-gate" class="member-gate" hidden><span>✦ PRO</span><h2>解锁完整取关历史</h2><p>免费版继续在本机积累关系数据，升级后查看完整记录和跨设备同步。</p><a href="/#pricing">查看会员方案</a></section>
         <section id="unfollow-content" class="insight-card"><div class="insight-toolbar"><label class="search"><span>⌕</span><input id="unfollow-search" type="search" placeholder="搜索用户名或账号"></label><div class="segmented"><button class="active" data-unfollow-filter="all">全部</button><button data-unfollow-filter="unfollowed_me">TA 取关我</button><button data-unfollow-filter="i_unfollowed">我取关 TA</button></div></div><div id="unfollow-list" class="unfollow-list"></div></section>
       </section>

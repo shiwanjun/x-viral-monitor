@@ -60,6 +60,7 @@
     const events = [];
     const wasMutual = (next.f === 1 || next.f === true) && (next.b === 1 || next.b === true);
     if (u.name) next.n = u.name;
+    if (u.avatar) next.a = u.avatar;
     if (typeof u.f === 'boolean' || u.f === 0 || u.f === 1) {
       const f = u.f === 1 || u.f === true;
       if (f) {
@@ -178,6 +179,7 @@
               : (typeof node.id_str === 'string' ? node.id_str
                 : (typeof legacy.id_str === 'string' ? legacy.id_str : undefined)),
             name: core?.name || legacy.name || '',
+            avatar: node?.avatar?.image_url || legacy?.profile_image_url_https || '',
             f: typeof fFinal === 'boolean' ? (fFinal ? 1 : 0) : undefined,
             b: typeof bFinal === 'boolean' ? (bFinal ? 1 : 0) : undefined,
             // Some timeline payloads no longer include public counts.  They

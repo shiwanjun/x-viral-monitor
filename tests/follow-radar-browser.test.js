@@ -8,6 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '..');
 const logicSrc = readFileSync(resolve(repo, 'src/follow-radar/logic.js'), 'utf8');
 const radarSrc = readFileSync(resolve(repo, 'src/follow-radar/radar.js'), 'utf8');
+const stylesSrc = readFileSync(resolve(repo, 'styles.css'), 'utf8');
 
 describe('关注雷达浏览器回归', () => {
   let browser;
@@ -113,7 +114,7 @@ describe('关注雷达浏览器回归', () => {
     await page.addScriptTag({ content: logicSrc });
     await page.addScriptTag({ content: radarSrc });
 
-    await page.waitForFunction(() => document.querySelector('.xvm-fr-user-pill')?.textContent === '我关注了 0.25');
+    await page.waitForFunction(() => document.querySelector('.xvm-fr-user-pill .xvm-fr-pill-label')?.textContent === '我关注了 0.25');
     await page.waitForTimeout(1300);
     expect(lookupRequests).toBe(1);
     await page.close();
@@ -124,7 +125,7 @@ describe('关注雷达浏览器回归', () => {
     await page.setContent('<div data-testid="UserCell"><a role="link" href="/alice">Alice</a><span class="other-extension">互关 0.53</span><button>正在关注</button></div>');
     await page.addScriptTag({ content: logicSrc });
     await page.addScriptTag({ content: radarSrc });
-    await page.waitForFunction(() => document.querySelector('.xvm-fr-user-pill')?.textContent === '我关注了 0.53');
+    await page.waitForFunction(() => document.querySelector('.xvm-fr-user-pill .xvm-fr-pill-label')?.textContent === '我关注了 0.53');
     expect(await page.locator('.xvm-fr-user-pill').count()).toBe(1);
     await page.close();
   });
@@ -143,7 +144,7 @@ describe('关注雷达浏览器回归', () => {
     await page.addScriptTag({ content: radarSrc });
     await page.waitForTimeout(800);
 
-    expect(await page.locator('.xvm-fr-pill').innerText()).toContain('—');
+    expect(await page.locator('.xvm-fr-pill-label').innerText()).toContain('—');
     await page.evaluate(() => {
       window.__xvmFollowRadar.ingestProfileRow({
         data: { user: { result: {
@@ -155,7 +156,101 @@ describe('关注雷达浏览器回归', () => {
     });
     await page.waitForTimeout(800);
 
-    expect(await page.locator('.xvm-fr-pill').innerText()).toBe('互关 0.25');
+    expect(await page.locator('.xvm-fr-pill-label').innerText()).toBe('互关 0.25');
+    await page.close();
+  });
+
+  it('关系接口缺少计数时不会误判完成，并会继续查询资料计数', async () => {
+    const page = await browser.newPage();
+    let lookupRequests = 0;
+    let showRequests = 0;
+    await page.route('https://x.com/**', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === '/i/api/1.1/users/lookup.json') {
+        lookupRequests++;
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify([{ screen_name: 'alice', following: false, followed_by: true }]) });
+        return;
+      }
+      if (url.pathname === '/i/api/1.1/users/show.json') {
+        showRequests++;
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ screen_name: 'alice', followers_count: 200, friends_count: 50, following: false, followed_by: true }) });
+        return;
+      }
+      await route.fulfill({ contentType: 'text/html', body: '<article data-testid="tweet"><div style="display:flex"><div data-testid="User-Name"><a role="link" href="/alice"><span>Alice</span><span>@alice</span></a></div><button data-testid="caret">...</button></div></article>' });
+    });
+    await page.goto('https://x.com/test');
+    await page.addScriptTag({ content: logicSrc });
+    await page.addScriptTag({ content: radarSrc });
+    await page.waitForFunction(() => document.querySelector('.xvm-fr-pill-label')?.textContent === '关注我 0.25');
+    expect(lookupRequests).toBe(1);
+    expect(showRequests).toBe(1);
+    await page.close();
+  });
+
+  it('REST 资料接口不可用时使用当前 UserByScreenName 模板补齐关注率', async () => {
+    const page = await browser.newPage();
+    let graphRequests = 0;
+    await page.route('https://x.com/**', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.includes('/i/api/1.1/users/')) {
+        await route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+        return;
+      }
+      if (url.pathname === '/i/api/graphql/IGgvgiOx4QZndDHuD3x9TQ/UserByScreenName') {
+        graphRequests++;
+        expect(url.searchParams.get('fieldToggles')).toContain('withAuxiliaryUserLabels');
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { user: { result: {
+          rest_id: '1', core: { screen_name: 'alice', name: 'Alice' },
+          legacy: { followers_count: 400, friends_count: 100, following: false, followed_by: false },
+        } } } }) });
+        return;
+      }
+      await route.fulfill({ contentType: 'text/html', body: '<article data-testid="tweet"><div style="display:flex"><div data-testid="User-Name"><a role="link" href="/alice"><span>Alice</span><span>@alice</span></a></div><button data-testid="caret">...</button></div></article>' });
+    });
+    await page.goto('https://x.com/test');
+    await page.addScriptTag({ content: logicSrc });
+    await page.addScriptTag({ content: radarSrc });
+    await page.waitForFunction(() => document.querySelector('.xvm-fr-pill-label')?.textContent === '关注率 0.25');
+    expect(graphRequests).toBe(1);
+    await page.close();
+  });
+
+  it('时间线胶囊固定在三点菜单之后且悬浮显示账号详情', async () => {
+    const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
+    await page.setContent(`
+      <article data-testid="tweet">
+        <div class="header" style="display:flex;align-items:center;width:620px">
+          <div data-testid="User-Name" style="flex:1"><a role="link" href="/alice"><span>Alice</span><span>@alice</span></a></div>
+          <button data-testid="caret" aria-label="更多">...</button>
+        </div>
+      </article>`);
+    await page.addScriptTag({ content: logicSrc });
+    await page.addScriptTag({ content: radarSrc });
+    await page.addStyleTag({ content: stylesSrc });
+    await page.waitForTimeout(800);
+    await page.evaluate(() => window.__xvmFollowRadar.ingestProfileRow({ screen_name: 'alice', followers_count: 200, friends_count: 50, followed_by: true }, 'alice'));
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
+      for (let index = 0; index < 5; index += 1) window.__xvmFollowRadar.applyToTimeline();
+    });
+    const layout = await page.locator('article').evaluate((article) => {
+      const pill = article.querySelector('.xvm-fr-pill'); const caret = article.querySelector('[data-testid="caret"]');
+      return {
+        afterCaret: caret.nextElementSibling === pill,
+        pillRight: pill.getBoundingClientRect().right,
+        caretRight: caret.getBoundingClientRect().right,
+        pillCount: article.querySelectorAll('.xvm-fr-pill').length,
+      };
+    });
+    expect(layout.afterCaret).toBe(true);
+    expect(layout.pillRight).toBeGreaterThan(layout.caretRight);
+    expect(layout.pillCount).toBe(1);
+    await page.locator('.xvm-fr-pill').hover();
+    await page.locator('.xvm-fr-tooltip').waitFor({ state: 'visible' });
+    const tooltip = await page.locator('.xvm-fr-tooltip').innerText();
+    expect(tooltip).toContain('粉丝：200');
+    expect(tooltip).toContain('关注人数：50');
+    expect(tooltip).toContain('对当前用户取关过：否');
     await page.close();
   });
 });

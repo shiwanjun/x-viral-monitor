@@ -23,7 +23,7 @@
     state.connected = false; return { ok: false, error: 'extension_not_connected' };
   }
   function banner(mode, title, copy, action = '重试') { const el = $('#connection-banner'); el.className = `banner ${mode}`; el.querySelector('strong').textContent = title; el.querySelector('small').textContent = copy; $('#banner-action').textContent = action; }
-  function errorText(code) { return ({ unauthorized: '请先登录 X-Tools', membership_required: '此功能需要 Pro 会员', account_mismatch: '检测到 X 账号切换，请切回已绑定账号', x_account_required: '请先打开 X 并绑定当前账号', quota_exceeded: '已达到当前会员额度', rate_limited: 'X 暂时限流，已自动暂停', cursor_conflict: '云端游标冲突，请重新拉取', x_tab_required: '请先打开一个 X 页面', extension_not_connected: '扩展未连接', cloud_sync_disabled: '请先开启关系云同步', missing_query_template: '尚未发现该分类的 X 查询，请先打开对应的书签、点赞或个人页' })[code] || code || '操作失败'; }
+  function errorText(code) { return ({ unauthorized: '请先登录 X-Tools', membership_required: '此功能需要 Pro 会员', account_mismatch: '检测到 X 账号切换，请切回已绑定账号', x_account_required: '请先打开一次 X 完成账号绑定', x_auth_required: 'X 登录凭证尚未缓存，请打开一次 X 后重试', quota_exceeded: '已达到当前会员额度', rate_limited: 'X 暂时限流，已自动暂停', cursor_conflict: '云端游标冲突，请重新拉取', x_tab_required: '请先打开一个 X 页面', extension_not_connected: '扩展未连接', cloud_sync_disabled: '请先开启关系云同步', missing_query_template: '暂时无法获取该分类的 X 查询模板' })[code] || code || '操作失败'; }
   const isPro = () => state.subscription?.tier === 'pro' || Boolean(state.extensionStatus?.isPro);
 
   function initials(user) { const value = String(user?.name || user?.email || 'XT').trim(); return [...value].slice(0, 2).join('').toUpperCase(); }
@@ -62,7 +62,7 @@
     banner(result.sync?.status === 'rate_limited' || failed ? 'error' : 'ok', result.sync?.status === 'running' ? '正在同步' : failed ? '同步未完成' : '扩展已连接', result.sync?.status === 'rate_limited' ? 'X 已限流，扩展将指数退避后继续。' : failed ? errorText(result.sync?.error) : `本地数据库可用 · ${result.account?.accountId ? `已绑定 X ID ${result.account.accountId}` : '等待绑定 X 账号'}`, result.sync?.status === 'running' ? '暂停' : '刷新');
     renderAccount();
     $('#cloud-state').textContent = result.cloudBackup ? (result.readOnly ? '只读保留' : '已开启') : '未开启'; $('#cloud-toggle').textContent = result.cloudBackup ? '管理' : '开启';
-    const operations = new Set(result.availableOperations || []); $('#full-sync').disabled = !['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies'].some((operation) => operations.has(operation)); $('#full-sync').title = $('#full-sync').disabled ? '先打开 X 的书签、点赞或个人页，扩展会自动发现查询模板' : '';
+    const operations = new Set(result.availableOperations || []); $('#full-sync').disabled = !['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies'].some((operation) => operations.has(operation)); $('#full-sync').title = $('#full-sync').disabled ? '首次使用请打开一次 X 完成登录绑定' : '';
     $('#last-sync').textContent = result.sync?.lastSyncedAt ? `最近 ${date(result.sync.lastSyncedAt)}` : '尚未同步'; renderFacets(); renderQuota(); await Promise.all([query(true), refreshSavedFilters()]);
   }
 
@@ -124,7 +124,7 @@
     $('#count-relations').textContent = number((counts.mutual || 0) + (counts.mine || 0) + (counts.theirs || 0)); $('#count-unfollow').textContent = number(state.relations.events.length);
     const needle = state.relationSearch.toLocaleLowerCase();
     const users = state.relations.users.filter((user) => (state.relationFilter === 'all' || relationshipKind(user) === state.relationFilter) && (!needle || `${user.n || ''} ${user.handle}`.toLocaleLowerCase().includes(needle)));
-    $('#relation-list').innerHTML = users.length ? users.map((user) => { const kind = relationshipKind(user); return `<article class="relation-row" data-open-user="${esc(user.handle)}" tabindex="0" role="link"><div class="relation-user"><span class="relation-avatar">${esc((user.n || user.handle || 'X').slice(0, 1).toUpperCase())}</span><div><strong>${esc(user.n || user.handle)}</strong><small>@${esc(user.handle)}</small></div></div><span class="relation-pill ${kind}">${relationshipLabel(kind)}</span><span class="relation-rate">${relationshipRate(user)}</span><span class="relation-date">${date(user.t)}</span></article>`; }).join('') : '<div class="insight-empty">暂无匹配的关系数据，请先在 X 的关注或粉丝页完成扫描。</div>';
+    $('#relation-list').innerHTML = users.length ? users.map((user) => { const kind = relationshipKind(user); const avatar = user.a ? `<img src="${esc(user.a)}" alt="" loading="lazy">` : esc((user.n || user.handle || 'X').slice(0, 1).toUpperCase()); return `<article class="relation-row" data-open-user="${esc(user.handle)}" tabindex="0" role="link"><div class="relation-user"><span class="relation-avatar">${avatar}</span><div><strong>${esc(user.n || user.handle)}</strong><small>@${esc(user.handle)}</small></div></div><span class="relation-pill ${kind}">${relationshipLabel(kind)}</span><span class="relation-rate">${relationshipRate(user)}</span><span class="relation-date">${date(user.t)}</span></article>`; }).join('') : '<div class="insight-empty">暂无匹配的关系数据，点击同步即可由扩展后台扫描。</div>';
     const eventNeedle = state.unfollowSearch.toLocaleLowerCase();
     const events = state.relations.events.filter((event) => (state.unfollowFilter === 'all' || event.type === state.unfollowFilter) && (!eventNeedle || `${event.n || ''} ${event.h || ''}`.toLocaleLowerCase().includes(eventNeedle)));
     $('#unfollow-list').innerHTML = events.length ? events.map((event) => `<article class="unfollow-row" data-open-user="${esc(event.h)}" tabindex="0" role="link"><div class="relation-user"><span class="relation-avatar">${esc((event.n || event.h || 'X').slice(0, 1).toUpperCase())}</span><div><strong>${esc(event.n || event.h)}</strong><small>@${esc(event.h)}</small></div></div><span class="relation-pill unfollowed">${event.type === 'i_unfollowed' ? '我取关 TA' : 'TA 取关我'}</span><span class="relation-rate">${Number(event.fc) > 0 ? (Number(event.fd || 0) / Number(event.fc)).toFixed(2) : '—'}</span><span class="relation-date">${date(event.ts)}</span></article>`).join('') : '<div class="insight-empty">暂无取关记录。</div>';
@@ -149,7 +149,7 @@
     const button = $(`[data-sync-kind="${kind}"]`); button?.classList.add('syncing');
     const result = await send({ type: 'XVM_LIBRARY_SYNC_START', payload: { mode, operations: kindOperations[kind] || kindOperations.all } });
     button?.classList.remove('syncing');
-    toast(result.ok ? `${kindName[kind] || '当前分类'}同步已开始，请保持 X 页面打开` : errorText(result.error));
+    toast(result.ok ? `${kindName[kind] || '当前分类'}同步已开始，可关闭 X 页面` : errorText(result.error));
     await refreshStatus();
     clearSyncPoll();
     if (result.ok) {
@@ -166,7 +166,7 @@
   async function syncRelationships(section) {
     const button = $(`[data-sync-section="${section}"]`); button?.classList.add('syncing');
     const result = await send({ type: 'XVM_LIBRARY_RELATIONSHIPS_SCAN', payload: { kinds: ['following', 'followers'] } });
-    toast(result.ok ? '关注关系扫描已开始，请保持 X 页面打开' : errorText(result.error));
+    toast(result.ok ? '关注关系后台扫描完成' : errorText(result.error));
     setTimeout(async () => { button?.classList.remove('syncing'); await refreshRelationships(); }, result.ok ? 2200 : 0);
   }
 

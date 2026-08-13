@@ -18,7 +18,8 @@ describe('follow-radar logic', () => {
     it('为 UserByScreenName 提供无需先访问个人主页的备用模板', () => {
       expect(radarSrc).toContain("const FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE");
       expect(radarSrc).toContain('authorization: \'Bearer ');
-      expect(radarSrc).toMatch(/queryId:\s*'[^']+'/);
+      expect(radarSrc).toContain("queryId: 'IGgvgiOx4QZndDHuD3x9TQ'");
+      expect(radarSrc).toContain("url.searchParams.set('fieldToggles', tpl.fieldToggles)");
       expect(radarSrc).toMatch(/op === ['"]UserByScreenName['"]\s*\?\s*FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE/);
     });
 
@@ -35,9 +36,9 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('const subscribeRetry = setInterval');
     });
 
-    it('将胶囊插入推文右上角菜单前，并为取关历史增加会员门控', () => {
+    it('将胶囊固定插入推文右上角菜单后，并为取关历史增加会员门控', () => {
       expect(radarSrc).toContain("find((node) => node.closest('article[data-testid=\"tweet\"]') === article)");
-      expect(radarSrc).toContain('host.insertBefore(pill, anchor)');
+      expect(radarSrc).toContain('host.insertBefore(pill, anchor.nextSibling)');
       expect(radarSrc).toContain('style.flexDirection === \'row\'');
       expect(radarSrc).toContain('isFollowHistoryMember()');
       expect(radarSrc).toContain('el.style.display = pill ? \'\' : \'none\'');
@@ -66,7 +67,7 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain("pillFor(handle, 'profile')");
       expect(radarSrc).toContain('applyToUserCards();');
       expect(radarSrc).toContain("/i/api/1.1/users/lookup.json");
-      expect(radarSrc).toContain('host.insertBefore(pill, anchor)');
+      expect(radarSrc).toContain('positionUserCardPill(owner, actionButton, pill)');
       expect(radarSrc).toContain('lookupProfileCounts(batch)');
       expect(radarSrc).toContain('PROFILE_LOOKUP_COOLDOWN_MS');
       expect(radarSrc).toContain('profileLookupInFlight');

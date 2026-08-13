@@ -38,16 +38,24 @@
   // the current id from the loaded web bundle when the page has not requested
   // UserByScreenName yet (which is normal on the home timeline).
   const FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE = {
-    queryId: 'SAMkL5y_N9pmahSw8yy6gw',
+    queryId: 'IGgvgiOx4QZndDHuD3x9TQ',
     authorization: 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
     features: JSON.stringify({
-      responsive_web_graphql_timeline_navigation_enabled: false,
-      responsive_web_graphql_exclude_directive_enabled: true,
+      hidden_profile_subscriptions_enabled: true,
+      profile_label_improvements_pcf_label_in_post_enabled: true,
+      responsive_web_profile_redirect_enabled: false,
+      rweb_tipjar_consumption_enabled: false,
       verified_phone_label_enabled: false,
-      responsive_web_twitter_blue_verified_badge_is_enabled: true,
+      subscriptions_verification_info_is_identity_verified_enabled: true,
+      subscriptions_verification_info_verified_since_enabled: true,
+      highlights_tweets_tab_ui_enabled: true,
+      responsive_web_twitter_article_notes_tab_enabled: true,
+      subscriptions_feature_can_gift_premium: true,
+      creator_subscriptions_tweet_preview_api_enabled: true,
       responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-      withAuxiliaryUserLabels: true,
+      responsive_web_graphql_timeline_navigation_enabled: true,
     }),
+    fieldToggles: JSON.stringify({ withPayments: false, withAuxiliaryUserLabels: true }),
   };
   const TIMELINE_REFRESH_COOLDOWN_MS = 2500;
   const TIMELINE_REFRESH_BATCH = 30;
@@ -139,8 +147,8 @@
       // append another capsule every ~600 ms.
       const surfaceClass = surface === 'profile' ? ' xvm-fr-user-pill' : '';
       el.className = `xvm-fr-pill${surfaceClass} ${pill ? pill.cls : 'xvm-fr-rate'}`;
-      el.textContent = pill ? pill.label : '';
-      if (pill?.title) el.setAttribute('title', pill.title);
+      renderPillContent(el, pill, h);
+      el.removeAttribute('title');
     }
     return interactive;
   }
@@ -287,10 +295,31 @@
         const rows = await res.json();
         for (const row of Array.isArray(rows) ? rows : []) {
           const handle = L.normalizeHandle(row?.screen_name);
-          if (handle && ingestProfileRow(row, handle)) resolved.add(handle);
+          if (!handle) continue;
+          ingestProfileRow(row, handle);
+          if (profileRowHasCounts(row)) resolved.add(handle);
         }
       }
     } catch (_) {}
+
+    // users/lookup 在部分账号只返回关系字段，不能把这种响应当作计数已完成。
+    // 逐个 users/show 是更轻量的第二层兜底，成功后才进入资料查询冷却。
+    for (const handle of requested.filter((item) => !resolved.has(item))) {
+      try {
+        const url = new URL('/i/api/1.1/users/show.json', location.origin);
+        url.searchParams.set('screen_name', handle);
+        const res = await fetch(url.toString(), { credentials: 'include', headers: {
+          authorization: auth, 'x-csrf-token': getCsrf(),
+          'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
+        } });
+        if (res.ok) {
+          const row = await res.json();
+          ingestProfileRow(row, handle);
+          if (profileRowHasCounts(row)) resolved.add(handle);
+        }
+      } catch (_) {}
+      await sleep(80);
+    }
 
     // 部分账号可能被批量接口过滤（受限账号等），再以 GraphQL 单用户查询兜底。
     const template = radarTemplate('UserByScreenName');
@@ -299,9 +328,9 @@
         if (!template?.queryId || template.queryId === 'REPLACE_AT_RUNTIME') continue;
         const json = await callGraphQL('UserByScreenName', {
           screen_name: handle,
-          withSafetyModeUserFields: true,
         }, template.features);
-        if (ingestProfileRow(json, handle)) resolved.add(handle);
+        ingestProfileRow(json, handle);
+        if (profileRowHasCounts(json)) resolved.add(handle);
       } catch (_) {}
       await sleep(120);
     }
@@ -462,20 +491,20 @@
     // pass instead of moving it back to the username row.
     let anchor = caret;
     while (anchor?.parentElement && anchor.parentElement !== host) anchor = anchor.parentElement;
-    if (caret && anchor?.parentElement === host && pill.parentElement !== host) host.insertBefore(pill, anchor);
+    if (caret && anchor?.parentElement === host && (pill.parentElement !== host || anchor.nextElementSibling !== pill)) host.insertBefore(pill, anchor.nextSibling);
     else if (!pill.parentElement) host.appendChild(pill);
     pill.setAttribute('data-xvm-fr-handle', handle);
     pill.setAttribute('data-xvm-fr-surface', 'timeline');
     const data = pillFor(handle, 'timeline');
     if (!data) {
       pill.style.display = 'none';
-      pill.textContent = '';
+      renderPillContent(pill, null, handle);
       return false;
     }
     pill.style.display = '';
     pill.className = `xvm-fr-pill ${data.cls}`;
-    pill.textContent = data.label;
-    if (data.title) pill.setAttribute('title', data.title);
+    renderPillContent(pill, data, handle);
+    pill.removeAttribute('title');
     return true;
   }
 
@@ -542,8 +571,8 @@
     const data = pillFor(handle, 'profile');
     pill.style.display = '';
     pill.className = `xvm-fr-pill xvm-fr-user-pill ${data?.cls || 'xvm-fr-rate'}`;
-    pill.textContent = data?.label || `${tt('frRate', '关注率')} \u2014`;
-    if (data?.title) pill.setAttribute('title', data.title);
+    renderPillContent(pill, data || { label: `${tt('frRate', '关注率')} \u2014` }, handle);
+    pill.removeAttribute('title');
     if (actionButton) positionUserCardPill(owner, actionButton, pill);
     return true;
   }
@@ -636,11 +665,21 @@
       handle,
       id: result?.rest_id || legacy?.id_str || row?.id_str || row?.id,
       name: core?.name || legacy?.name || row?.name,
+      avatar: result?.avatar?.image_url || legacy?.profile_image_url_https || row?.profile_image_url_https,
       fc: Number.isFinite(fc) ? fc : undefined,
       fd: Number.isFinite(fd) ? fd : undefined,
       f: typeof f === 'boolean' ? (f ? 1 : 0) : undefined,
       b: typeof b === 'boolean' ? (b ? 1 : 0) : undefined,
     });
+  }
+
+  function profileRowHasCounts(row) {
+    if (!row || typeof row !== 'object') return false;
+    const result = row?.data?.user?.result || row?.data?.user_result_by_screen_name?.result || row?.result || row;
+    const legacy = result?.legacy || row?.legacy || row;
+    const fc = Number(legacy?.followers_count ?? result?.public_metrics?.followers_count ?? row?.followers_count);
+    const fd = Number(legacy?.friends_count ?? result?.public_metrics?.following_count ?? row?.friends_count);
+    return Number.isFinite(fc) && Number.isFinite(fd);
   }
 
   // ─── Active GraphQL calls ───────────────────────────────────────────
@@ -652,8 +691,8 @@
     return op === 'UserByScreenName' ? FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE : null;
   }
 
-  function discoverUserByScreenNameTemplate() {
-    if (state.meta.templates?.UserByScreenName?.queryId) return;
+  function discoverUserByScreenNameTemplate(force = false) {
+    if (!force && state.meta.templates?.UserByScreenName?.queryId) return;
     const urls = [...new Set([
       ...Array.from(document.scripts || []).map((s) => s.src),
       ...performance.getEntriesByType('resource').map((e) => e.name),
@@ -671,7 +710,7 @@
       } catch (_) { return null; }
     })).then((found) => {
       const template = found.find(Boolean);
-      if (!template || state.meta.templates?.UserByScreenName?.queryId) return;
+      if (!template || (!force && state.meta.templates?.UserByScreenName?.queryId)) return;
       state.meta.templates = { ...(state.meta.templates || {}), UserByScreenName: {
         ...FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE, ...template,
       } };
@@ -713,6 +752,7 @@
     const url = new URL(`/i/api/graphql/${tpl.queryId}/${op}`, location.origin);
     url.searchParams.set('variables', JSON.stringify(variables));
     if (features) url.searchParams.set('features', features);
+    if (tpl.fieldToggles) url.searchParams.set('fieldToggles', tpl.fieldToggles);
     const res = await fetch(url.toString(), {
       credentials: 'include',
       headers: {
@@ -731,7 +771,20 @@
       err.waitMs = waitMs;
       throw err;
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status} on ${op}`);
+    if (!res.ok) {
+      // X 会不定期轮换 GraphQL query id。失效模板不能继续留在缓存中，
+      // 否则资料计数会永久显示“查询中”，直到用户手动清除扩展数据。
+      if (op === 'UserByScreenName' && [400, 404].includes(res.status)) {
+        const stored = state.meta.templates?.UserByScreenName;
+        if (stored?.queryId === tpl.queryId) {
+          state.meta.templates = { ...(state.meta.templates || {}) };
+          delete state.meta.templates.UserByScreenName;
+          schedulePersist();
+        }
+        discoverUserByScreenNameTemplate(true);
+      }
+      throw new Error(`HTTP ${res.status} on ${op}`);
+    }
     return res.json();
   }
 
@@ -851,7 +904,6 @@
         try {
           const json = await callGraphQL('UserByScreenName', {
             screen_name: h,
-            withSafetyModeUserFields: true,
           }, tpl.features);
           ingest(json, '');
           scanControl.count++;
@@ -918,6 +970,41 @@
           title: `${title}\n${tt('frRateLabel', '关注/粉丝比')} ${shortRate}`,
         };
     }
+  }
+
+  function renderPillContent(element, data, handle) {
+    const h = L.normalizeHandle(handle);
+    const rec = h ? state.users[h] : null;
+    const rate = L.computeRate(rec);
+    const signature = JSON.stringify([
+      data?.label || '', h || '', rec?.fc ?? null, rec?.fd ?? null,
+      rate ?? null, Boolean(rec?.u),
+    ]);
+    // MutationObserver 会持续巡视 X 的虚拟列表。数据未变化时保留现有 DOM，
+    // 避免悬浮框闪烁、胶囊位置抖动和无意义的再次扫描。
+    if (element.dataset.xvmFrRender === signature
+      && (!data || element.querySelector('.xvm-fr-pill-label'))) return;
+    element.dataset.xvmFrRender = signature;
+    element.replaceChildren();
+    if (!data) return;
+    const label = document.createElement('span');
+    label.className = 'xvm-fr-pill-label';
+    label.textContent = data.label || '';
+    element.appendChild(label);
+    const tooltip = document.createElement('span');
+    tooltip.className = 'xvm-fr-tooltip';
+    tooltip.setAttribute('role', 'tooltip');
+    const display = (value) => Number.isFinite(Number(value)) ? Number(value).toLocaleString() : '查询中';
+    const rows = [
+      ['粉丝', display(rec?.fc)],
+      ['关注人数', display(rec?.fd)],
+      ['关注率', rate == null ? '查询中' : String(rate)],
+      ['对当前用户取关过', rec?.u ? '是' : '否'],
+    ];
+    tooltip.innerHTML = `<strong>@${h || ''}</strong>${rows.map(([key, value]) => `<span><b>${key}：</b>${value}</span>`).join('')}`;
+    element.appendChild(tooltip);
+    element.tabIndex = 0;
+    element.setAttribute('aria-label', `${data.label || ''}，查看账号详情`);
   }
 
   function isFollowHistoryMember() {
