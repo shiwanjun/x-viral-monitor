@@ -22,6 +22,8 @@ describe('数据中心公共契约', () => {
     ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweetsAndReplies', 'DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'].forEach((operation) => expect(capture).toContain(operation));
     expect(capture).toContain('2600');
     expect(capture).toContain('response.status === 429');
+    expect(capture).toContain('(event.data.templates || []).forEach(restoreTemplate)');
+    expect(read('../background.js')).toContain('templates: await storedLibraryTemplates()');
   });
 
   it('Worker 提供 D1/R2 云同步路由与 30 天清理', () => {

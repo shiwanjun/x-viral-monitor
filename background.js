@@ -87,6 +87,12 @@ const LIBRARY_MIGRATED_KEY = 'xvm_library_bookmarks_migrated_v1';
 const LIBRARY_DEVICE_KEY = 'xvm_library_device_id_v1';
 const pendingLibraryActions = new Map();
 
+async function storedLibraryTemplates() {
+  const keys = ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies', 'DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'].map((operation) => `xvm_library_template_${operation}`);
+  const values = await chrome.storage.local.get(keys);
+  return keys.map((key) => values?.[key]).filter((template) => template?.operation && template?.queryId && template?.baseUrl);
+}
+
 function libraryError(error, fallback = 'library_error') {
   const code = String(error?.message || error || fallback);
   return { ok: false, error: code };
@@ -224,7 +230,7 @@ async function startLibrarySync(payload = {}) {
   if (payload.mode === 'full' && !context.isPro) throw new Error('membership_required');
   const next = { ...context.sync, status: 'running', mode: payload.mode || 'incremental', startedAt: Date.now(), updatedAt: Date.now(), error: null };
   await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
-  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: payload.operations });
+  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: payload.operations, templates: await storedLibraryTemplates() });
   return { ok: true, sync: next };
 }
 
@@ -726,7 +732,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (Date.now() - Number(context.sync?.lastAutoStartedAt || 0) >= 30 * 60 * 1000) {
         const sync = { ...context.sync, lastAutoStartedAt: Date.now(), updatedAt: Date.now() };
         await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
-        try { await chrome.tabs.sendMessage(sender.tab.id, { type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: 'incremental' }); } catch (_) {}
+        try { await chrome.tabs.sendMessage(sender.tab.id, { type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: 'incremental', templates: await storedLibraryTemplates() }); } catch (_) {}
       }
       sendResponse({ ok: true });
     })().catch((error) => sendResponse(libraryError(error)));
