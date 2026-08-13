@@ -70,8 +70,12 @@ describe('官网登录后数据中心浏览器回归', () => {
   it('关系与取关导航必须留在规范数据中心路由', async () => {
     const page = await browser.newPage();
     await page.goto(`${origin}/workspace`);
-    expect(await page.locator('a.nav-item').filter({ hasText: '关系' }).getAttribute('href')).toBe('/workspace?section=relations');
-    expect(await page.locator('a.nav-item').filter({ hasText: '取关历史' }).getAttribute('href')).toBe('/workspace?section=unfollow');
+    await page.locator('[data-section="relations"]').click();
+    expect(new URL(page.url()).searchParams.get('section')).toBe('relations');
+    expect(await page.locator('#relations-screen').isVisible()).toBe(true);
+    await page.locator('[data-section="unfollow"]').click();
+    expect(new URL(page.url()).searchParams.get('section')).toBe('unfollow');
+    expect(await page.locator('#unfollow-screen').isVisible()).toBe(true);
     await page.close();
   });
 
@@ -88,8 +92,11 @@ describe('官网登录后数据中心浏览器回归', () => {
       Object.defineProperty(window, 'chrome', { configurable: true, value: { runtime: {
         lastError: null,
         sendMessage(_id, message, callback) {
+          (window.__libraryMessages ||= []).push(JSON.parse(JSON.stringify(message)));
           if (message.type === 'XVM_LIBRARY_STATUS') callback({ ok: true, signedIn: true, isPro: true, account: { accountId: '1' }, counts: { bookmark: 1, like: 1, authored_post: 0, authored_reply: 0 }, tags: [{ id: 't1', name: 'AI', color: '#654fe8' }], folders: [], quota: { tier: 'pro', used: 2, limit: 100000, locked: 0 }, sync: { status: 'idle' } });
-          else if (message.type === 'XVM_LIBRARY_QUERY') callback({ ok: true, rows: message.query.search ? rows.filter((row) => row.post.text.includes(message.query.search)) : rows, cursor: null, quota: { tier: 'pro', used: 2, limit: 100000, locked: 0 } });
+          else if (message.type === 'XVM_LIBRARY_QUERY') callback({ ok: true, rows: rows.filter((row) => (!message.query.search || row.post.text.includes(message.query.search)) && (!message.query.kind || message.query.kind === 'all' || row.item.kind === message.query.kind)), cursor: null, quota: { tier: 'pro', used: 2, limit: 100000, locked: 0 } });
+          else if (message.type === 'XVM_LIBRARY_MUTATE' && message.payload.action === 'list_filters') callback({ ok: true, items: [{ id: 'sf1', name: 'AI 灵感', query: { kind: 'bookmark', search: '第一条' } }] });
+          else if (message.type === 'XVM_LIBRARY_RELATIONSHIPS') callback({ ok: true, users: [{ handle: 'alice', n: 'Alice', f: 1, b: 1, fc: 100, fd: 80 }], events: [{ id: 'unfollowed_me:bob:1000', h: 'bob', n: 'Bob', type: 'unfollowed_me', ts: 1000, fc: 200, fd: 40 }], counts: { mutual: 1, mine: 0, theirs: 0, unfollowed: 1 }, cloudSync: true });
           else callback({ ok: true });
         },
       } } });
@@ -111,6 +118,17 @@ describe('官网登录后数据中心浏览器回归', () => {
     await page.waitForTimeout(350);
     expect(await page.locator('#rows tr').count()).toBe(1);
     expect(await page.locator('#rows').innerText()).toContain('第二条纯文本点赞');
+    await page.locator('#filter-toggle').click({ timeout: 2000 });
+    await page.locator('[data-apply-filter="sf1"]').click({ timeout: 2000 });
+    const filterDebug = await page.evaluate(() => ({ search: document.querySelector('#search')?.value, html: document.querySelector('#saved-filters')?.innerHTML, messages: window.__libraryMessages }));
+    expect(filterDebug.search, JSON.stringify(filterDebug)).toBe('第一条');
+    await page.waitForTimeout(500);
+    expect(await page.locator('#rows').innerText(), JSON.stringify(filterDebug)).toContain('第一条带图片的书签');
+    await page.locator('[data-section="relations"]').click();
+    expect(await page.locator('#relation-list').innerText()).toContain('互关');
+    expect(await page.locator('#relation-list').innerText()).toContain('0.80');
+    await page.locator('[data-section="unfollow"]').click();
+    expect(await page.locator('#unfollow-list').innerText()).toContain('TA 取关我');
     await page.close();
-  });
+  }, 15_000);
 });

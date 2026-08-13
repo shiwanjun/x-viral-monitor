@@ -21,7 +21,7 @@
 
 name = "xtool"
 main = "src/index.ts"
-compatibility_date = "2026-05-24"
+compatibility_date = "2026-08-13"
 compatibility_flags = ["nodejs_compat"]
 
 # Route — the Worker is deployed as "xtool" and reachable via the custom
@@ -39,7 +39,7 @@ BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "test"
 ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
 EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
-LIBRARY_WORKSPACE_ENABLED = "false"
+LIBRARY_WORKSPACE_ENABLED = "true"
 
 [assets]
 directory = "../docs"
@@ -97,7 +97,7 @@ BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "prod"
 ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
 EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
-LIBRARY_WORKSPACE_ENABLED = "false"
+LIBRARY_WORKSPACE_ENABLED = "true"
 
 [[env.production.d1_databases]]
 binding = "DB"

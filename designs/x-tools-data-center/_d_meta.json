@@ -8,11 +8,15 @@
         {
           "path": "数据中心高保真原型.html",
           "createdAt": "2026-08-13T10:28:33.705Z",
-          "status": "needs-review"
+          "status": "approved",
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          }
         }
       ]
     }
   },
   "createdAt": "2026-08-13T10:28:33.709Z",
-  "updatedAt": "2026-08-13T13:12:07.272Z"
+  "updatedAt": "2026-08-13T14:41:07.602Z"
 }

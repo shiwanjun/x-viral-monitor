@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>X-Tools 数据中心</title>
   <meta name="description" content="统一管理 X 书签、点赞、原创推文与回复。">
-  <link rel="stylesheet" href="workspace.css?v=5">
+  <link rel="stylesheet" href="./workspace.css">
+  <link rel="stylesheet" href="./workspace-insights.css">
+  <link rel="stylesheet" href="./workspace-controls.css">
 </head>
 <body>
   <div class="shell">
     <aside class="sidebar">
-      <a class="brand" href="#"><img src="x-tools-logo.png" alt=""><span>X-Tools</span><b>DATA</b></a>
+      <a class="brand" href="/"><img src="./x-tools-logo.png" alt=""><span>X-Tools</span><b>DATA</b></a>
       <p class="nav-title">数据中心</p>
       <nav id="kind-nav" aria-label="数据类型">
         <button class="nav-item active" data-kind="all"><span>◫</span>全部内容<em id="count-all">0</em></button>
@@ -18,8 +20,8 @@
         <button class="nav-item" data-kind="like"><span>♥</span>点赞<em id="count-like">0</em></button>
         <button class="nav-item" data-kind="authored_post"><span>✎</span>我的推文<em id="count-authored_post">0</em></button>
         <button class="nav-item" data-kind="authored_reply"><span>↩</span>我的回复<em id="count-authored_reply">0</em></button>
-        <a class="nav-item" href="/workspace?section=relations"><span>⌘</span>关系</a>
-        <a class="nav-item" href="/workspace?section=unfollow"><span>↘</span>取关历史</a>
+        <button class="nav-item" data-section="relations"><span>⌘</span>关系<em id="count-relations">0</em></button>
+        <button class="nav-item" data-section="unfollow"><span>↘</span>取关历史<em id="count-unfollow">0</em></button>
       </nav>
       <div class="facet-head"><p class="nav-title">文件夹</p><button id="add-folder" title="新建文件夹">＋</button></div>
       <div id="folders" class="facet-list"><button class="facet active" data-folder=""><i></i>全部文件夹</button></div>
@@ -41,6 +43,7 @@
         <button class="sync-button" id="sync"><span>↻</span><b>增量同步</b></button>
       </header>
 
+      <section id="library-screen" class="screen" data-screen-label="内容数据中心">
       <section id="connection-banner" class="banner loading"><span class="status-dot"></span><div><strong>正在连接扩展</strong><small>数据只从本机扩展分页读取，每次最多 50 条。</small></div><button id="banner-action">重试</button></section>
 
       <section class="overview">
@@ -54,6 +57,7 @@
         <label>内容类型<select id="media-filter"><option value="">全部</option><option value="media">含媒体</option><option value="text">纯文本</option></select></label>
         <label>开始日期<input id="date-from" type="date"></label><label>结束日期<input id="date-to" type="date"></label>
         <button id="clear-filters">清除筛选</button><button class="pro-action" id="save-filter">保存智能筛选 <b>PRO</b></button>
+        <div id="saved-filters" class="saved-filters" aria-label="已保存筛选"></div>
       </section>
 
       <section class="workspace-card">
@@ -73,11 +77,24 @@
       </section>
 
       <section id="quota-wall" class="quota-wall" hidden><div><span>✦ PRO</span><h2>还有 <b id="locked-count">0</b> 条内容已安全保留</h2><p>Free 可使用最近 1,000 条。升级后立即解锁最多 100,000 条、云备份、AI 分类与批量导出。</p></div><a href="/#pricing">查看会员方案 →</a></section>
+      </section>
+
+      <section id="relations-screen" class="screen insight-screen" data-screen-label="关系工作台" hidden>
+        <section class="insight-hero"><div><p class="eyebrow">X-TOOLS / RELATIONSHIPS</p><h2>关注关系</h2><p>查看互关、我关注和关注我的用户，关注率为对方关注数 ÷ 粉丝数。</p></div><div class="insight-actions"><button id="relationship-cloud" class="secondary-button">云同步 <b>PRO</b></button><button class="sync-button" data-open-x="following">打开 X 扫描</button></div></section>
+        <section class="relation-metrics"><article><span>互相关注</span><strong id="relation-mutual">0</strong><small>双方均已关注</small></article><article><span>我关注</span><strong id="relation-mine">0</strong><small>对方未关注我</small></article><article><span>关注我</span><strong id="relation-theirs">0</strong><small>我尚未关注</small></article><article><span>历史取关</span><strong id="relation-unfollowed">0</strong><small>保留关系快照</small></article></section>
+        <section class="insight-card"><div class="insight-toolbar"><label class="search"><span>⌕</span><input id="relation-search" type="search" placeholder="搜索用户名或账号"></label><div class="segmented"><button class="active" data-relation-filter="all">全部</button><button data-relation-filter="mutual">互关</button><button data-relation-filter="mine">我关注</button><button data-relation-filter="theirs">关注我</button></div></div><div id="relation-list" class="relation-list"></div></section>
+      </section>
+
+      <section id="unfollow-screen" class="screen insight-screen" data-screen-label="取关历史工作台" hidden>
+        <section class="insight-hero"><div><p class="eyebrow">PRO / FOLLOW HISTORY</p><h2>取关历史</h2><p>扫描在本机完成；会员可筛选完整历史并开启可选云端同步。</p></div><div class="insight-actions"><button id="relationship-sync" class="secondary-button">立即同步</button><button class="sync-button" data-open-x="followers">打开 X 扫描</button></div></section>
+        <section id="unfollow-gate" class="member-gate" hidden><span>✦ PRO</span><h2>解锁完整取关历史</h2><p>免费版继续在本机积累关系数据，升级后查看完整记录和跨设备同步。</p><a href="/#pricing">查看会员方案</a></section>
+        <section id="unfollow-content" class="insight-card"><div class="insight-toolbar"><label class="search"><span>⌕</span><input id="unfollow-search" type="search" placeholder="搜索用户名或账号"></label><div class="segmented"><button class="active" data-unfollow-filter="all">全部</button><button data-unfollow-filter="unfollowed_me">TA 取关我</button><button data-unfollow-filter="i_unfollowed">我取关 TA</button></div></div><div id="unfollow-list" class="unfollow-list"></div></section>
+      </section>
     </main>
   </div>
 
   <dialog id="dialog"><form method="dialog"><button class="dialog-close" value="cancel">×</button><p class="eyebrow" id="dialog-eyebrow">X-TOOLS</p><h2 id="dialog-title">操作</h2><p id="dialog-copy"></p><div id="dialog-body"></div><menu><button value="cancel">取消</button><button id="dialog-confirm" value="default">确认</button></menu></form></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="workspace.js?v=5" defer></script>
+  <script src="./workspace.js" defer></script>
 </body>
 </html>

@@ -13,7 +13,7 @@ describe('数据中心公共契约', () => {
 
   it('扩展暴露完整分页消息且单页最多 50 条', () => {
     const background = read('../background.js');
-    ['XVM_LIBRARY_STATUS', 'XVM_LIBRARY_QUERY', 'XVM_LIBRARY_FACETS', 'XVM_LIBRARY_MUTATE', 'XVM_LIBRARY_SYNC_START', 'XVM_LIBRARY_SYNC_PAUSE', 'XVM_LIBRARY_EXPORT', 'XVM_LIBRARY_X_ACTION'].forEach((type) => expect(background).toContain(type));
+    ['XVM_LIBRARY_STATUS', 'XVM_LIBRARY_QUERY', 'XVM_LIBRARY_FACETS', 'XVM_LIBRARY_MUTATE', 'XVM_LIBRARY_SYNC_START', 'XVM_LIBRARY_SYNC_PAUSE', 'XVM_LIBRARY_EXPORT', 'XVM_LIBRARY_X_ACTION', 'XVM_LIBRARY_AI_CLASSIFY', 'XVM_LIBRARY_AI_COMMAND', 'XVM_LIBRARY_RELATIONSHIPS', 'XVM_LIBRARY_CLOUD_DELETE'].forEach((type) => expect(background).toContain(type));
     expect(background).toMatch(/Math\.min\(50,/);
   });
 
@@ -23,7 +23,11 @@ describe('数据中心公共契约', () => {
     expect(capture).toContain('2600');
     expect(capture).toContain('response.status === 429');
     expect(capture).toContain('(event.data.templates || []).forEach(restoreTemplate)');
-    expect(read('../background.js')).toContain('templates: await storedLibraryTemplates()');
+    expect(capture).toContain('template.resumeCursor');
+    expect(capture).toContain('template.highWaterId');
+    expect(capture).toContain('window.__xvmGrok.generate');
+    expect(read('../lib/library-bridge.js')).toContain('XVM_LIBRARY_AI_COMMAND');
+    expect(read('../background.js')).toContain('templates: await storedLibraryTemplates({ resume })');
   });
 
   it('Worker 提供 D1/R2 云同步路由与 30 天清理', () => {
@@ -36,7 +40,7 @@ describe('数据中心公共契约', () => {
 
   it('工作台包含三视图、额度墙和降级状态', () => {
     const html = read('../docs/workspace.html');
-    ['表格', '画廊', '统计', 'quota-wall', '正在连接扩展', '云备份'].forEach((label) => expect(html).toContain(label));
+    ['表格', '画廊', '统计', 'quota-wall', '正在连接扩展', '云备份', '关注关系', '取关历史', 'saved-filters'].forEach((label) => expect(html).toContain(label));
     expect(read('../docs/workspace.js')).toContain("limit: 50");
   });
 });

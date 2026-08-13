@@ -74,6 +74,8 @@
   let relationshipLookupPending = new Map();
   let profileLookupPending = new Set();
   let profileLookupAttemptedAt = new Map();
+  let profileLookupInFlight = new Set();
+  let profileLookupRetryAt = new Map();
 
   // ─── i18n (XVM_SETTINGS_UPDATE broadcast, same as starchart.js) ─────
   window.addEventListener('message', (ev) => {
@@ -259,21 +261,45 @@
 
   async function lookupProfileCounts(handles) {
     const auth = authorizationToken(window.__xvmNet?.getBearer?.() || FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE.authorization);
-    if (!auth) return;
-    for (const handle of [...new Set(handles || [])].slice(0, TIMELINE_REFRESH_BATCH)) {
+    const requested = [...new Set((handles || []).map((handle) => L.normalizeHandle(handle)).filter(Boolean))]
+      .slice(0, TIMELINE_REFRESH_BATCH);
+    const resolved = new Set();
+    if (!auth || !requested.length) return resolved;
+
+    // X 的 v1.1 users/lookup 可一次返回多位用户的粉丝数、关注数与关系字段。
+    // 相比逐个 users/show 请求，它更稳定，也避免虚拟列表反复挂载时形成请求风暴。
+    try {
+      const url = new URL('/i/api/1.1/users/lookup.json', location.origin);
+      url.searchParams.set('screen_name', requested.join(','));
+      const res = await fetch(url.toString(), { credentials: 'include', headers: {
+        authorization: auth, 'x-csrf-token': getCsrf(),
+        'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
+      } });
+      if (res.ok) {
+        const rows = await res.json();
+        for (const row of Array.isArray(rows) ? rows : []) {
+          const handle = L.normalizeHandle(row?.screen_name);
+          if (handle && ingestProfileRow(row, handle)) resolved.add(handle);
+        }
+      }
+    } catch (_) {}
+
+    // 部分账号可能被批量接口过滤（受限账号等），再以 GraphQL 单用户查询兜底。
+    const template = radarTemplate('UserByScreenName');
+    for (const handle of requested.filter((item) => !resolved.has(item))) {
       try {
-        const url = new URL('/i/api/1.1/users/show.json', location.origin);
-        url.searchParams.set('screen_name', handle);
-        const res = await fetch(url.toString(), { credentials: 'include', headers: {
-          authorization: auth, 'x-csrf-token': getCsrf(),
-          'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
-        } });
-        if (res.ok) ingestProfileRow(await res.json(), handle);
+        if (!template?.queryId || template.queryId === 'REPLACE_AT_RUNTIME') continue;
+        const json = await callGraphQL('UserByScreenName', {
+          screen_name: handle,
+          withSafetyModeUserFields: true,
+        }, template.features);
+        if (ingestProfileRow(json, handle)) resolved.add(handle);
       } catch (_) {}
       await sleep(120);
     }
     schedulePersist();
     scheduleEmit();
+    return resolved;
   }
 
   function subscribe() {
@@ -478,16 +504,34 @@
     const owner = card.closest('[data-testid="UserCell"]') || card;
     const nameBlock = card.querySelector('[data-testid="User-Name"]');
     const actionButton = [...owner.querySelectorAll('button')].find((button) => /^(回关|正在关注|关注|Follow|Following|关注了你)/i.test((button.textContent || '').trim()));
-    const host = actionButton?.parentElement || nameBlock || owner.querySelector('div[dir="ltr"]')?.parentElement || owner;
+    let host = nameBlock || owner.querySelector('div[dir="ltr"]')?.parentElement || owner;
+    let anchor = null;
+    if (actionButton) {
+      // X 把“回关 / 正在关注”放在多层窄包装里。胶囊若直接插到按钮父级，
+      // 两者会在同一个固定宽度列里重叠。向上找到同时包含资料区和操作区的
+      // 第一层共同容器，把胶囊作为操作列的前一个兄弟节点。
+      anchor = actionButton;
+      let candidate = actionButton.parentElement;
+      while (candidate && owner.contains(candidate)) {
+        const hasProfileSibling = [...candidate.children].some((child) => child !== anchor
+          && ((nameBlock && child.contains(nameBlock))
+            || child.querySelector?.('a[role="link"][href^="/"]')));
+        if (hasProfileSibling || candidate === owner) {
+          host = candidate;
+          break;
+        }
+        anchor = candidate;
+        candidate = candidate.parentElement;
+      }
+    }
     const existingPills = [...owner.querySelectorAll('.xvm-fr-user-pill')];
-    const isNew = existingPills.length === 0;
     const pill = existingPills[0] || document.createElement('span');
     existingPills.slice(1).forEach((extra) => extra.remove());
-    if (isNew) {
-      pill.className = 'xvm-fr-pill xvm-fr-user-pill';
-      if (actionButton && actionButton.parentElement === host) host.insertBefore(pill, actionButton);
-      else host.appendChild(pill);
-    }
+    pill.className = 'xvm-fr-pill xvm-fr-user-pill';
+    // 每轮都校正位置，兼容 X 虚拟列表复用节点及旧版本热加载留下的错误锚点。
+    if (anchor?.parentElement === host) {
+      if (pill.parentElement !== host || pill.nextElementSibling !== anchor) host.insertBefore(pill, anchor);
+    } else if (pill.parentElement !== host) host.appendChild(pill);
     pill.setAttribute('data-xvm-fr-handle', handle);
     pill.setAttribute('data-xvm-fr-surface', 'profile');
     const data = pillFor(handle, 'profile');
@@ -529,15 +573,33 @@
       const rec = state.users[h];
       const lastAttempt = profileLookupAttemptedAt.get(h) || 0;
       if ((!rec || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd)))
+        && !profileLookupInFlight.has(h)
+        && now >= (profileLookupRetryAt.get(h) || 0)
         && now - lastAttempt >= PROFILE_LOOKUP_COOLDOWN_MS) profileLookupPending.add(h);
     }
     if (!profileLookupPending.size) return;
     const batch = [...profileLookupPending].slice(0, TIMELINE_REFRESH_BATCH);
     batch.forEach((handle) => {
       profileLookupPending.delete(handle);
-      profileLookupAttemptedAt.set(handle, now);
+      profileLookupInFlight.add(handle);
     });
-    lookupProfileCounts(batch).catch(() => {});
+    lookupProfileCounts(batch).then((resolved = new Set()) => {
+      const completedAt = Date.now();
+      for (const handle of batch) {
+        if (resolved.has(handle)) {
+          profileLookupAttemptedAt.set(handle, completedAt);
+          profileLookupRetryAt.delete(handle);
+        } else {
+          // 失败不再伪装成成功冷却五分钟；短暂退避后允许页面继续补查。
+          profileLookupRetryAt.set(handle, completedAt + 15_000);
+        }
+      }
+    }).catch(() => {
+      const retryAt = Date.now() + 15_000;
+      batch.forEach((handle) => profileLookupRetryAt.set(handle, retryAt));
+    }).finally(() => {
+      batch.forEach((handle) => profileLookupInFlight.delete(handle));
+    });
   }
 
   function ingestProfileRow(row, fallbackHandle = '') {

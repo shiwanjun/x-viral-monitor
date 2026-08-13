@@ -65,10 +65,12 @@ describe('follow-radar logic', () => {
       expect(radarSrc).toContain('function applyToUserCards()');
       expect(radarSrc).toContain("pillFor(handle, 'profile')");
       expect(radarSrc).toContain('applyToUserCards();');
-      expect(radarSrc).toContain("/i/api/1.1/users/show.json");
-      expect(radarSrc).toContain('host.insertBefore(pill, actionButton)');
+      expect(radarSrc).toContain("/i/api/1.1/users/lookup.json");
+      expect(radarSrc).toContain('host.insertBefore(pill, anchor)');
       expect(radarSrc).toContain('lookupProfileCounts(batch)');
       expect(radarSrc).toContain('PROFILE_LOOKUP_COOLDOWN_MS');
+      expect(radarSrc).toContain('profileLookupInFlight');
+      expect(radarSrc).toContain('profileLookupRetryAt');
       expect(radarSrc).toContain('function ingestProfileRow(row');
       expect(radarSrc).toContain('关注了你|follows you');
       expect(radarSrc).toContain("const owner = card.closest('[data-testid=\"UserCell\"]') || card");

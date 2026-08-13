@@ -86,11 +86,20 @@ const LIBRARY_SYNC_KEY = 'xvm_library_sync_status_v1';
 const LIBRARY_MIGRATED_KEY = 'xvm_library_bookmarks_migrated_v1';
 const LIBRARY_DEVICE_KEY = 'xvm_library_device_id_v1';
 const pendingLibraryActions = new Map();
+const pendingLibraryAi = new Map();
 
-async function storedLibraryTemplates() {
+async function storedLibraryTemplates({ resume = false } = {}) {
   const keys = ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies', 'DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'].map((operation) => `xvm_library_template_${operation}`);
   const values = await chrome.storage.local.get(keys);
-  return keys.map((key) => values?.[key]).filter((template) => template?.operation && template?.queryId && template?.baseUrl);
+  const context = await libraryContext();
+  return keys.map((key) => values?.[key]).filter((template) => template?.operation && template?.queryId && template?.baseUrl).map((template) => {
+    const progress = context.sync?.operations?.[template.operation] || {};
+    return { ...template, highWaterId: progress.highWaterId || '', resumeCursor: resume ? progress.cursor || '' : '' };
+  });
+}
+
+async function availableLibraryOperations() {
+  return (await storedLibraryTemplates()).map((template) => template.operation);
 }
 
 function libraryError(error, fallback = 'library_error') {
@@ -157,11 +166,49 @@ async function broadcastLibraryCommand(message) {
 async function libraryStatus() {
   const context = await libraryContext();
   const facets = await XvmLibraryDb.facets({ isPro: context.isPro });
+  const cloudBackup = Boolean(context.sync?.cloudBackup);
   return {
     ok: true, connected: true, signedIn: context.signedIn, isPro: context.isPro,
     account: context.boundAccount, sync: context.sync, ...facets,
-    cloudBackup: Boolean(context.sync?.cloudBackup), readOnly: Boolean(context.sync?.readOnly),
+    cloudBackup, readOnly: Boolean(context.sync?.readOnly || (cloudBackup && !context.isPro)),
+    availableOperations: await availableLibraryOperations(),
   };
+}
+
+async function relationshipStatus() {
+  const values = await chrome.storage.local.get(['followRadarV1', 'followRadarCloudSync']);
+  const radar = values?.followRadarV1 || {};
+  const users = Object.entries(radar.users || {}).map(([handle, record]) => ({ handle, ...record }));
+  const events = (Array.isArray(radar.events) ? radar.events : []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+  const counts = users.reduce((result, user) => {
+    const key = user.f && user.b ? 'mutual' : user.f ? 'mine' : user.b ? 'theirs' : (user.u || user.i) ? 'unfollowed' : 'none';
+    result[key] = (result[key] || 0) + 1; return result;
+  }, { mutual: 0, mine: 0, theirs: 0, unfollowed: 0, none: 0 });
+  return { ok: true, users, events, counts, cloudSync: Boolean(values?.followRadarCloudSync), meta: radar.meta || {} };
+}
+
+function radarEventId(event = {}) {
+  return String(event.id || event.eventId || `${event.type || event.eventType}:${event.h || event.handle}:${event.ts || event.occurredAt}`);
+}
+
+async function syncRelationshipCloud() {
+  const context = await libraryContext();
+  if (!context.signedIn) throw new Error('unauthorized');
+  if (!context.isPro) throw new Error('membership_required');
+  const values = await chrome.storage.local.get(['followRadarV1', 'followRadarCloudSync']);
+  if (!values.followRadarCloudSync) throw new Error('cloud_sync_disabled');
+  const radar = values.followRadarV1 || {};
+  const localEvents = Array.isArray(radar.events) ? radar.events : [];
+  if (localEvents.length) await cloudRequest('/api/follow-radar/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events: localEvents.slice(0, 1000) }) });
+  const remote = await cloudRequest('/api/follow-radar/events?limit=1000');
+  const merged = new Map(localEvents.map((event) => [radarEventId(event), event]));
+  (remote.events || []).forEach((event) => {
+    const normalized = { id: event.eventId, h: event.handle, n: event.displayName, type: event.eventType, ts: event.occurredAt, fc: event.followersCount, fd: event.followingCount };
+    merged.set(radarEventId(normalized), { ...(merged.get(radarEventId(normalized)) || {}), ...normalized });
+  });
+  const events = [...merged.values()].sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)).slice(0, 1000);
+  await chrome.storage.local.set({ followRadarV1: { ...radar, events, meta: { ...(radar.meta || {}), cloudSyncedAt: Date.now() } } });
+  return { ok: true, events: events.length, retention: remote.retention || 'full' };
 }
 
 async function libraryMutate(payload = {}) {
@@ -171,13 +218,40 @@ async function libraryMutate(payload = {}) {
   if (action === 'assign_tag') return { ok: true, ...(await XvmLibraryDb.assignTag(payload.itemIds, payload.targetId)) };
   if (action === 'assign_folder') return { ok: true, ...(await XvmLibraryDb.assignFolder(payload.itemIds, payload.targetId)) };
   if (action === 'archive' || action === 'restore') return { ok: true, ...(await XvmLibraryDb.archive(payload.itemIds, action === 'archive')) };
+  if (action === 'list_archived') return { ok: true, rows: await XvmLibraryDb.listArchived(payload.limit || 50) };
+  if (action === 'save_filter') {
+    const context = await libraryContext(); if (!context.isPro) throw new Error('membership_required');
+    const name = String(payload.name || '').trim().slice(0, 80); if (!name) throw new Error('invalid_name');
+    const current = (await XvmLibraryDb.getSyncState('saved_filters'))?.items || [];
+    const value = { id: crypto.randomUUID(), name, query: payload.query || {}, updatedAt: Date.now() };
+    await XvmLibraryDb.setSyncState('saved_filters', { items: [value, ...current.filter((item) => item.id !== value.id)].slice(0, 30) });
+    return { ok: true, value };
+  }
+  if (action === 'list_filters') return { ok: true, items: (await XvmLibraryDb.getSyncState('saved_filters'))?.items || [] };
+  if (action === 'delete_filter') {
+    const current = (await XvmLibraryDb.getSyncState('saved_filters'))?.items || [];
+    await XvmLibraryDb.setSyncState('saved_filters', { items: current.filter((item) => item.id !== payload.id) });
+    return { ok: true };
+  }
+  if (action === 'set_relationship_cloud') {
+    const context = await libraryContext();
+    if (!context.signedIn) throw new Error('unauthorized');
+    const enabled = Boolean(payload.enabled);
+    if (enabled && !context.isPro) throw new Error('membership_required');
+    await chrome.storage.local.set({ followRadarCloudSync: enabled });
+    if (enabled) await syncRelationshipCloud();
+    return { ok: true, enabled };
+  }
   if (action === 'set_cloud_backup') {
     const context = await libraryContext();
     if (!context.signedIn) throw new Error('unauthorized');
-    if (!context.isPro) throw new Error('membership_required');
+    if (payload.enabled && !context.isPro) throw new Error('membership_required');
     const sync = { ...context.sync, cloudBackup: Boolean(payload.enabled), readOnly: false, updatedAt: Date.now() };
     await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
-    if (payload.enabled) { await pullLibraryCloud(); await pushLibraryCloud(); }
+    if (payload.enabled) {
+      try { await pullLibraryCloud(); await pushLibraryCloud(); }
+      catch (error) { await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: context.sync }); throw error; }
+    }
     return { ok: true, sync };
   }
   throw new Error('unsupported_mutation');
@@ -194,14 +268,19 @@ async function cloudRequest(path, init = {}) {
 
 async function pullLibraryCloud() {
   const context = await libraryContext();
+  if (!context.boundAccount?.accountId) throw new Error('x_account_required');
+  const status = await cloudRequest('/api/library/sync/status');
+  if (status.accountId && status.accountId !== context.boundAccount.accountId) throw new Error('account_mismatch');
   const cursor = Math.max(0, Number(context.sync?.cloudCursor || 0));
-  let next = cursor; let applied = 0; let hasMore = true;
+  let next = cursor; let applied = 0; let hasMore = true; let mode = status.mode || 'none';
   while (hasMore) {
     const data = await cloudRequest(`/api/library/sync/pull?cursor=${next}&limit=20`);
-    for (const chunk of (data.chunks || [])) { const result = await XvmLibraryDb.applyChanges(chunk.changes || []); applied += result.applied; }
+    mode = data.mode || mode;
+    for (const chunk of (data.chunks || [])) if (chunk.accountId && chunk.accountId !== context.boundAccount.accountId) throw new Error('account_mismatch');
+    for (const chunk of (data.chunks || [])) { const result = await XvmLibraryDb.applyChanges((chunk.changes || []).map((change) => ({ deviceId: chunk.deviceId || '', ...change }))); applied += result.applied; }
     next = Number(data.cursor || next); hasMore = Boolean(data.hasMore);
   }
-  const sync = { ...context.sync, cloudCursor: next, cloudPulledAt: Date.now(), readOnly: false, updatedAt: Date.now() };
+  const sync = { ...context.sync, cloudCursor: next, cloudPulledAt: Date.now(), readOnly: mode === 'read_only', updatedAt: Date.now() };
   await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
   return { applied, cursor: next };
 }
@@ -228,9 +307,11 @@ async function pushLibraryCloud(retried = false) {
 async function startLibrarySync(payload = {}) {
   const context = await libraryContext();
   if (payload.mode === 'full' && !context.isPro) throw new Error('membership_required');
-  const next = { ...context.sync, status: 'running', mode: payload.mode || 'incremental', startedAt: Date.now(), updatedAt: Date.now(), error: null };
+  const mode = payload.mode || 'incremental';
+  const resume = mode === 'full' && context.sync?.mode === 'full' && ['running', 'paused', 'failed', 'rate_limited'].includes(context.sync?.status);
+  const next = { ...context.sync, status: 'running', mode, operations: resume ? (context.sync?.operations || {}) : {}, startedAt: Date.now(), updatedAt: Date.now(), error: null };
   await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
-  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: payload.operations, templates: await storedLibraryTemplates() });
+  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: payload.operations, templates: await storedLibraryTemplates({ resume }) });
   return { ok: true, sync: next };
 }
 
@@ -249,12 +330,15 @@ async function runLibraryXAction(payload = {}) {
   if (!allowed.includes(payload.operation)) throw new Error('unsupported_x_action');
   const postIds = (Array.isArray(payload.postIds) ? payload.postIds : []).slice(0, 50);
   if (!postIds.length) throw new Error('invalid_request');
+  if (!context.boundAccount?.accountId) throw new Error('account_mismatch');
+  const validation = await XvmLibraryDb.validateXAction(context.boundAccount.accountId, payload.operation, postIds);
+  if (!validation.valid) throw new Error('invalid_x_action_target');
   const requestId = crypto.randomUUID();
   const resultPromise = new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pendingLibraryActions.delete(requestId); reject(new Error('x_action_timeout')); }, Math.max(45_000, postIds.length * 4_000));
     pendingLibraryActions.set(requestId, (result) => { clearTimeout(timer); resolve(result); });
   });
-  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_X_ACTION_COMMAND', action: { requestId, operation: payload.operation, postIds } });
+  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_X_ACTION_COMMAND', action: { requestId, operation: payload.operation, postIds: validation.accepted } });
   return { ok: true, results: await resultPromise };
 }
 
@@ -268,10 +352,25 @@ async function classifyLibrary(payload = {}) {
   const rows = (Array.isArray(payload.rows) ? payload.rows : []).slice(0, 20);
   if (!rows.length) throw new Error('invalid_request');
   const config = await loadConfig();
-  if (config.provider === 'x-grok') throw new Error('ai_provider_required');
   const corpus = rows.map((row, index) => `${index + 1}. ${String(row.text || '').slice(0, 500)}`).join('\n');
   const aiPayload = { tweetText: corpus, promptTemplate: '[推文内容]\n\n请提炼 3-8 个可复用的中文内容标签，每行一个标签，不要解释。' };
-  const comments = config.provider === 'ollama' ? await generateWithOllama({ ...config, replyCount: 8 }, aiPayload) : await generateWithOpenAICompatible({ ...config, replyCount: 8 }, aiPayload);
+  let comments;
+  if (config.provider === 'x-grok') {
+    const requestId = crypto.randomUUID();
+    const resultPromise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { pendingLibraryAi.delete(requestId); reject(new Error('grok_timeout')); }, 90_000);
+      pendingLibraryAi.set(requestId, (result) => {
+        clearTimeout(timer); pendingLibraryAi.delete(requestId);
+        if (result?.error) reject(new Error(result.error)); else resolve(result?.comments || []);
+      });
+    });
+    await broadcastLibraryCommand({ type: 'XVM_LIBRARY_AI_COMMAND', request: { requestId, text: corpus } });
+    comments = await resultPromise;
+  } else {
+    comments = config.provider === 'ollama'
+      ? await generateWithOllama({ ...config, replyCount: 8 }, aiPayload)
+      : await generateWithOpenAICompatible({ ...config, replyCount: 8 }, aiPayload);
+  }
   const names = parseAiCategories(comments);
   const tags = [];
   for (const name of names) tags.push(await XvmLibraryDb.createTag(name, '#654fe8'));
@@ -292,11 +391,19 @@ async function handleLibraryRequest(message) {
     const context = await libraryContext();
     return { ok: true, ...(await XvmLibraryDb.facets({ isPro: context.isPro })) };
   }
+  if (message.type === 'XVM_LIBRARY_RELATIONSHIPS') return relationshipStatus();
+  if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SYNC') return syncRelationshipCloud();
   if (message.type === 'XVM_LIBRARY_MUTATE') return libraryMutate(message.payload || {});
   if (message.type === 'XVM_LIBRARY_SYNC_START') return startLibrarySync(message.payload || {});
   if (message.type === 'XVM_LIBRARY_SYNC_PAUSE') return pauseLibrarySync();
   if (message.type === 'XVM_LIBRARY_CLOUD_PULL') return { ok: true, ...(await pullLibraryCloud()) };
   if (message.type === 'XVM_LIBRARY_CLOUD_PUSH') return { ok: true, ...(await pushLibraryCloud()) };
+  if (message.type === 'XVM_LIBRARY_CLOUD_DELETE') {
+    const result = await cloudRequest('/api/library/sync', { method: 'DELETE' });
+    const context = await libraryContext();
+    await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...context.sync, cloudBackup: false, cloudCursor: 0, cloudDeletedAt: Date.now(), readOnly: false, updatedAt: Date.now() } });
+    return result;
+  }
   if (message.type === 'XVM_LIBRARY_EXPORT') {
     const context = await libraryContext();
     if (message.query?.cursor && !context.isPro) throw new Error('membership_required');
@@ -745,7 +852,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const operation = message.operation || 'all';
       const sync = {
         ...context.sync, status, updatedAt: Date.now(), error: message.error || null,
-        operations: { ...(context.sync?.operations || {}), [operation]: { status, pages: message.pages || 0, captured: message.captured || 0, cursor: message.cursor || '', updatedAt: Date.now() } },
+        operations: message.type === 'XVM_LIBRARY_SYNC_COMPLETE' ? (context.sync?.operations || {}) : { ...(context.sync?.operations || {}), [operation]: { status, pages: message.pages || 0, captured: message.captured || 0, cursor: message.cursor || '', highWaterId: message.highWaterId || context.sync?.operations?.[operation]?.highWaterId || '', reachedHighWater: Boolean(message.reachedHighWater), updatedAt: Date.now() } },
       };
       if (status === 'idle') sync.lastSyncedAt = Date.now();
       await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
@@ -756,6 +863,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'XVM_LIBRARY_X_ACTION_RESULT') {
     const resolver = pendingLibraryActions.get(message.requestId);
     if (resolver) { pendingLibraryActions.delete(message.requestId); resolver(message.results || { error: message.error }); }
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.type === 'XVM_LIBRARY_AI_RESULT') {
+    const resolver = pendingLibraryAi.get(message.requestId);
+    if (resolver) resolver(message);
     sendResponse({ ok: true });
     return false;
   }
