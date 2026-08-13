@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "数据中心高保真原型": {
+      "versions": [
+        {
+          "path": "数据中心高保真原型.html",
+          "createdAt": "2026-08-13T10:28:33.705Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-08-13T10:28:33.709Z",
+  "updatedAt": "2026-08-13T10:58:45.163Z"
+}

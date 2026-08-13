@@ -17,9 +17,11 @@ chrome.storage is used to persist user preferences and cache data locally in the
 
 • chrome.storage.sync — user-configurable thresholds (Trending / Viral views-per-hour), badge style, leaderboard column order, Grok prompt template, and general feature toggles. These follow the user across devices; bookmark-folder selection does not.
 
-• chrome.storage.local — Star Chart query template/result caches and, only when bookmark-folder timeline injection is enabled, its device-specific toggle/folder selection, a cache of tweet entries from those folders, and the numeric X account ID used to prevent cross-account cache mixing. The bookmark cache is limited to 2 MB and 120 entries per folder, expires after 24 hours, and is cleared on disable, deselection, or X account change. It is never synced or transmitted to X-Tools servers.
+• IndexedDB / chrome.storage.local — the unified local data library (bookmarks, likes, the user's own posts and replies, tags, folders, source-deletion state), sync cursors, feature settings, and the numeric X account ID used to prevent cross-account mixing. The `unlimitedStorage` permission prevents Chrome's default small quota from corrupting large user-requested local archives.
 
-No browsing history or login credentials are stored. Cached bookmark tweet entries remain on the device and exist only to render the user-selected folders in the X timeline.
+• Optional Pro cloud backup — only after explicit consent, normalized metadata, tags, folders, and deletion state may be sent to the X-Tools Worker for cross-device recovery. X cookies, bearer tokens, raw GraphQL responses, AI keys, and media files are excluded. Media is represented only by its original public URL. Pro expiry makes backup read-only for 30 days before deletion.
+
+No browsing history, X login credentials, cookies, bearer tokens, or AI keys are uploaded. Local library data remains on the device unless a Pro user explicitly enables cloud backup.
 ```
 
 ### 需请求主机权限的理由 (justification for host access)
@@ -52,10 +54,10 @@ The extension also requests host permissions for user-configured AI providers, G
 - [ ] 个人通讯
 - [ ] 位置
 - [ ] 网络记录
-- [ ] 用户活动
+- [x] 用户活动（书签、点赞、本人推文与本人回复，仅用于用户主动启用的数据中心）
 - [x] 网站内容（仅在本机处理；包含用户主动启用后短期缓存的所选书签推文）
 
-> 说明：扩展会**读取** X 页面上的推文指标（views/likes/RT 等）和 Star Chart 的转发者公开列表；用户主动开启书签文件夹时间线后，还会在本机短期缓存所选文件夹的推文条目。只有用户主动配置并使用外部 AI 回复服务时，相关提示词与推文正文会直连发送给该服务商；书签缓存不会发送到 X-Tools 或第三方服务器。
+> 说明：扩展会**读取** X 页面已返回的书签、点赞、本人推文、本人回复和公开互动指标，并保存到本机 IndexedDB。Pro 用户明确授权后，可将标准化元数据、标签、文件夹与删除状态备份到 X-Tools；X Cookie、Bearer、原始响应、AI Key 与媒体文件不上传。只有用户主动使用外部 AI 服务时，相关提示词与推文正文才会直连该服务商。
 
 ## 数据使用声明 - 合规承诺
 

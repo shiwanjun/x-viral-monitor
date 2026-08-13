@@ -306,6 +306,7 @@ if (!globalThis.chrome?.storage?.local) {
     try {
       if (action === 'open-x-following') return openX('https://x.com/following');
       if (action === 'open-x-home') return openX('https://x.com/home');
+      if (action === 'open-data-center') return openX('https://x.jieyiai.dev/workspace');
       if (action === 'open-membership') return openX('https://x.jieyiai.dev/#pricing');
       if (action === 'manage-membership') return openX('https://pancake.waffo.ai/consumer/portal');
       if (action === 'go-radar') { state.view = 'radar'; return renderWorkspace(); }

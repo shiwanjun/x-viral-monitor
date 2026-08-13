@@ -1,3 +1,5 @@
+if (typeof importScripts === 'function') importScripts('lib/library-db.js');
+
 const PLACEHOLDER = '[推文内容]';
 const DEFAULT_PROVIDER = 'x-grok';
 const DEFAULT_PLATFORM = 'openai';
@@ -79,6 +81,225 @@ const AUTH_BACKEND_URL = 'https://x.jieyiai.dev';
 const SESSION_KEY = 'xvm_session_v1';
 const SUBSCRIPTION_KEY = 'xvm_subscription_v1';
 const WEBSITE_ORIGIN = 'https://x.jieyiai.dev';
+const LIBRARY_BINDING_KEY = 'xvm_library_bound_account_v1';
+const LIBRARY_SYNC_KEY = 'xvm_library_sync_status_v1';
+const LIBRARY_MIGRATED_KEY = 'xvm_library_bookmarks_migrated_v1';
+const LIBRARY_DEVICE_KEY = 'xvm_library_device_id_v1';
+const pendingLibraryActions = new Map();
+
+function libraryError(error, fallback = 'library_error') {
+  const code = String(error?.message || error || fallback);
+  return { ok: false, error: code };
+}
+
+function subscriptionIsPro(subscription) {
+  const plan = subscription?.tier || subscription?.plan;
+  const status = String(subscription?.status || 'active');
+  const end = Number(subscription?.expiresAt || subscription?.currentPeriodEnd || 0);
+  return ['standard', 'pro', 'max'].includes(plan) && ['active', 'trialing', 'canceling'].includes(status) && (!end || end > Date.now());
+}
+
+async function libraryContext() {
+  const values = await chrome.storage.local.get([SESSION_KEY, SUBSCRIPTION_KEY, LIBRARY_BINDING_KEY, LIBRARY_SYNC_KEY]);
+  return {
+    signedIn: Boolean(values?.[SESSION_KEY]?.token),
+    session: values?.[SESSION_KEY] || null,
+    subscription: values?.[SUBSCRIPTION_KEY] || null,
+    isPro: subscriptionIsPro(values?.[SUBSCRIPTION_KEY]),
+    boundAccount: values?.[LIBRARY_BINDING_KEY] || null,
+    sync: values?.[LIBRARY_SYNC_KEY] || { status: 'idle', updatedAt: 0, operations: {} },
+  };
+}
+
+async function ensureDeviceId() {
+  const stored = await chrome.storage.local.get(LIBRARY_DEVICE_KEY);
+  if (stored?.[LIBRARY_DEVICE_KEY]) return stored[LIBRARY_DEVICE_KEY];
+  const id = crypto.randomUUID();
+  await chrome.storage.local.set({ [LIBRARY_DEVICE_KEY]: id });
+  return id;
+}
+
+async function ensureLibraryBinding(accountId) {
+  const id = String(accountId || '').trim();
+  if (!id) throw new Error('account_mismatch');
+  const values = await chrome.storage.local.get(LIBRARY_BINDING_KEY);
+  const bound = values?.[LIBRARY_BINDING_KEY];
+  if (bound?.accountId && bound.accountId !== id) throw new Error('account_mismatch');
+  if (!bound?.accountId) await chrome.storage.local.set({ [LIBRARY_BINDING_KEY]: { accountId: id, boundAt: Date.now() } });
+  return id;
+}
+
+async function migrateLegacyBookmarks(accountId) {
+  const values = await chrome.storage.local.get([LIBRARY_MIGRATED_KEY, 'bookmarkTimelineCache', 'bookmarkFoldersCache']);
+  if (values?.[LIBRARY_MIGRATED_KEY]) return;
+  const snapshot = makeWebsiteDashboardSnapshot(values);
+  const records = snapshot.rows.map((row) => ({
+    accountId, kind: 'bookmark', sourceFolderId: row.folderId, sourceFolderName: row.folderName,
+    post: { id: row.id, text: row.text, authorName: row.name, authorHandle: row.handle, authorAvatar: row.avatar, media: row.media.map((url) => ({ type: 'image', url })), metrics: { views: row.views, likes: row.engagement }, createdAt: Date.now() },
+  }));
+  await XvmLibraryDb.putCaptures(records);
+  await chrome.storage.local.set({ [LIBRARY_MIGRATED_KEY]: { migratedAt: Date.now(), count: records.length } });
+}
+
+async function broadcastLibraryCommand(message) {
+  const tabs = await chrome.tabs.query({ url: ['https://x.com/*', 'https://pro.x.com/*'] });
+  if (!tabs.length) throw new Error('x_tab_required');
+  const results = await Promise.allSettled(tabs.map((tab) => chrome.tabs.sendMessage(tab.id, message)));
+  return results.some((result) => result.status === 'fulfilled');
+}
+
+async function libraryStatus() {
+  const context = await libraryContext();
+  const facets = await XvmLibraryDb.facets({ isPro: context.isPro });
+  return {
+    ok: true, connected: true, signedIn: context.signedIn, isPro: context.isPro,
+    account: context.boundAccount, sync: context.sync, ...facets,
+    cloudBackup: Boolean(context.sync?.cloudBackup), readOnly: Boolean(context.sync?.readOnly),
+  };
+}
+
+async function libraryMutate(payload = {}) {
+  const action = payload.action;
+  if (action === 'create_tag') return { ok: true, value: await XvmLibraryDb.createTag(payload.name, payload.color) };
+  if (action === 'create_folder') return { ok: true, value: await XvmLibraryDb.createFolder(payload.name, payload.color) };
+  if (action === 'assign_tag') return { ok: true, ...(await XvmLibraryDb.assignTag(payload.itemIds, payload.targetId)) };
+  if (action === 'assign_folder') return { ok: true, ...(await XvmLibraryDb.assignFolder(payload.itemIds, payload.targetId)) };
+  if (action === 'archive' || action === 'restore') return { ok: true, ...(await XvmLibraryDb.archive(payload.itemIds, action === 'archive')) };
+  if (action === 'set_cloud_backup') {
+    const context = await libraryContext();
+    if (!context.signedIn) throw new Error('unauthorized');
+    if (!context.isPro) throw new Error('membership_required');
+    const sync = { ...context.sync, cloudBackup: Boolean(payload.enabled), readOnly: false, updatedAt: Date.now() };
+    await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
+    if (payload.enabled) { await pullLibraryCloud(); await pushLibraryCloud(); }
+    return { ok: true, sync };
+  }
+  throw new Error('unsupported_mutation');
+}
+
+async function cloudRequest(path, init = {}) {
+  const context = await libraryContext();
+  if (!context.session?.token) throw new Error('unauthorized');
+  const response = await fetch(`${AUTH_BACKEND_URL}${path}`, { ...init, headers: { Accept: 'application/json', Authorization: `Bearer ${context.session.token}`, ...(init.headers || {}) } });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) throw new Error(data?.error || `cloud_http_${response.status}`);
+  return data;
+}
+
+async function pullLibraryCloud() {
+  const context = await libraryContext();
+  const cursor = Math.max(0, Number(context.sync?.cloudCursor || 0));
+  let next = cursor; let applied = 0; let hasMore = true;
+  while (hasMore) {
+    const data = await cloudRequest(`/api/library/sync/pull?cursor=${next}&limit=20`);
+    for (const chunk of (data.chunks || [])) { const result = await XvmLibraryDb.applyChanges(chunk.changes || []); applied += result.applied; }
+    next = Number(data.cursor || next); hasMore = Boolean(data.hasMore);
+  }
+  const sync = { ...context.sync, cloudCursor: next, cloudPulledAt: Date.now(), readOnly: false, updatedAt: Date.now() };
+  await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
+  return { applied, cursor: next };
+}
+
+async function pushLibraryCloud(retried = false) {
+  const context = await libraryContext();
+  if (!context.sync?.cloudBackup || !context.isPro || !context.boundAccount?.accountId) return { skipped: true };
+  const changes = await XvmLibraryDb.readOutbox(500);
+  if (!changes.length) return { accepted: 0, cursor: context.sync?.cloudCursor || 0 };
+  try {
+    const batchId = `${changes[0].id}:${changes[0].updatedAt}:${changes.at(-1).id}:${changes.at(-1).updatedAt}:${changes.length}`.slice(0, 128);
+    const data = await cloudRequest('/api/library/sync/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: context.boundAccount.accountId, deviceId: await ensureDeviceId(), batchId, cursor: Number(context.sync?.cloudCursor || 0), changes }) });
+    await XvmLibraryDb.ackOutbox(changes.map((change) => change.id));
+    const sync = { ...context.sync, cloudCursor: data.cursor, cloudPushedAt: Date.now(), updatedAt: Date.now() };
+    await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
+    if (changes.length === 500) setTimeout(() => pushLibraryCloud().catch(() => {}), 250);
+    return data;
+  } catch (error) {
+    if (!retried && String(error?.message) === 'cursor_conflict') { await pullLibraryCloud(); return pushLibraryCloud(true); }
+    throw error;
+  }
+}
+
+async function startLibrarySync(payload = {}) {
+  const context = await libraryContext();
+  if (payload.mode === 'full' && !context.isPro) throw new Error('membership_required');
+  const next = { ...context.sync, status: 'running', mode: payload.mode || 'incremental', startedAt: Date.now(), updatedAt: Date.now(), error: null };
+  await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
+  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: payload.operations });
+  return { ok: true, sync: next };
+}
+
+async function pauseLibrarySync() {
+  const context = await libraryContext();
+  const next = { ...context.sync, status: 'paused', updatedAt: Date.now() };
+  await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
+  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'pause' });
+  return { ok: true, sync: next };
+}
+
+async function runLibraryXAction(payload = {}) {
+  const context = await libraryContext();
+  if (!context.isPro) throw new Error('membership_required');
+  const allowed = ['DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'];
+  if (!allowed.includes(payload.operation)) throw new Error('unsupported_x_action');
+  const postIds = (Array.isArray(payload.postIds) ? payload.postIds : []).slice(0, 50);
+  if (!postIds.length) throw new Error('invalid_request');
+  const requestId = crypto.randomUUID();
+  const resultPromise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { pendingLibraryActions.delete(requestId); reject(new Error('x_action_timeout')); }, Math.max(45_000, postIds.length * 4_000));
+    pendingLibraryActions.set(requestId, (result) => { clearTimeout(timer); resolve(result); });
+  });
+  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_X_ACTION_COMMAND', action: { requestId, operation: payload.operation, postIds } });
+  return { ok: true, results: await resultPromise };
+}
+
+function parseAiCategories(comments) {
+  return Array.from(new Set((comments || []).flatMap((text) => String(text).split(/[，,、|/\n]/)).map((text) => text.replace(/^[#\-\d.\s]+/, '').trim()).filter((text) => text.length >= 2 && text.length <= 20))).slice(0, 8);
+}
+
+async function classifyLibrary(payload = {}) {
+  const context = await libraryContext();
+  if (!context.isPro) throw new Error('membership_required');
+  const rows = (Array.isArray(payload.rows) ? payload.rows : []).slice(0, 20);
+  if (!rows.length) throw new Error('invalid_request');
+  const config = await loadConfig();
+  if (config.provider === 'x-grok') throw new Error('ai_provider_required');
+  const corpus = rows.map((row, index) => `${index + 1}. ${String(row.text || '').slice(0, 500)}`).join('\n');
+  const aiPayload = { tweetText: corpus, promptTemplate: '[推文内容]\n\n请提炼 3-8 个可复用的中文内容标签，每行一个标签，不要解释。' };
+  const comments = config.provider === 'ollama' ? await generateWithOllama({ ...config, replyCount: 8 }, aiPayload) : await generateWithOpenAICompatible({ ...config, replyCount: 8 }, aiPayload);
+  const names = parseAiCategories(comments);
+  const tags = [];
+  for (const name of names) tags.push(await XvmLibraryDb.createTag(name, '#654fe8'));
+  for (let index = 0; index < rows.length; index += 1) {
+    const tag = tags[index % Math.max(1, tags.length)];
+    if (tag) await XvmLibraryDb.assignTag([rows[index].itemId], tag.id);
+  }
+  return { ok: true, tags, assigned: rows.length };
+}
+
+async function handleLibraryRequest(message) {
+  if (message.type === 'XVM_LIBRARY_STATUS') return libraryStatus();
+  if (message.type === 'XVM_LIBRARY_QUERY') {
+    const context = await libraryContext();
+    return { ok: true, ...(await XvmLibraryDb.query({ ...(message.query || {}), limit: Math.min(50, Number(message.query?.limit) || 50) }, { isPro: context.isPro })) };
+  }
+  if (message.type === 'XVM_LIBRARY_FACETS') {
+    const context = await libraryContext();
+    return { ok: true, ...(await XvmLibraryDb.facets({ isPro: context.isPro })) };
+  }
+  if (message.type === 'XVM_LIBRARY_MUTATE') return libraryMutate(message.payload || {});
+  if (message.type === 'XVM_LIBRARY_SYNC_START') return startLibrarySync(message.payload || {});
+  if (message.type === 'XVM_LIBRARY_SYNC_PAUSE') return pauseLibrarySync();
+  if (message.type === 'XVM_LIBRARY_CLOUD_PULL') return { ok: true, ...(await pullLibraryCloud()) };
+  if (message.type === 'XVM_LIBRARY_CLOUD_PUSH') return { ok: true, ...(await pushLibraryCloud()) };
+  if (message.type === 'XVM_LIBRARY_EXPORT') {
+    const context = await libraryContext();
+    if (message.query?.cursor && !context.isPro) throw new Error('membership_required');
+    return { ok: true, format: message.format || 'json', ...(await XvmLibraryDb.query({ ...(message.query || {}), limit: 50 }, { isPro: context.isPro })) };
+  }
+  if (message.type === 'XVM_LIBRARY_X_ACTION') return runLibraryXAction(message.payload || {});
+  if (message.type === 'XVM_LIBRARY_AI_CLASSIFY') return classifyLibrary(message.payload || {});
+  throw new Error('unsupported_message');
+}
 
 function isOfficialWebsiteSender(sender) {
   try { return new URL(sender?.url || '').origin === WEBSITE_ORIGIN; }
@@ -471,6 +692,72 @@ async function testOpenAICompatible(config) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== 'string') return false;
 
+  if (message.type === 'XVM_LIBRARY_CAPTURE_BATCH') {
+    (async () => {
+      const bound = await ensureLibraryBinding(message.accountId);
+      await migrateLegacyBookmarks(bound);
+      const deviceId = await ensureDeviceId();
+      const records = (message.records || []).map((record) => ({ ...record, accountId: bound, deviceId }));
+      const result = await XvmLibraryDb.putCaptures(records);
+      const context = await libraryContext();
+      const sync = { ...context.sync, status: 'idle', lastSyncedAt: Date.now(), updatedAt: Date.now(), lastOperation: message.operation, cursor: message.cursor || context.sync?.cursor || '' };
+      await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
+      if (context.sync?.cloudBackup && context.isPro) setTimeout(() => pushLibraryCloud().catch(() => {}), 200);
+      sendResponse({ ok: true, ...result });
+    })().catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
+  if (message.type === 'XVM_LIBRARY_SOURCE_REMOVED') {
+    ensureLibraryBinding(message.accountId)
+      .then((bound) => XvmLibraryDb.markSourceRemoved(bound, message.kind, message.postId))
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
+  if (message.type === 'XVM_LIBRARY_TEMPLATE') {
+    chrome.storage.local.set({ [`xvm_library_template_${message.template?.operation}`]: message.template || null }, () => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message.type === 'XVM_LIBRARY_PAGE_READY') {
+    (async () => {
+      const bound = await ensureLibraryBinding(message.accountId);
+      await migrateLegacyBookmarks(bound);
+      const context = await libraryContext();
+      if (Date.now() - Number(context.sync?.lastAutoStartedAt || 0) >= 30 * 60 * 1000) {
+        const sync = { ...context.sync, lastAutoStartedAt: Date.now(), updatedAt: Date.now() };
+        await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
+        try { await chrome.tabs.sendMessage(sender.tab.id, { type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: 'incremental' }); } catch (_) {}
+      }
+      sendResponse({ ok: true });
+    })().catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
+  if (message.type === 'XVM_LIBRARY_SYNC_PROGRESS' || message.type === 'XVM_LIBRARY_SYNC_COMPLETE' || message.type === 'XVM_LIBRARY_ERROR') {
+    (async () => {
+      const context = await libraryContext();
+      const status = message.type === 'XVM_LIBRARY_SYNC_COMPLETE' ? 'idle' : (message.type === 'XVM_LIBRARY_ERROR' ? 'failed' : message.status || 'running');
+      const operation = message.operation || 'all';
+      const sync = {
+        ...context.sync, status, updatedAt: Date.now(), error: message.error || null,
+        operations: { ...(context.sync?.operations || {}), [operation]: { status, pages: message.pages || 0, captured: message.captured || 0, cursor: message.cursor || '', updatedAt: Date.now() } },
+      };
+      if (status === 'idle') sync.lastSyncedAt = Date.now();
+      await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
+      sendResponse({ ok: true });
+    })().catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
+  if (message.type === 'XVM_LIBRARY_X_ACTION_RESULT') {
+    const resolver = pendingLibraryActions.get(message.requestId);
+    if (resolver) { pendingLibraryActions.delete(message.requestId); resolver(message.results || { error: message.error }); }
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message.type.startsWith('XVM_LIBRARY_')) {
+    handleLibraryRequest(message).then(sendResponse).catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
+
   if (message.type === 'XVM_AI_GET_PRESETS') {
     sendResponse({ ok: true, presets: OPENAI_COMPAT_PLATFORMS, defaults: SYNC_DEFAULTS });
     return false;
@@ -524,6 +811,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Only the first-party website may ask this extension to redeem a one-time
 // handoff code. The raw bearer token remains inside the extension worker.
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
+  if (message?.type?.startsWith('XVM_LIBRARY_')) {
+    if (!isOfficialWebsiteSender(sender)) {
+      sendResponse({ ok: false, error: 'unauthorized' });
+      return false;
+    }
+    handleLibraryRequest(message).then(sendResponse).catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
   if (message?.type === 'XVM_WEBSITE_AUTH_PROBE') {
     if (!isOfficialWebsiteSender(sender)) {
       sendResponse({ ok: false, error: 'untrusted_sender' });

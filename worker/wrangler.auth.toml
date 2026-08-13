@@ -30,12 +30,16 @@ routes = [
   { pattern = "https://x.jieyiai.dev/*", zone_name = "jieyiai.dev" },
 ]
 
+[triggers]
+crons = ["17 3 * * *"]
+
 # Defaults (shared across envs unless overridden)
 [vars]
 BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "test"
 ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
 EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
+LIBRARY_WORKSPACE_ENABLED = "false"
 
 [assets]
 directory = "../docs"
@@ -49,6 +53,10 @@ run_worker_first = ["/api/*"]
 binding = "DB"
 database_name = "jieyi-auth"
 database_id = "d83e9d6e-0b2b-4c4c-b8ce-e83082188a6d"
+
+[[r2_buckets]]
+binding = "LIBRARY_BUCKET"
+bucket_name = "x-tools-library"
 
 # ─── Test environment ────────────────────────────────────────────────
 # Deploy:  npx wrangler deploy -c wrangler.auth.toml --env test
@@ -64,11 +72,16 @@ BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "test"
 ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
 EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
+LIBRARY_WORKSPACE_ENABLED = "true"
 
 [[env.test.d1_databases]]
 binding = "DB"
 database_name = "jieyi-auth-prelaunch"
 database_id = "35e5099a-158c-4362-89b5-84cdfae4f272"
+
+[[env.test.r2_buckets]]
+binding = "LIBRARY_BUCKET"
+bucket_name = "x-tools-library-test"
 
 # ─── Production environment ──────────────────────────────────────────
 # Deploy:  npx wrangler deploy -c wrangler.auth.toml --env production
@@ -84,8 +97,13 @@ BETTER_AUTH_URL = "https://x.jieyiai.dev"
 WAFFO_ENV = "prod"
 ALLOWED_ORIGIN = "chrome-extension://bionhgeckdccebiialhfkdaniblofbmf,chrome-extension://lfhpokjhhnpphhdadnaclbailchgkfnn,https://x.jieyiai.dev"
 EXTENSION_IDS = "bionhgeckdccebiialhfkdaniblofbmf,lfhpokjhhnpphhdadnaclbailchgkfnn"
+LIBRARY_WORKSPACE_ENABLED = "false"
 
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "jieyi-auth"
 database_id = "d83e9d6e-0b2b-4c4c-b8ce-e83082188a6d"
+
+[[env.production.r2_buckets]]
+binding = "LIBRARY_BUCKET"
+bucket_name = "x-tools-library"

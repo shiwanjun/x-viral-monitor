@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage"],
+  "permissions": ["storage", "unlimitedStorage"],
   "host_permissions": [
     "https://raw.githubusercontent.com/*",
     "http://localhost/*",
@@ -21,7 +21,9 @@
     "https://api.siliconflow.cn/*",
     "https://api.siliconflow.com/*",
     "https://x.jieyiai.dev/*",
-    "https://pancake.waffo.ai/*"
+    "https://pancake.waffo.ai/*",
+    "https://x.com/*",
+    "https://pro.x.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -47,12 +49,12 @@
   "content_scripts": [
     {
       "matches": ["https://x.com/*", "https://pro.x.com/*"],
-      "js": ["src/build-channel.js", "lib/bookmark-timeline-storage.js", "bridge.js", "src/premium/license/tier-logic.js", "src/premium/license/isolated.js"],
+      "js": ["src/build-channel.js", "lib/bookmark-timeline-storage.js", "lib/library-bridge.js", "bridge.js", "src/premium/license/tier-logic.js", "src/premium/license/isolated.js"],
       "run_at": "document_start"
     },
     {
       "matches": ["https://x.com/*", "https://pro.x.com/*"],
-      "js": ["src/build-channel.js", "lib/x-net-hook.js", "lib/x-client-transaction.js", "lib/grok-reply.js", "lib/long-image-viewer.js", "lib/image-viewer.js", "lib/bookmark-timeline-inject.js", "src/premium/license/gate.js", "src/premium/content-filter/rules.js", "src/premium/content-filter/filter.js", "src/premium/rate-filter/filter.js", "content.js", "starchart.js", "src/follow-radar/logic.js", "src/follow-radar/radar.js", "bookmark-menu.js"],
+      "js": ["src/build-channel.js", "lib/x-net-hook.js", "lib/library-capture.js", "lib/x-client-transaction.js", "lib/grok-reply.js", "lib/long-image-viewer.js", "lib/image-viewer.js", "lib/bookmark-timeline-inject.js", "src/premium/license/gate.js", "src/premium/content-filter/rules.js", "src/premium/content-filter/filter.js", "src/premium/rate-filter/filter.js", "content.js", "starchart.js", "src/follow-radar/logic.js", "src/follow-radar/radar.js", "bookmark-menu.js"],
       "css": ["styles.css"],
       "run_at": "document_start",
       "world": "MAIN"

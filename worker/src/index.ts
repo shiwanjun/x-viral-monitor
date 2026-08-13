@@ -43,6 +43,8 @@ interface WorkerEnv extends AuthEnv {
   WAFFO_PRODUCT_MEMBERSHIP_MONTHLY: string;
   WAFFO_PRODUCT_MEMBERSHIP_YEARLY: string;
   EXTENSION_IDS?: string;
+  LIBRARY_WORKSPACE_ENABLED?: string;
+  LIBRARY_BUCKET: R2Bucket;
 }
 
 const app = new Hono<{ Bindings: WorkerEnv }>();
@@ -112,9 +114,41 @@ function withCors(response: Response, headers: Record<string, string>): Response
 }
 
 type FollowRadarAccess = { userId: string; mode: "full" | "last_30_days" };
+type LibraryAccess = { userId: string; accountId: string | null; mode: "full" | "read_only" | "none"; retainUntil: number | null };
+
+async function libraryAccess(c: { env: WorkerEnv; req: { raw: Request } }, requestedAccountId = ""): Promise<LibraryAccess | null> {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) return null;
+  const subscription = await c.env.DB.prepare("SELECT plan, status, current_period_end, updated_at FROM subscriptions WHERE user_id = ?")
+    .bind(session.user.id).first<{ plan: string; status: string; current_period_end: number | null; updated_at: string | null }>();
+  const binding = await c.env.DB.prepare("SELECT x_account_id, retain_until FROM library_accounts WHERE user_id = ?")
+    .bind(session.user.id).first<{ x_account_id: string; retain_until: number | null }>();
+  const active = PLAN_TO_TIER[subscription?.plan || "none"] === "pro"
+    && ["active", "canceling"].includes(subscription?.status || "")
+    && (subscription?.current_period_end == null || subscription.current_period_end > Date.now());
+  if (requestedAccountId && binding?.x_account_id && requestedAccountId !== binding.x_account_id) {
+    return { userId: session.user.id, accountId: binding.x_account_id, mode: "none", retainUntil: binding.retain_until };
+  }
+  if (active) return { userId: session.user.id, accountId: binding?.x_account_id || null, mode: "full", retainUntil: binding?.retain_until || null };
+  const anchor = binding?.retain_until || (subscription?.current_period_end ? subscription.current_period_end + 30 * 24 * 60 * 60 * 1000 : null);
+  if (anchor && anchor > Date.now()) return { userId: session.user.id, accountId: binding?.x_account_id || null, mode: "read_only", retainUntil: anchor };
+  return { userId: session.user.id, accountId: binding?.x_account_id || null, mode: "none", retainUntil: anchor };
+}
+
+async function gzipJson(value: unknown): Promise<ArrayBuffer> {
+  const source = new Blob([JSON.stringify(value)]).stream();
+  const compressed = source.pipeThrough(new CompressionStream("gzip"));
+  return new Response(compressed).arrayBuffer();
+}
+
+async function gunzipJson(body: ReadableStream): Promise<unknown> {
+  const decompressed = body.pipeThrough(new DecompressionStream("gzip"));
+  return new Response(decompressed).json();
+}
 
 /** The extension scans X locally; this accepts only public relationship events. */
-async function getFollowRadarAccess(c: any, allowGrace = false): Promise<FollowRadarAccess | null> {
+async function getFollowRadarAccess(c: { env: WorkerEnv; req: { raw: Request } }, allowGrace = false): Promise<FollowRadarAccess | null> {
   const auth = createAuth(c.env);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session) return null;
@@ -154,7 +188,7 @@ app.get("/api/extension-handoff/config", (c) => {
   // Extension IDs are public browser identifiers, not credentials. Returning
   // the configured list lets the test Worker hand off to an unpacked build
   // without ever widening the production site's fixed Web Store allowlist.
-  return jsonWithCors(c, { extensionIds: allowedExtensionIds(c.env) });
+  return jsonWithCors(c, { extensionIds: allowedExtensionIds(c.env), libraryWorkspaceEnabled: c.env.LIBRARY_WORKSPACE_ENABLED !== "false" });
 });
 
 app.post("/api/extension-handoff/create", async (c) => {
@@ -337,6 +371,95 @@ app.delete("/api/follow-radar/events", async (c) => {
   return jsonWithCors(c, { ok: true });
 });
 
+// ─── Library cloud backup (Pro, normalized metadata only) ───────────
+app.get("/api/library/sync/status", async (c) => {
+  const access = await libraryAccess(c);
+  if (!access) return jsonWithCors(c, { ok: false, error: "unauthorized" }, 401);
+  const manifest = await c.env.DB.prepare("SELECT cursor, change_count, bytes_used, updated_at FROM library_sync_manifests WHERE user_id = ?")
+    .bind(access.userId).first<{ cursor: number; change_count: number; bytes_used: number; updated_at: string }>();
+  return jsonWithCors(c, { ok: true, mode: access.mode, accountId: access.accountId, retainUntil: access.retainUntil, manifest: manifest || { cursor: 0, change_count: 0, bytes_used: 0, updated_at: null } });
+});
+
+app.post("/api/library/sync/push", async (c) => {
+  const contentLength = Number(c.req.header("content-length") || 0);
+  if (contentLength > 2 * 1024 * 1024) return jsonWithCors(c, { ok: false, error: "quota_exceeded" }, 413);
+  let body: { accountId?: unknown; deviceId?: unknown; batchId?: unknown; cursor?: unknown; changes?: unknown[] };
+  try { body = await c.req.json(); } catch (_) { return jsonWithCors(c, { ok: false, error: "invalid_json" }, 400); }
+  const accountId = String(body.accountId || "").slice(0, 64);
+  const deviceId = String(body.deviceId || "").slice(0, 80);
+  const batchId = String(body.batchId || "").slice(0, 128);
+  const changes = Array.isArray(body.changes) ? body.changes : [];
+  if (!accountId || !deviceId || !batchId || !changes.length || changes.length > 500) return jsonWithCors(c, { ok: false, error: "invalid_request" }, 400);
+  const access = await libraryAccess(c, accountId);
+  if (!access) return jsonWithCors(c, { ok: false, error: "unauthorized" }, 401);
+  if (access.mode !== "full") return jsonWithCors(c, { ok: false, error: access.accountId && access.accountId !== accountId ? "account_mismatch" : "membership_required" }, 403);
+
+  const receipt = await c.env.DB.prepare("SELECT cursor, accepted FROM library_sync_receipts WHERE user_id = ? AND batch_id = ?")
+    .bind(access.userId, batchId).first<{ cursor: number; accepted: number }>();
+  if (receipt) return jsonWithCors(c, { ok: true, dedup: true, accepted: receipt.accepted, cursor: receipt.cursor });
+
+  const expected = Math.max(0, Number(body.cursor) || 0);
+  const current = await c.env.DB.prepare("SELECT cursor FROM library_sync_manifests WHERE user_id = ?").bind(access.userId).first<{ cursor: number }>();
+  const currentCursor = Number(current?.cursor || 0);
+  if (expected !== currentCursor) return jsonWithCors(c, { ok: false, error: "cursor_conflict", cursor: currentCursor }, 409);
+  if (!access.accountId) {
+    await c.env.DB.prepare("INSERT INTO library_accounts (user_id, x_account_id, bound_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET updated_at = excluded.updated_at")
+      .bind(access.userId, accountId, Date.now(), Date.now()).run();
+  }
+  const accepted = changes.filter((change) => change && typeof change === "object" && String((change as any).id || "").length <= 220).slice(0, 500);
+  const nextCursor = currentCursor + 1;
+  const objectKey = `library/${access.userId}/${accountId}/${String(nextCursor).padStart(12, "0")}-${crypto.randomUUID()}.json.gz`;
+  const payload = { version: 1, accountId, deviceId, cursor: nextCursor, createdAt: Date.now(), changes: accepted };
+  const compressed = await gzipJson(payload);
+  if (compressed.byteLength > 2 * 1024 * 1024) return jsonWithCors(c, { ok: false, error: "quota_exceeded" }, 413);
+  await c.env.LIBRARY_BUCKET.put(objectKey, compressed, { httpMetadata: { contentType: "application/json", contentEncoding: "gzip" }, customMetadata: { userId: access.userId, accountId, cursor: String(nextCursor) } });
+  const chunkId = crypto.randomUUID();
+  const batch = c.env.DB.batch([
+    c.env.DB.prepare("INSERT INTO library_sync_chunks (id, user_id, x_account_id, object_key, cursor, change_count, bytes_used, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(chunkId, access.userId, accountId, objectKey, nextCursor, accepted.length, compressed.byteLength, Date.now()),
+    c.env.DB.prepare(`INSERT INTO library_sync_manifests (user_id, x_account_id, cursor, change_count, bytes_used, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET cursor = excluded.cursor, x_account_id = excluded.x_account_id,
+      change_count = library_sync_manifests.change_count + excluded.change_count, bytes_used = library_sync_manifests.bytes_used + excluded.bytes_used, updated_at = excluded.updated_at`)
+      .bind(access.userId, accountId, nextCursor, accepted.length, compressed.byteLength, Date.now()),
+    c.env.DB.prepare("INSERT INTO library_sync_receipts (user_id, batch_id, cursor, accepted, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(access.userId, batchId, nextCursor, accepted.length, Date.now()),
+  ]);
+  try { await batch; } catch (error) { await c.env.LIBRARY_BUCKET.delete(objectKey); throw error; }
+  return jsonWithCors(c, { ok: true, accepted: accepted.length, cursor: nextCursor });
+});
+
+app.get("/api/library/sync/pull", async (c) => {
+  const access = await libraryAccess(c);
+  if (!access) return jsonWithCors(c, { ok: false, error: "unauthorized" }, 401);
+  if (access.mode === "none") return jsonWithCors(c, { ok: false, error: "membership_required" }, 403);
+  const cursor = Math.max(0, Number(c.req.query("cursor") || 0));
+  const limit = Math.max(1, Math.min(50, Number(c.req.query("limit") || 10)));
+  const rows = await c.env.DB.prepare("SELECT object_key, cursor FROM library_sync_chunks WHERE user_id = ? AND cursor > ? ORDER BY cursor ASC LIMIT ?")
+    .bind(access.userId, cursor, limit).all<{ object_key: string; cursor: number }>();
+  const chunks = [];
+  for (const row of rows.results || []) {
+    const object = await c.env.LIBRARY_BUCKET.get(row.object_key);
+    if (!object?.body) continue;
+    chunks.push(await gunzipJson(object.body));
+  }
+  const nextCursor = (rows.results || []).at(-1)?.cursor || cursor;
+  return jsonWithCors(c, { ok: true, mode: access.mode, cursor: nextCursor, hasMore: (rows.results || []).length === limit, chunks });
+});
+
+app.delete("/api/library/sync", async (c) => {
+  const access = await libraryAccess(c);
+  if (!access) return jsonWithCors(c, { ok: false, error: "unauthorized" }, 401);
+  const rows = await c.env.DB.prepare("SELECT object_key FROM library_sync_chunks WHERE user_id = ?").bind(access.userId).all<{ object_key: string }>();
+  const keys = (rows.results || []).map((row) => row.object_key);
+  for (let offset = 0; offset < keys.length; offset += 1000) await c.env.LIBRARY_BUCKET.delete(keys.slice(offset, offset + 1000));
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM library_sync_chunks WHERE user_id = ?").bind(access.userId),
+    c.env.DB.prepare("DELETE FROM library_sync_manifests WHERE user_id = ?").bind(access.userId),
+    c.env.DB.prepare("DELETE FROM library_sync_receipts WHERE user_id = ?").bind(access.userId),
+    c.env.DB.prepare("DELETE FROM library_accounts WHERE user_id = ?").bind(access.userId),
+  ]);
+  return jsonWithCors(c, { ok: true, deletedChunks: keys.length });
+});
+
 // ─── POST /api/webhook ───────────────────────────────────────────────
 //   Waffo webhook receiver. Verifies RSA-SHA256 signature, then updates
 //   the subscriptions table based on the event type.
@@ -374,10 +497,10 @@ app.post("/api/webhook", async (c) => {
   }
 
   // Resolve userId from email if metadata didn't carry it.
-  let resolvedUserId = userId;
+  let resolvedUserId: string | undefined = userId;
   if (!resolvedUserId && email) {
     const u = await c.env.DB.prepare("SELECT id FROM user WHERE email = ?").bind(email).first<{ id: string }>();
-    resolvedUserId = u?.id || null;
+    resolvedUserId = u?.id;
   }
   if (!resolvedUserId) {
     return c.json({ ok: true, skipped: "user_not_found" });
@@ -397,16 +520,22 @@ app.post("/api/webhook", async (c) => {
          plan = excluded.plan, status = 'active', waffo_order_id = excluded.waffo_order_id,
          current_period_end = excluded.current_period_end, updated_at = datetime('now')`,
     ).bind(crypto.randomUUID(), resolvedUserId, email, plan, orderId, now + periodMs).run();
+    await c.env.DB.prepare("UPDATE library_accounts SET retain_until = NULL, updated_at = ? WHERE user_id = ?").bind(now, resolvedUserId).run();
   } else if (action === "ending") {
     // canceling — keep access until period end, mark status.
     await c.env.DB.prepare(
       "UPDATE subscriptions SET status = 'canceling', updated_at = datetime('now') WHERE user_id = ?",
     ).bind(resolvedUserId).run();
+    const retainUntil = (await c.env.DB.prepare("SELECT current_period_end FROM subscriptions WHERE user_id = ?").bind(resolvedUserId).first<{ current_period_end: number | null }>())?.current_period_end;
+    if (retainUntil) await c.env.DB.prepare("UPDATE library_accounts SET retain_until = ?, updated_at = ? WHERE user_id = ?")
+      .bind(retainUntil + 30 * 24 * 60 * 60 * 1000, now, resolvedUserId).run();
   } else if (action === "revoke") {
     // canceled or past_due — revoke access.
     await c.env.DB.prepare(
       "UPDATE subscriptions SET status = ?, plan = 'none', current_period_end = NULL, updated_at = datetime('now') WHERE user_id = ?",
     ).bind(statusForEvent(event.eventType), resolvedUserId).run();
+    await c.env.DB.prepare("UPDATE library_accounts SET retain_until = ?, updated_at = ? WHERE user_id = ?")
+      .bind(now + 30 * 24 * 60 * 60 * 1000, now, resolvedUserId).run();
   }
 
   return c.json({ ok: true, action });
@@ -422,4 +551,25 @@ app.options("*", (c) => {
   return new Response(null, { status: 204, headers: corsHeaders(c.env, c.req.header("Origin") || "") });
 });
 
-export default app;
+async function cleanupExpiredLibraries(env: WorkerEnv) {
+  const expired = await env.DB.prepare("SELECT user_id FROM library_accounts WHERE retain_until IS NOT NULL AND retain_until <= ? LIMIT 100")
+    .bind(Date.now()).all<{ user_id: string }>();
+  for (const account of expired.results || []) {
+    const rows = await env.DB.prepare("SELECT object_key FROM library_sync_chunks WHERE user_id = ?").bind(account.user_id).all<{ object_key: string }>();
+    const keys = (rows.results || []).map((row) => row.object_key);
+    for (let offset = 0; offset < keys.length; offset += 1000) await env.LIBRARY_BUCKET.delete(keys.slice(offset, offset + 1000));
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM library_sync_chunks WHERE user_id = ?").bind(account.user_id),
+      env.DB.prepare("DELETE FROM library_sync_manifests WHERE user_id = ?").bind(account.user_id),
+      env.DB.prepare("DELETE FROM library_sync_receipts WHERE user_id = ?").bind(account.user_id),
+      env.DB.prepare("DELETE FROM library_accounts WHERE user_id = ?").bind(account.user_id),
+    ]);
+  }
+}
+
+export default {
+  fetch: app.fetch,
+  async scheduled(_controller: ScheduledController, env: WorkerEnv, ctx: ExecutionContext) {
+    ctx.waitUntil(cleanupExpiredLibraries(env));
+  },
+};
