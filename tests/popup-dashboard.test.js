@@ -75,10 +75,9 @@ describe('#45 popup tabs structure (mock A)', () => {
     expect(/<symbol id="icon-moon"/.test(html)).toBe(true);
   });
 
-  it('工作台与扩展使用同一份 X-Tools 标识资源', () => {
-    const dashboardHtml = readFileSync(resolve(repo, 'dashboard.html'), 'utf8');
-    expect(dashboardHtml).toContain('src="icons/x-tools-logo.png"');
-    expect(dashboardHtml).not.toContain('icon_origin.svg');
+  it('只保留官网工作台且扩展使用统一 X-Tools 标识资源', () => {
+    expect(manifest.options_ui).toBeUndefined();
+    expect(dashJs).toContain("chrome.tabs.create({ url: 'https://x.jieyiai.dev/workspace' })");
     expect(manifest.icons).toEqual({
       16: 'icons/icon16.png',
       48: 'icons/icon48.png',

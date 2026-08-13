@@ -2724,16 +2724,18 @@ article[data-testid="tweet"] .xvm-fr-pill {
 }
 .xvm-fr-user-pill {
   display: inline-flex;
-  position: static !important;
+  position: absolute !important;
+  z-index: 2;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   min-width: 102px;
   min-height: 30px;
-  margin: 0 8px;
+  margin: 0;
   padding-inline: 12px;
   vertical-align: middle;
 }
+.xvm-fr-user-card-owner { position: relative !important; }
 
 @media (max-width: 600px) {
   .xvm-fr-user-pill {

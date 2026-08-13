@@ -72,15 +72,15 @@ describe('关注雷达浏览器回归', () => {
       const pillBox = pill.getBoundingClientRect();
       const buttonBox = button.getBoundingClientRect();
       return {
-        pillParentIsActionColumn: pill.parentElement === actionColumn,
-        pillImmediatelyBeforeActionColumn: pill.nextElementSibling === actionColumn,
-        noOverlap: pillBox.right <= buttonBox.left,
+        pillParentIsCard: pill.parentElement === card,
+        verticallyAligned: Math.abs((pillBox.top + pillBox.height / 2) - (buttonBox.top + buttonBox.height / 2)) < 1,
+        noOverlap: pillBox.right <= buttonBox.left || pillBox.left >= buttonBox.right,
         pills: card.querySelectorAll('.xvm-fr-user-pill').length,
       };
     });
     expect(layout).toEqual({
-      pillParentIsActionColumn: false,
-      pillImmediatelyBeforeActionColumn: true,
+      pillParentIsCard: true,
+      verticallyAligned: true,
       noOverlap: true,
       pills: 1,
     });
@@ -113,9 +113,19 @@ describe('关注雷达浏览器回归', () => {
     await page.addScriptTag({ content: logicSrc });
     await page.addScriptTag({ content: radarSrc });
 
-    await page.waitForFunction(() => document.querySelector('.xvm-fr-user-pill')?.textContent === '我关注 0.25');
+    await page.waitForFunction(() => document.querySelector('.xvm-fr-user-pill')?.textContent === '我关注了 0.25');
     await page.waitForTimeout(1300);
     expect(lookupRequests).toBe(1);
+    await page.close();
+  });
+
+  it('可复用同一用户行已有的数值率且不会继续显示破折号', async () => {
+    const page = await browser.newPage();
+    await page.setContent('<div data-testid="UserCell"><a role="link" href="/alice">Alice</a><span class="other-extension">互关 0.53</span><button>正在关注</button></div>');
+    await page.addScriptTag({ content: logicSrc });
+    await page.addScriptTag({ content: radarSrc });
+    await page.waitForFunction(() => document.querySelector('.xvm-fr-user-pill')?.textContent === '我关注了 0.53');
+    expect(await page.locator('.xvm-fr-user-pill').count()).toBe(1);
     await page.close();
   });
 

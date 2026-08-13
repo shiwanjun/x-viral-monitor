@@ -258,7 +258,7 @@
 
   function wireWorkspaceButton() {
     document.getElementById('open-workspace')?.addEventListener('click', () => {
-      try { chrome.runtime.openOptionsPage(); } catch (_) {}
+      try { chrome.tabs.create({ url: 'https://x.jieyiai.dev/workspace' }); } catch (_) {}
     });
   }
 

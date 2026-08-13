@@ -31,7 +31,7 @@ describe('website-to-extension auth handoff', () => {
   });
 
   it('permits incoming extension messages only from the official website', () => {
-    expect(manifest.externally_connectable.matches).toEqual(['https://x.jieyiai.dev/*']);
+    expect(manifest.externally_connectable.matches).toEqual(['https://x.jieyiai.dev/*', 'http://127.0.0.1/*', 'http://localhost/*']);
     expect(background).toMatch(/onMessageExternal/);
     expect(background).toMatch(/isOfficialWebsiteSender/);
     expect(background).toMatch(/XVM_WEBSITE_AUTH_HANDOFF/);

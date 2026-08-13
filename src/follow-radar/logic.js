@@ -3,7 +3,8 @@
 // Relationship state machine for leaderboard capsules:
 //   rec: { n: display name, f: 0|1 (I follow them), b: 0|1 (they follow me),
 //          fc: followers_count, fd: friends_count (their following),
-//          t: lastSeen ts, u: ts they unfollowed me, i: ts I unfollowed them }
+//          t: lastSeen ts, u: ts they unfollowed me, i: ts I unfollowed them,
+//          m: ts when a mutual relationship was first broken }
 //   capsule: 互关 (f&&b) · 我关注 (f) · 关注我 (b) · 取关 (u|i, no current link) · 关注率 (none)
 //
 // Exposed as window.__xvmFollowRadarLogic so radar.js and unit tests share it.
@@ -25,6 +26,9 @@
     const f = rec.f === 1 || rec.f === true;
     const b = rec.b === 1 || rec.b === true;
     if (f && b) return 'mutual';
+    // Once a mutual relationship existed, either side breaking it is a
+    // historical unfollow even if the remaining direction is still active.
+    if (rec.m || (rec.u && f) || (rec.i && b)) return 'unfollowed';
     if (f) return 'mine';
     if (b) return 'theirs';
     if (rec.u || rec.i) return 'unfollowed';
@@ -35,6 +39,8 @@
   // null when followers count is unknown/zero.
   function computeRate(rec) {
     if (!rec) return null;
+    const observedRate = Number(rec.r);
+    if (Number.isFinite(observedRate) && observedRate >= 0) return Math.round(observedRate * 100) / 100;
     const fc = Number(rec.fc) || 0;
     const fd = Number(rec.fd) || 0;
     if (fc <= 0) return null;
@@ -52,6 +58,7 @@
   function mergeUser(rec, u, now = Date.now()) {
     const next = rec ? { ...rec } : {};
     const events = [];
+    const wasMutual = (next.f === 1 || next.f === true) && (next.b === 1 || next.b === true);
     if (u.name) next.n = u.name;
     if (typeof u.f === 'boolean' || u.f === 0 || u.f === 1) {
       const f = u.f === 1 || u.f === true;
@@ -79,6 +86,9 @@
     }
     if (typeof u.fc === 'number') next.fc = u.fc;
     if (typeof u.fd === 'number') next.fd = u.fd;
+    if (typeof u.r === 'number' && Number.isFinite(u.r) && u.r >= 0) next.r = u.r;
+    const isMutual = (next.f === 1 || next.f === true) && (next.b === 1 || next.b === true);
+    if (wasMutual && !isMutual && !next.m) next.m = now;
     next.t = now;
     return { rec: next, events };
   }

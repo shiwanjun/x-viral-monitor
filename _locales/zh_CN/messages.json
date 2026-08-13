@@ -597,7 +597,7 @@
   "cfAutoSaved":          { "message": "已自动保存" },
   "advAppearanceTitle": { "message": "外观" },
   "frMutual":        { "message": "互关" },
-  "frMine":          { "message": "我关注" },
+  "frMine":          { "message": "我关注了" },
   "frTheirs":        { "message": "关注我" },
   "frUnfollowed":    { "message": "取关了" },
   "frRateLabel":     { "message": "关注/粉丝比" },

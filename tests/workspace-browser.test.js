@@ -100,6 +100,8 @@ describe('官网登录后数据中心浏览器回归', () => {
           else callback({ ok: true });
         },
       } } });
+      window.__openedUrls = [];
+      window.open = (url) => { window.__openedUrls.push(String(url)); return null; };
       window.__auditChrome = Boolean(window.chrome?.runtime?.sendMessage);
     });
     await page.goto(`${origin}/workspace`);
@@ -108,9 +110,19 @@ describe('官网登录后数据中心浏览器回归', () => {
     await page.locator('[data-view="gallery"]').click();
     expect(await page.locator('#view-gallery').isVisible()).toBe(true);
     expect(await page.locator('#view-gallery .gallery-card').count()).toBe(2);
+    await page.locator('#view-gallery .gallery-card').first().click();
+    expect(await page.evaluate(() => window.__openedUrls.at(-1))).toBe('https://x.com/alice/status/101');
     await page.locator('[data-view="stats"]').click();
     expect(await page.locator('#view-stats').isVisible()).toBe(true);
     await page.locator('[data-view="table"]').click();
+    await page.locator('[data-kind="like"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('#rows tr').length === 1);
+    expect(await page.locator('#page-title').textContent()).toBe('点赞');
+    expect(await page.locator('#rows').innerText()).toContain('第二条纯文本点赞');
+    await page.locator('[data-kind="all"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('#rows tr').length === 2);
+    await page.locator('[data-sync-kind="bookmark"]').click();
+    await page.waitForFunction(() => window.__libraryMessages.some((message) => message.type === 'XVM_LIBRARY_SYNC_START' && message.payload.operations.includes('Bookmarks')));
     await page.locator('#rows .row-check').first().check();
     expect(await page.locator('#batch-bar').isVisible()).toBe(true);
     expect(await page.locator('#selected-count').textContent()).toBe('1');
@@ -127,6 +139,8 @@ describe('官网登录后数据中心浏览器回归', () => {
     await page.locator('[data-section="relations"]').click();
     expect(await page.locator('#relation-list').innerText()).toContain('互关');
     expect(await page.locator('#relation-list').innerText()).toContain('0.80');
+    await page.locator('#relation-list .relation-row').click();
+    expect(await page.evaluate(() => window.__openedUrls.at(-1))).toBe('https://x.com/alice');
     await page.locator('[data-section="unfollow"]').click();
     expect(await page.locator('#unfollow-list').innerText()).toContain('TA 取关我');
     await page.close();

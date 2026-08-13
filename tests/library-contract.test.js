@@ -9,11 +9,12 @@ describe('数据中心公共契约', () => {
     expect(manifest.permissions).toContain('unlimitedStorage');
     expect(manifest.content_scripts[0].js).toContain('lib/library-bridge.js');
     expect(manifest.content_scripts[1].js).toContain('lib/library-capture.js');
+    expect(manifest.options_ui).toBeUndefined();
   });
 
   it('扩展暴露完整分页消息且单页最多 50 条', () => {
     const background = read('../background.js');
-    ['XVM_LIBRARY_STATUS', 'XVM_LIBRARY_QUERY', 'XVM_LIBRARY_FACETS', 'XVM_LIBRARY_MUTATE', 'XVM_LIBRARY_SYNC_START', 'XVM_LIBRARY_SYNC_PAUSE', 'XVM_LIBRARY_EXPORT', 'XVM_LIBRARY_X_ACTION', 'XVM_LIBRARY_AI_CLASSIFY', 'XVM_LIBRARY_AI_COMMAND', 'XVM_LIBRARY_RELATIONSHIPS', 'XVM_LIBRARY_CLOUD_DELETE'].forEach((type) => expect(background).toContain(type));
+    ['XVM_LIBRARY_STATUS', 'XVM_LIBRARY_QUERY', 'XVM_LIBRARY_FACETS', 'XVM_LIBRARY_MUTATE', 'XVM_LIBRARY_SYNC_START', 'XVM_LIBRARY_SYNC_PAUSE', 'XVM_LIBRARY_EXPORT', 'XVM_LIBRARY_X_ACTION', 'XVM_LIBRARY_AI_CLASSIFY', 'XVM_LIBRARY_AI_COMMAND', 'XVM_LIBRARY_RELATIONSHIPS', 'XVM_LIBRARY_RELATIONSHIPS_SCAN', 'XVM_LIBRARY_CLOUD_DELETE'].forEach((type) => expect(background).toContain(type));
     expect(background).toMatch(/Math\.min\(50,/);
   });
 
@@ -27,7 +28,8 @@ describe('数据中心公共契约', () => {
     expect(capture).toContain('template.highWaterId');
     expect(capture).toContain('window.__xvmGrok.generate');
     expect(read('../lib/library-bridge.js')).toContain('XVM_LIBRARY_AI_COMMAND');
-    expect(read('../background.js')).toContain('templates: await storedLibraryTemplates({ resume })');
+    expect(read('../background.js')).toContain('templates: selectedTemplates');
+    expect(read('../background.js')).toContain("throw new Error('missing_query_template')");
   });
 
   it('Worker 提供 D1/R2 云同步路由与 30 天清理', () => {

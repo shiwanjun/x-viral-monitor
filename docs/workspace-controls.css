@@ -56,3 +56,15 @@
   border-color: #f0c7cb;
   background: #fff8f8;
 }
+
+.nav-entry { position: relative; display: flex; align-items: center; }
+.nav-entry .nav-item { padding-right: 38px; }
+.nav-sync { position: absolute; right: 5px; z-index: 1; display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 8px; color: #7569aa; background: transparent; font-size: 15px; }
+.nav-sync:hover { color: #4e39ca; background: #fff; }
+.nav-sync.syncing { animation: xvm-spin .8s linear infinite; color: #4e39ca; }
+@keyframes xvm-spin { to { transform: rotate(360deg); } }
+tbody tr[data-open-post], .gallery-card[data-open-post], .relation-row[data-open-user], .unfollow-row[data-open-user] { cursor: pointer; }
+.gallery-card[data-open-post] { transition: border-color .16s, transform .16s, box-shadow .16s; }
+.gallery-card[data-open-post]:hover, .gallery-card[data-open-post]:focus-visible { border-color: #a99cf2; box-shadow: 0 10px 28px #3c2cb219; transform: translateY(-2px); outline: 0; }
+.relation-row[data-open-user]:hover, .unfollow-row[data-open-user]:hover,
+.relation-row[data-open-user]:focus-visible, .unfollow-row[data-open-user]:focus-visible { background: #f7f5ff; outline: 2px solid #d8d1ff; outline-offset: -2px; }

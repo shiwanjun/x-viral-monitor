@@ -87,6 +87,14 @@
       scheduleEmit();
     }
   });
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== window || ev.data?.source !== 'x-tools-library-isolated' || ev.data?.type !== 'XVM_FOLLOW_RADAR_SCAN_COMMAND') return;
+    (async () => {
+      for (const kind of (Array.isArray(ev.data.kinds) ? ev.data.kinds : ['following', 'followers'])) {
+        if (kind === 'following' || kind === 'followers') await scanList(kind);
+      }
+    })().catch(() => {});
+  });
   function tt(key, fallback) { return msgs[key] || fallback; }
 
   // ─── Storage bridge (bridge.js, ISOLATED world) ─────────────────────
@@ -164,10 +172,10 @@
   // ─── Passive capture ────────────────────────────────────────────────
   function recordUser(u, now = Date.now()) {
     const cur = state.users[u.handle];
-    const before = JSON.stringify({ id: cur?.id, f: cur?.f, b: cur?.b, fc: cur?.fc, fd: cur?.fd });
+    const before = JSON.stringify({ id: cur?.id, f: cur?.f, b: cur?.b, fc: cur?.fc, fd: cur?.fd, r: cur?.r, m: cur?.m });
     const { rec, events } = L.mergeUser(cur, u, now);
     if (u.id) rec.id = String(u.id);
-    const after = JSON.stringify({ id: rec.id, f: rec.f, b: rec.b, fc: rec.fc, fd: rec.fd });
+    const after = JSON.stringify({ id: rec.id, f: rec.f, b: rec.b, fc: rec.fc, fd: rec.fd, r: rec.r, m: rec.m });
     if (before === after && !events.length) return false;
     state.users[u.handle] = rec;
     for (const e of events) pushEvent(u.handle, rec.n || u.name, e.type, e.ts, rec);
@@ -402,6 +410,24 @@
     if (/正在关注|following/i.test(buttonText)) u.f = 1;
     else if (/回关|关注|follow/i.test(buttonText) && !/正在关注|following/i.test(buttonText)) u.f = 0;
     if (u.f !== undefined || u.b !== undefined) recordUser(u);
+    absorbVisibleRate(card, handle);
+  }
+
+  // Interoperate with any already-rendered public ratio badge. This is only a
+  // fallback while X's profile query is pending; native GraphQL counts remain
+  // the primary source. It also makes hot reloads immediately reuse a value
+  // already visible in the same user/tweet row instead of showing a dash.
+  function absorbVisibleRate(scope, handle) {
+    for (const node of scope.querySelectorAll('span,div')) {
+      if (node.classList?.contains('xvm-fr-pill') || node.children.length > 3) continue;
+      const text = (node.textContent || '').trim();
+      const match = text.match(/^(?:互关|我关注|关注我|关注率)\s+(\d+(?:\.\d+)?)$/);
+      if (!match) continue;
+      const rate = Number(match[1]);
+      if (Number.isFinite(rate) && recordUser({ handle, r: rate })) schedulePersist();
+      return rate;
+    }
+    return null;
   }
 
   // Inject / refresh a pill next to the username row of a tweet (mirrors the
@@ -467,6 +493,7 @@
       const cell = article.closest('[data-testid="cellInnerDiv"]') || article;
       const handle = absorbFromCell(cell, article);
       if (!handle) continue;
+      absorbVisibleRate(article, handle);
       visibleHandles.push(handle);
       if (ensureTimelinePill(article, handle)) { anyShown = true; withData++; }
     }
@@ -502,36 +529,14 @@
 
   function ensureUserCardPill(card, handle) {
     const owner = card.closest('[data-testid="UserCell"]') || card;
-    const nameBlock = card.querySelector('[data-testid="User-Name"]');
     const actionButton = [...owner.querySelectorAll('button')].find((button) => /^(回关|正在关注|关注|Follow|Following|关注了你)/i.test((button.textContent || '').trim()));
-    let host = nameBlock || owner.querySelector('div[dir="ltr"]')?.parentElement || owner;
-    let anchor = null;
-    if (actionButton) {
-      // X 把“回关 / 正在关注”放在多层窄包装里。胶囊若直接插到按钮父级，
-      // 两者会在同一个固定宽度列里重叠。向上找到同时包含资料区和操作区的
-      // 第一层共同容器，把胶囊作为操作列的前一个兄弟节点。
-      anchor = actionButton;
-      let candidate = actionButton.parentElement;
-      while (candidate && owner.contains(candidate)) {
-        const hasProfileSibling = [...candidate.children].some((child) => child !== anchor
-          && ((nameBlock && child.contains(nameBlock))
-            || child.querySelector?.('a[role="link"][href^="/"]')));
-        if (hasProfileSibling || candidate === owner) {
-          host = candidate;
-          break;
-        }
-        anchor = candidate;
-        candidate = candidate.parentElement;
-      }
-    }
     const existingPills = [...owner.querySelectorAll('.xvm-fr-user-pill')];
     const pill = existingPills[0] || document.createElement('span');
     existingPills.slice(1).forEach((extra) => extra.remove());
     pill.className = 'xvm-fr-pill xvm-fr-user-pill';
-    // 每轮都校正位置，兼容 X 虚拟列表复用节点及旧版本热加载留下的错误锚点。
-    if (anchor?.parentElement === host) {
-      if (pill.parentElement !== host || pill.nextElementSibling !== anchor) host.insertBefore(pill, anchor);
-    } else if (pill.parentElement !== host) host.appendChild(pill);
+    // 胶囊绝对定位到原生操作按钮左侧，不参与 X 的 flex/column 布局，
+    // 因而不会再把“回关 / 正在关注”顶到下一行或与其重叠。
+    if (pill.parentElement !== owner) owner.appendChild(pill);
     pill.setAttribute('data-xvm-fr-handle', handle);
     pill.setAttribute('data-xvm-fr-surface', 'profile');
     const data = pillFor(handle, 'profile');
@@ -539,7 +544,21 @@
     pill.className = `xvm-fr-pill xvm-fr-user-pill ${data?.cls || 'xvm-fr-rate'}`;
     pill.textContent = data?.label || `${tt('frRate', '关注率')} \u2014`;
     if (data?.title) pill.setAttribute('title', data.title);
+    if (actionButton) positionUserCardPill(owner, actionButton, pill);
     return true;
+  }
+
+  function positionUserCardPill(owner, actionButton, pill) {
+    owner.classList.add('xvm-fr-user-card-owner');
+    const ownerBox = owner.getBoundingClientRect();
+    const buttonBox = actionButton.getBoundingClientRect();
+    const pillBox = pill.getBoundingClientRect();
+    const width = pillBox.width || pill.offsetWidth || 102;
+    const height = pillBox.height || pill.offsetHeight || 30;
+    let left = buttonBox.left - ownerBox.left - width - 8;
+    if (left < 4) left = Math.min(ownerBox.width - width - 4, buttonBox.right - ownerBox.left + 8);
+    pill.style.left = `${Math.max(4, left)}px`;
+    pill.style.top = `${Math.max(0, buttonBox.top - ownerBox.top + (buttonBox.height - height) / 2)}px`;
   }
 
   function applyToUserCards() {
@@ -640,7 +659,7 @@
       ...performance.getEntriesByType('resource').map((e) => e.name),
     ].filter((u) => /abs\.twimg\.com\/responsive-web\/client-web\/.*\.js/.test(u)))];
     if (!urls.length) return;
-    Promise.all(urls.slice(0, 12).map(async (url) => {
+    Promise.all(urls.slice(0, 60).map(async (url) => {
       try {
         const text = await fetch(url, { credentials: 'omit' }).then((r) => r.ok ? r.text() : '');
         const marker = text.search(/operationName[:=]["']UserByScreenName["']/);
@@ -788,7 +807,9 @@
       for (const e of evts) {
         const rec = state.users[e.h];
         if (rec) {
-          if (e.type === 'unfollowed_me') rec.u = e.ts; else rec.i = e.ts;
+          const wasMutual = Boolean(rec.f && rec.b);
+          if (e.type === 'unfollowed_me') { rec.u = e.ts; rec.b = 0; } else { rec.i = e.ts; rec.f = 0; }
+          if (wasMutual && !rec.m) rec.m = e.ts;
           rec.t = e.ts;
         } else {
           state.users[e.h] = { n: '', f: 0, b: 0, t: e.ts, [e.type === 'unfollowed_me' ? 'u' : 'i']: e.ts };
@@ -875,7 +896,7 @@
         return { cls: 'xvm-fr-mutual', label: rateLabel(tt('frMutual', '互关')), title };
       case 'mine':
         if (!settings.relations) return null;
-        return { cls: 'xvm-fr-mine', label: rateLabel(tt('frMine', '我关注')), title };
+        return { cls: 'xvm-fr-mine', label: rateLabel(tt('frMine', '我关注了')), title };
       case 'theirs':
         if (!settings.relations) return null;
         return { cls: 'xvm-fr-theirs', label: rateLabel(tt('frTheirs', '关注我')), title };
@@ -885,7 +906,7 @@
         const byMe = rec?.i;
         const when = new Date(byThem || byMe || Date.now()).toLocaleDateString();
         const who = byThem ? tt('frUnfollowedMe', 'TA 取关了你') : tt('frIUnfollowed', '你取关了 TA');
-        return { cls: 'xvm-fr-unfollowed', label: rateLabel(tt('frUnfollowed', '取消关注')), title: `${title}\n${who} · ${when}` };
+        return { cls: 'xvm-fr-unfollowed', label: rateLabel(tt('frUnfollowed', '取关了')), title: `${title}\n${who} · ${when}` };
       }
       default:
         // No relationship — always show the profile's follow ratio. A dash is

@@ -181,7 +181,7 @@ async function relationshipStatus() {
   const users = Object.entries(radar.users || {}).map(([handle, record]) => ({ handle, ...record }));
   const events = (Array.isArray(radar.events) ? radar.events : []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
   const counts = users.reduce((result, user) => {
-    const key = user.f && user.b ? 'mutual' : user.f ? 'mine' : user.b ? 'theirs' : (user.u || user.i) ? 'unfollowed' : 'none';
+    const key = user.f && user.b ? 'mutual' : user.m ? 'unfollowed' : user.f ? 'mine' : user.b ? 'theirs' : (user.u || user.i) ? 'unfollowed' : 'none';
     result[key] = (result[key] || 0) + 1; return result;
   }, { mutual: 0, mine: 0, theirs: 0, unfollowed: 0, none: 0 });
   return { ok: true, users, events, counts, cloudSync: Boolean(values?.followRadarCloudSync), meta: radar.meta || {} };
@@ -309,10 +309,20 @@ async function startLibrarySync(payload = {}) {
   if (payload.mode === 'full' && !context.isPro) throw new Error('membership_required');
   const mode = payload.mode || 'incremental';
   const resume = mode === 'full' && context.sync?.mode === 'full' && ['running', 'paused', 'failed', 'rate_limited'].includes(context.sync?.status);
+  const requested = Array.isArray(payload.operations) ? payload.operations : [];
+  const templates = await storedLibraryTemplates({ resume });
+  const selectedTemplates = requested.length ? templates.filter((template) => requested.includes(template.operation)) : templates;
+  if (!selectedTemplates.length) throw new Error('missing_query_template');
   const next = { ...context.sync, status: 'running', mode, operations: resume ? (context.sync?.operations || {}) : {}, startedAt: Date.now(), updatedAt: Date.now(), error: null };
-  await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
-  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: payload.operations, templates: await storedLibraryTemplates({ resume }) });
-  return { ok: true, sync: next };
+  try {
+    const delivered = await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: next.mode, operations: selectedTemplates.map((template) => template.operation), templates: selectedTemplates });
+    if (!delivered) throw new Error('x_tab_required');
+    await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
+    return { ok: true, sync: next, operations: selectedTemplates.map((template) => template.operation) };
+  } catch (error) {
+    await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...context.sync, status: 'failed', mode, error: String(error?.message || error), updatedAt: Date.now() } });
+    throw error;
+  }
 }
 
 async function pauseLibrarySync() {
@@ -392,6 +402,11 @@ async function handleLibraryRequest(message) {
     return { ok: true, ...(await XvmLibraryDb.facets({ isPro: context.isPro })) };
   }
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS') return relationshipStatus();
+  if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SCAN') {
+    const delivered = await broadcastLibraryCommand({ type: 'XVM_FOLLOW_RADAR_SCAN_COMMAND', kinds: message.payload?.kinds || ['following', 'followers'] });
+    if (!delivered) throw new Error('x_tab_required');
+    return { ok: true };
+  }
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SYNC') return syncRelationshipCloud();
   if (message.type === 'XVM_LIBRARY_MUTATE') return libraryMutate(message.payload || {});
   if (message.type === 'XVM_LIBRARY_SYNC_START') return startLibrarySync(message.payload || {});
@@ -415,7 +430,11 @@ async function handleLibraryRequest(message) {
 }
 
 function isOfficialWebsiteSender(sender) {
-  try { return new URL(sender?.url || '').origin === WEBSITE_ORIGIN; }
+  try {
+    const url = new URL(sender?.url || '');
+    return url.origin === WEBSITE_ORIGIN
+      || (url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname));
+  }
   catch (_) { return false; }
 }
 
@@ -475,7 +494,7 @@ async function exchangeExtensionHandoff(code) {
     [SESSION_KEY]: { token: data.token, userId: data.user.id, email: data.user.email || null, name: data.user.name || null, signedInAt: Date.now() },
     [SUBSCRIPTION_KEY]: { ...(data.subscription || {}), checkedAt: Date.now() },
   });
-  try { await chrome.runtime.openOptionsPage(); } catch (_) {}
+  try { await chrome.tabs.create({ url: `${WEBSITE_ORIGIN}/workspace` }); } catch (_) {}
   return { user: data.user, subscription: data.subscription || null };
 }
 
@@ -966,7 +985,7 @@ chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) =>
         sendResponse({ ok: false, error: 'not_signed_in' });
         return;
       }
-      chrome.runtime.openOptionsPage()
+      chrome.tabs.create({ url: `${WEBSITE_ORIGIN}/workspace` })
         .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
     });

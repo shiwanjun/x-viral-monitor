@@ -105,6 +105,10 @@ describe('follow-radar logic', () => {
       expect(L.classify({ f: 1, b: 0 })).toBe('mine');
       expect(L.classify({ f: 0, b: 1 })).toBe('theirs');
     });
+    it('互关关系任一方向断开后优先显示取关历史', () => {
+      expect(L.classify({ f: 1, b: 0, m: 123 })).toBe('unfollowed');
+      expect(L.classify({ f: 0, b: 1, m: 123 })).toBe('unfollowed');
+    });
     it('unfollowed only when tombstones exist', () => {
       expect(L.classify({ f: 0, b: 0, u: 123 })).toBe('unfollowed');
       expect(L.classify({ f: 0, b: 0, i: 123 })).toBe('unfollowed');
@@ -129,6 +133,9 @@ describe('follow-radar logic', () => {
       expect(L.formatRate(3.2)).toBe('3.2x');
       expect(L.formatRate(null)).toBe('\u2014');
     });
+    it('可复用页面上已经观察到的关注率', () => {
+      expect(L.computeRate({ r: 0.53 })).toBe(0.53);
+    });
   });
 
   describe('mergeUser transitions', () => {
@@ -143,6 +150,11 @@ describe('follow-radar logic', () => {
       expect(rec.b).toBe(0);
       expect(rec.u).toBe(2000);
       expect(events).toEqual([{ type: 'unfollowed_me', ts: 2000 }]);
+    });
+    it('互关断开时写入互关历史标记', () => {
+      const { rec } = L.mergeUser({ f: 1, b: 1 }, { b: 0 }, 2500);
+      expect(rec.m).toBe(2500);
+      expect(L.classify(rec)).toBe('unfollowed');
     });
     it('clears tombstone when re-linked', () => {
       const { rec } = L.mergeUser({ f: 0, b: 0, u: 500, i: 600 }, { f: 1, b: 1 }, 3000);
