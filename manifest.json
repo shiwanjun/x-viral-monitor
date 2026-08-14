@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "unlimitedStorage"],
+  "permissions": ["storage", "unlimitedStorage", "cookies", "alarms"],
   "host_permissions": [
     "https://raw.githubusercontent.com/*",
     "http://localhost/*",

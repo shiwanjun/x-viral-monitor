@@ -1,4 +1,9 @@
-if (typeof importScripts === 'function') importScripts('lib/library-db.js', 'lib/library-normalize.js');
+if (typeof importScripts === 'function') importScripts(
+  'lib/library-db.js',
+  'lib/library-normalize.js',
+  'lib/library-sync-engine.js',
+  'lib/library-query-discovery.js',
+);
 
 const PLACEHOLDER = '[推文内容]';
 const DEFAULT_PROVIDER = 'x-grok';
@@ -86,6 +91,10 @@ const LIBRARY_SYNC_KEY = 'xvm_library_sync_status_v1';
 const LIBRARY_MIGRATED_KEY = 'xvm_library_bookmarks_migrated_v1';
 const LIBRARY_DEVICE_KEY = 'xvm_library_device_id_v1';
 const LIBRARY_AUTH_KEY = 'xvm_library_x_auth_v1';
+const LIBRARY_QUERY_DISCOVERY_KEY = 'xvm_library_query_discovery_v1';
+const RELATIONSHIP_COMMITTED_KEY = 'xvm_relationship_committed_v1';
+const RELATIONSHIP_SYNC_KEY = 'xvm_relationship_sync_v1';
+const LIBRARY_AUTO_SYNC_ALARM = 'xvm-library-auto-sync';
 const COMMUNITY_X_CONFIG_URL = 'https://raw.githubusercontent.com/fa0311/twitter-openapi/refs/heads/main/src/config/placeholder.json';
 const pendingLibraryActions = new Map();
 const pendingLibraryAi = new Map();
@@ -100,36 +109,61 @@ async function storedLibraryTemplates({ resume = false } = {}) {
   });
 }
 
-async function refreshCommunityLibraryTemplates(accountId) {
-  const response = await fetch(COMMUNITY_X_CONFIG_URL, { cache: 'no-store' });
-  if (!response.ok) throw new Error(`template_http_${response.status}`);
-  const config = await response.json();
+async function refreshCommunityLibraryTemplates(accountId, { force = false } = {}) {
+  const templateKeys = ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies', 'Following', 'Followers'].map((operation) => `xvm_library_template_${operation}`);
+  const existing = await chrome.storage.local.get([...templateKeys, LIBRARY_QUERY_DISCOVERY_KEY]);
+  const cachedDiscovery = existing?.[LIBRARY_QUERY_DISCOVERY_KEY] || {};
+  let config = {};
+  try {
+    const response = await fetch(COMMUNITY_X_CONFIG_URL, { cache: 'no-store' });
+    if (response.ok) config = await response.json();
+  } catch (_) {}
+  let discovered = cachedDiscovery.ids || {};
+  const discoveryFresh = Date.now() - Number(cachedDiscovery.updatedAt || 0) < 6 * 60 * 60 * 1000;
   const operations = ['Bookmarks', 'Likes', 'UserTweets', 'UserTweetsAndReplies', 'Following', 'Followers'];
+  const hasUsableFallback = operations.every((operation) => existing?.[`xvm_library_template_${operation}`]?.queryId || config?.[operation]?.queryId);
+  if (force || (!discoveryFresh && !hasUsableFallback)) {
+    try {
+      const ids = await XvmLibraryQueryDiscovery.discover({ fetchFn: fetch.bind(globalThis) });
+      if (Object.keys(ids).length) {
+        discovered = { ...discovered, ...ids };
+        await chrome.storage.local.set({ [LIBRARY_QUERY_DISCOVERY_KEY]: { ids: discovered, updatedAt: Date.now() } });
+      }
+    } catch (_) {}
+  }
   const stored = {};
   for (const operation of operations) {
+    const current = existing?.[`xvm_library_template_${operation}`] || {};
     const item = config?.[operation];
-    if (!item?.queryId) continue;
-    const variables = { ...(item.variables || {}) };
+    const queryId = discovered[operation] || current.queryId || item?.queryId;
+    if (!queryId) continue;
+    const variables = { ...(item?.variables || current.variables || {}), count: 100 };
     if (operation.startsWith('UserTweets') || ['Likes', 'Following', 'Followers'].includes(operation)) variables.userId = String(accountId);
     stored[`xvm_library_template_${operation}`] = {
       operation,
-      queryId: item.queryId,
-      baseUrl: `https://x.com/i/api/graphql/${item.queryId}/${operation}`,
+      queryId,
+      baseUrl: `https://x.com/i/api/graphql/${queryId}/${operation}`,
       variables,
       params: {
-        ...(item.features ? { features: JSON.stringify(item.features) } : {}),
-        ...(item.fieldToggles ? { fieldToggles: JSON.stringify(item.fieldToggles) } : {}),
+        ...(item?.features ? { features: JSON.stringify(item.features) } : current.params?.features ? { features: current.params.features } : {}),
+        ...(item?.fieldToggles ? { fieldToggles: JSON.stringify(item.fieldToggles) } : current.params?.fieldToggles ? { fieldToggles: current.params.fieldToggles } : {}),
       },
       method: 'GET',
       capturedAt: Date.now(),
-      source: 'community-config',
+      source: discovered[operation] ? 'bundle-discovery' : current.queryId ? 'passive-capture' : 'community-config',
     };
   }
   await chrome.storage.local.set(stored);
   return Object.values(stored);
 }
 
-function buildBackgroundReplay(template, cursor, auth) {
+async function freshCsrfToken(fallback = '') {
+  if (!chrome.cookies?.get) return fallback;
+  try { return (await chrome.cookies.get({ url: 'https://x.com', name: 'ct0' }))?.value || fallback; }
+  catch (_) { return fallback; }
+}
+
+async function buildBackgroundReplay(template, cursor, auth) {
   const variables = { ...(template.variables || {}), count: Math.min(100, Number(template.variables?.count || 100)) };
   if (cursor) variables.cursor = cursor; else delete variables.cursor;
   const url = new URL(template.baseUrl);
@@ -141,7 +175,7 @@ function buildBackgroundReplay(template, cursor, auth) {
       method: 'GET', credentials: 'include',
       headers: {
         authorization: auth.authorization,
-        'x-csrf-token': auth.csrfToken,
+        'x-csrf-token': await freshCsrfToken(auth.csrfToken),
         'x-twitter-active-user': 'yes',
         'x-twitter-auth-type': 'OAuth2Session',
       },
@@ -149,46 +183,51 @@ function buildBackgroundReplay(template, cursor, auth) {
   };
 }
 
-async function runBackgroundLibrarySync(selectedTemplates, { mode, accountId, auth, context }) {
+async function runBackgroundLibrarySync(selectedTemplates, { mode, accountId, auth, context, jobId }) {
   const deviceId = await ensureDeviceId();
   const operationStates = { ...(context.sync?.operations || {}) };
   let accepted = 0;
   for (const template of selectedTemplates) {
-    const progress = operationStates[template.operation] || {};
+    let progress = XvmLibrarySyncEngine.initialOperationState(operationStates[template.operation] || {}, mode);
     const maxPages = mode === 'full' ? 2000 : 5;
-    const highWaterId = mode === 'incremental' ? String(progress.highWaterId || '') : '';
-    let cursor = mode === 'full' ? String(progress.cursor || '') : '';
-    let pages = 0;
-    let captured = 0;
-    let backoff = 2500;
-    while (pages < maxPages) {
-      const request = buildBackgroundReplay(template, cursor, auth);
-      const response = await fetch(request.url, request.init);
-      if (response.status === 429) {
-        const sync = { ...(await libraryContext()).sync, status: 'rate_limited', updatedAt: Date.now(), retryMs: backoff };
-        await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
-        await new Promise((resolve) => setTimeout(resolve, backoff));
-        backoff = Math.min(60_000, backoff * 2);
-        continue;
-      }
-      if (!response.ok) throw new Error(`x_http_${response.status}`);
-      const json = await response.json();
+    while (progress.pages < maxPages && progress.status !== 'done') {
+      const live = await libraryContext();
+      if (live.sync?.jobId !== jobId || live.sync?.status === 'paused') throw new Error('sync_paused');
+      const request = await buildBackgroundReplay(template, progress.cursor, auth);
+      const { payload: json, rateLimit } = await XvmLibrarySyncEngine.fetchPage({
+        fetchFn: fetch.bind(globalThis),
+        request,
+        onRetry: ({ status, retryMs }) => {
+          chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...live.sync, status, retryMs, currentOperation: template.operation, updatedAt: Date.now() } }).catch(() => {});
+        },
+      });
       const records = XvmLibraryNormalize.findTweets(json)
         .map((tweet) => XvmLibraryNormalize.normalizeTweet(tweet, XvmLibraryNormalize.kindForOperation(template.operation), accountId))
         .filter(Boolean).map((record) => ({ ...record, accountId, deviceId }));
-      const reachedHighWater = Boolean(highWaterId && records.some((record) => record.post.id === highWaterId));
       const result = await XvmLibraryDb.putCaptures(records);
-      accepted += result.accepted || 0; captured += records.length; pages += 1;
-      cursor = XvmLibraryNormalize.cursorFrom(json);
-      operationStates[template.operation] = {
-        status: cursor && !reachedHighWater ? 'running' : 'done', pages, captured, cursor,
-        highWaterId: pages === 1 ? (records[0]?.post?.id || highWaterId) : highWaterId,
-        reachedHighWater, updatedAt: Date.now(),
-      };
-      await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...(await libraryContext()).sync, status: 'running', mode, operations: operationStates, updatedAt: Date.now() } });
-      if (!cursor || !records.length || reachedHighWater) break;
-      await new Promise((resolve) => setTimeout(resolve, 2600));
+      accepted += result.accepted || 0;
+      progress = XvmLibrarySyncEngine.advanceOperation(progress, {
+        mode,
+        records,
+        cursor: XvmLibraryNormalize.cursorFrom(json),
+        inserted: result.inserted,
+        updated: result.updated,
+      });
+      operationStates[template.operation] = { ...progress, rateLimit };
+      const current = await libraryContext();
+      if (current.sync?.jobId !== jobId) throw new Error('sync_superseded');
+      await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: {
+        ...current.sync,
+        status: progress.status === 'done' ? 'running' : progress.status,
+        mode,
+        currentOperation: template.operation,
+        operations: operationStates,
+        updatedAt: Date.now(),
+      } });
+      if (progress.status === 'done') break;
+      await new Promise((resolve) => setTimeout(resolve, XvmLibrarySyncEngine.jitteredDelay()));
     }
+    if (progress.pages >= maxPages && progress.status !== 'done') operationStates[template.operation] = { ...progress, status: 'paused', stopReason: 'page_limit' };
   }
   return { accepted, operations: operationStates };
 }
@@ -271,59 +310,144 @@ async function libraryStatus() {
 }
 
 async function relationshipStatus() {
-  const values = await chrome.storage.local.get(['followRadarV1', 'followRadarCloudSync']);
+  const values = await chrome.storage.local.get(['followRadarV1', 'followRadarCloudSync', RELATIONSHIP_COMMITTED_KEY, RELATIONSHIP_SYNC_KEY]);
   const radar = values?.followRadarV1 || {};
-  const users = Object.entries(radar.users || {}).map(([handle, record]) => ({ handle, ...record }));
+  let committed = values?.[RELATIONSHIP_COMMITTED_KEY] || {};
+  // 旧版本只保存 followRadarV1。升级后先把最后一份完整快照迁移为
+  // committed，再启动新扫描；这样工作台首屏不会从已有的几百条跳成 0。
+  if (!Object.keys(committed.users || {}).length && Object.keys(radar.users || {}).length) {
+    const snap = radar.snap || { following: {}, followers: {} };
+    const users = {};
+    Object.entries(radar.users || {}).forEach(([handle, record]) => {
+      const inFollowing = Boolean(snap.following?.[handle]);
+      const inFollowers = Boolean(snap.followers?.[handle]);
+      if (!inFollowing && !inFollowers && !record?.f && !record?.b && !record?.u && !record?.i) return;
+      users[handle] = {
+        ...record,
+        f: Object.keys(snap.following || {}).length ? Number(inFollowing) : Number(Boolean(record?.f)),
+        b: Object.keys(snap.followers || {}).length ? Number(inFollowers) : Number(Boolean(record?.b)),
+      };
+    });
+    committed = {
+      accountId: radar.meta?.accountId || '',
+      users,
+      snap,
+      meta: { migratedAt: Date.now(), committedAt: Number(radar.meta?.backgroundScannedAt || radar.meta?.lastScanAt || Date.now()) },
+    };
+    await chrome.storage.local.set({ [RELATIONSHIP_COMMITTED_KEY]: committed });
+  }
+  const users = Object.entries(committed.users || {}).map(([handle, record]) => ({ handle, ...record }));
   const events = (Array.isArray(radar.events) ? radar.events : []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
   const counts = users.reduce((result, user) => {
     const key = user.f && user.b ? 'mutual' : user.m ? 'unfollowed' : user.f ? 'mine' : user.b ? 'theirs' : (user.u || user.i) ? 'unfollowed' : 'none';
     result[key] = (result[key] || 0) + 1; return result;
   }, { mutual: 0, mine: 0, theirs: 0, unfollowed: 0, none: 0 });
-  return { ok: true, users, events, counts, cloudSync: Boolean(values?.followRadarCloudSync), meta: radar.meta || {} };
+  return {
+    ok: true,
+    users,
+    events,
+    counts,
+    cloudSync: Boolean(values?.followRadarCloudSync),
+    meta: { ...(radar.meta || {}), ...(committed.meta || {}) },
+    sync: values?.[RELATIONSHIP_SYNC_KEY] || { status: 'idle' },
+  };
 }
 
 async function runBackgroundRelationshipScan(kinds = ['following', 'followers']) {
-  const context = await libraryContext();
-  const accountId = context.boundAccount?.accountId;
-  if (!accountId) throw new Error('x_account_required');
-  const [values, sessionValues] = await Promise.all([
-    chrome.storage.local.get('followRadarV1'),
-    chrome.storage.session.get(LIBRARY_AUTH_KEY),
-  ]);
-  const auth = sessionValues?.[LIBRARY_AUTH_KEY];
-  if (!auth?.authorization || !auth?.csrfToken || auth.accountId !== accountId) throw new Error('x_auth_required');
-  await refreshCommunityLibraryTemplates(accountId);
-  const templates = await storedLibraryTemplates();
-  const radar = values.followRadarV1 || { users: {}, events: [], meta: {} };
-  const users = { ...(radar.users || {}) };
-  const snapshot = { following: {}, followers: {}, ts: Date.now() };
-  for (const kind of kinds) {
-    const operation = kind === 'following' ? 'Following' : 'Followers';
-    const template = templates.find((item) => item.operation === operation);
-    if (!template) throw new Error('missing_query_template');
-    let cursor = ''; let pages = 0;
-    do {
-      const request = buildBackgroundReplay(template, cursor, auth);
-      const response = await fetch(request.url, request.init);
-      if (!response.ok) throw new Error(`x_http_${response.status}`);
-      const json = await response.json();
-      for (const incoming of XvmLibraryNormalize.extractUsers(json)) {
-        const old = users[incoming.handle] || {};
-        users[incoming.handle] = { ...old, ...Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== undefined && value !== '')), [kind === 'following' ? 'f' : 'b']: 1, t: Date.now() };
-        snapshot[kind][incoming.handle] = Date.now();
-      }
-      cursor = XvmLibraryNormalize.cursorFrom(json); pages += 1;
-      if (cursor) await new Promise((resolve) => setTimeout(resolve, 1000));
-    } while (cursor && pages < 2000);
+  const scanId = crypto.randomUUID();
+  const startedAt = Date.now();
+  await chrome.storage.local.set({ [RELATIONSHIP_SYNC_KEY]: { status: 'running', scanId, kinds, startedAt, updatedAt: startedAt, pages: 0 } });
+  try {
+    const context = await libraryContext();
+    const accountId = context.boundAccount?.accountId;
+    if (!accountId) throw new Error('x_account_required');
+    const [values, sessionValues] = await Promise.all([
+      chrome.storage.local.get(['followRadarV1', RELATIONSHIP_COMMITTED_KEY]),
+      chrome.storage.session.get(LIBRARY_AUTH_KEY),
+    ]);
+    const auth = sessionValues?.[LIBRARY_AUTH_KEY];
+    if (!auth?.authorization || !auth?.csrfToken || auth.accountId !== accountId) throw new Error('x_auth_required');
+    await refreshCommunityLibraryTemplates(accountId);
+    const templates = await storedLibraryTemplates();
+    const radar = values.followRadarV1 || { users: {}, events: [], meta: {} };
+    const previousCommitted = values?.[RELATIONSHIP_COMMITTED_KEY] || {};
+    const previousSnap = previousCommitted.snap || radar.snap || { following: {}, followers: {} };
+    const snapshot = {
+      following: kinds.includes('following') ? {} : { ...(previousSnap.following || {}) },
+      followers: kinds.includes('followers') ? {} : { ...(previousSnap.followers || {}) },
+      ts: Date.now(),
+    };
+    const observed = {};
+    let totalPages = 0;
+    for (const kind of kinds) {
+      const operation = kind === 'following' ? 'Following' : 'Followers';
+      const template = templates.find((item) => item.operation === operation);
+      if (!template) throw new Error('missing_query_template');
+      let cursor = '';
+      const seenCursors = new Set();
+      let pages = 0;
+      do {
+        const request = await buildBackgroundReplay(template, cursor, auth);
+        const { payload: json } = await XvmLibrarySyncEngine.fetchPage({
+          fetchFn: fetch.bind(globalThis),
+          request,
+          onRetry: ({ retryMs }) => chrome.storage.local.set({ [RELATIONSHIP_SYNC_KEY]: { status: 'rate_limited', scanId, kinds, startedAt, updatedAt: Date.now(), pages: totalPages, retryMs } }).catch(() => {}),
+        });
+        for (const incoming of XvmLibraryNormalize.extractUsers(json)) {
+          const old = observed[incoming.handle] || radar.users?.[incoming.handle] || previousCommitted.users?.[incoming.handle] || {};
+          observed[incoming.handle] = { ...old, ...Object.fromEntries(Object.entries(incoming).filter(([, value]) => value !== undefined && value !== '')), t: Date.now() };
+          snapshot[kind][incoming.handle] = Date.now();
+        }
+        const nextCursor = XvmLibraryNormalize.cursorFrom(json);
+        pages += 1; totalPages += 1;
+        await chrome.storage.local.set({ [RELATIONSHIP_SYNC_KEY]: { status: 'running', scanId, kinds, startedAt, updatedAt: Date.now(), pages: totalPages, current: kind } });
+        if (!nextCursor || nextCursor === cursor || seenCursors.has(nextCursor)) { cursor = ''; break; }
+        seenCursors.add(nextCursor); cursor = nextCursor;
+        if (cursor) await new Promise((resolve) => setTimeout(resolve, XvmLibrarySyncEngine.jitteredDelay()));
+      } while (cursor && pages < 2000);
+      if (cursor) throw new Error('relationship_page_limit');
+    }
+
+    const now = Date.now();
+    const handles = new Set([...Object.keys(snapshot.following), ...Object.keys(snapshot.followers)]);
+    const users = {};
+    handles.forEach((handle) => {
+      const record = observed[handle] || radar.users?.[handle] || previousCommitted.users?.[handle] || {};
+      users[handle] = { ...record, f: snapshot.following[handle] ? 1 : 0, b: snapshot.followers[handle] ? 1 : 0, t: now };
+    });
+    const events = new Map((radar.events || []).map((event) => [event.id || `${event.type}:${event.h}:${event.ts}`, event]));
+    if (kinds.includes('followers')) Object.keys(previousSnap.followers || {}).forEach((handle) => {
+      if (snapshot.followers[handle]) return;
+      const record = previousCommitted.users?.[handle] || radar.users?.[handle] || {};
+      const item = { id: `unfollowed_me:${handle}:${now}`, h: handle, n: record.n || '', type: 'unfollowed_me', ts: now, fc: record.fc ?? null, fd: record.fd ?? null };
+      events.set(item.id, item);
+    });
+    if (kinds.includes('following')) Object.keys(previousSnap.following || {}).forEach((handle) => {
+      if (snapshot.following[handle]) return;
+      const record = previousCommitted.users?.[handle] || radar.users?.[handle] || {};
+      const item = { id: `i_unfollowed:${handle}:${now}`, h: handle, n: record.n || '', type: 'i_unfollowed', ts: now, fc: record.fc ?? null, fd: record.fd ?? null };
+      events.set(item.id, item);
+    });
+    const nextRadar = { ...radar, users: { ...(radar.users || {}), ...users }, snap: snapshot, events: [...events.values()].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-1000), meta: { ...(radar.meta || {}), backgroundScannedAt: now } };
+    const committed = { accountId, users, snap: snapshot, meta: { committedAt: now, pages: totalPages, scanId } };
+    await chrome.storage.local.set({
+      followRadarV1: nextRadar,
+      [RELATIONSHIP_COMMITTED_KEY]: committed,
+      [RELATIONSHIP_SYNC_KEY]: { status: 'idle', scanId, kinds, startedAt, completedAt: now, updatedAt: now, pages: totalPages },
+    });
+    return { ok: true, users: Object.keys(users).length, pages: totalPages };
+  } catch (error) {
+    await chrome.storage.local.set({ [RELATIONSHIP_SYNC_KEY]: { status: 'failed', scanId, kinds, startedAt, updatedAt: Date.now(), error: String(error?.message || error) } });
+    throw error;
   }
-  const previousSnap = radar.snap || {};
-  const events = new Map((radar.events || []).map((event) => [event.id || `${event.type}:${event.h}:${event.ts}`, event]));
-  const now = Date.now();
-  if (kinds.includes('followers')) Object.keys(previousSnap.followers || {}).forEach((handle) => { if (!snapshot.followers[handle]) { const record = users[handle] || {}; record.u ||= now; record.b = 0; record.t = now; users[handle] = record; const item = { id: `unfollowed_me:${handle}:${now}`, h: handle, n: record.n || '', type: 'unfollowed_me', ts: now, fc: record.fc ?? null, fd: record.fd ?? null }; events.set(item.id, item); } });
-  if (kinds.includes('following')) Object.keys(previousSnap.following || {}).forEach((handle) => { if (!snapshot.following[handle]) { const record = users[handle] || {}; record.i ||= now; record.f = 0; record.t = now; users[handle] = record; const item = { id: `i_unfollowed:${handle}:${now}`, h: handle, n: record.n || '', type: 'i_unfollowed', ts: now, fc: record.fc ?? null, fd: record.fd ?? null }; events.set(item.id, item); } });
-  const mergedSnap = { following: kinds.includes('following') ? snapshot.following : (previousSnap.following || {}), followers: kinds.includes('followers') ? snapshot.followers : (previousSnap.followers || {}), ts: now };
-  await chrome.storage.local.set({ followRadarV1: { ...radar, users, snap: mergedSnap, events: [...events.values()].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-1000), meta: { ...(radar.meta || {}), backgroundScannedAt: now } } });
-  return { ok: true, users: Object.keys(users).length };
+}
+
+async function startRelationshipScan(kinds = ['following', 'followers']) {
+  const values = await chrome.storage.local.get(RELATIONSHIP_SYNC_KEY);
+  const current = values?.[RELATIONSHIP_SYNC_KEY];
+  if (['running', 'rate_limited'].includes(current?.status)) return { ok: true, background: true, alreadyRunning: true, sync: current };
+  runBackgroundRelationshipScan(kinds).catch(() => {});
+  return { ok: true, background: true, sync: { status: 'running', kinds, startedAt: Date.now() } };
 }
 
 function radarEventId(event = {}) {
@@ -459,7 +583,8 @@ async function startLibrarySync(payload = {}) {
   // 模板时不应阻止书签同步。其它分类至少要有一个可执行模板。
   selectedTemplates = selectedTemplates.filter((template, index, list) => list.findIndex((item) => item.operation === template.operation) === index);
   if (!selectedTemplates.length) throw new Error('missing_query_template');
-  const next = { ...context.sync, status: 'running', mode, operations: resume ? (context.sync?.operations || {}) : {}, startedAt: Date.now(), updatedAt: Date.now(), error: null };
+  const jobId = crypto.randomUUID();
+  const next = { ...context.sync, jobId, background: false, status: 'running', mode, operations: resume ? (context.sync?.operations || {}) : (context.sync?.operations || {}), startedAt: Date.now(), updatedAt: Date.now(), error: null, retryMs: 0 };
   try {
     await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
     const stored = await chrome.storage.session.get(LIBRARY_AUTH_KEY);
@@ -468,15 +593,21 @@ async function startLibrarySync(payload = {}) {
       && Date.now() - Number(authEnvelope.capturedAt || 0) < 24 * 60 * 60 * 1000;
     if (boundId && authFresh && authEnvelope.accountId === boundId) {
       // 在扩展 service worker 内同步；无需保持 X 标签页打开。
-      runBackgroundLibrarySync(selectedTemplates, { mode, accountId: boundId, auth: authEnvelope, context })
+      await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...next, background: true } });
+      runBackgroundLibrarySync(selectedTemplates, { mode, accountId: boundId, auth: authEnvelope, context: { ...context, sync: next }, jobId })
         .then(async (result) => {
           const current = await libraryContext();
-          await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...current.sync, status: 'idle', operations: result.operations, lastSyncedAt: Date.now(), updatedAt: Date.now(), error: null } });
+          if (current.sync?.jobId !== jobId) return;
+          await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...current.sync, status: 'idle', background: false, currentOperation: '', operations: result.operations, lastSyncedAt: Date.now(), updatedAt: Date.now(), error: null, retryMs: 0 } });
           if (current.sync?.cloudBackup && current.isPro) pushLibraryCloud().catch(() => {});
+          const relationValues = await chrome.storage.local.get(RELATIONSHIP_COMMITTED_KEY);
+          const committedAt = Number(relationValues?.[RELATIONSHIP_COMMITTED_KEY]?.meta?.committedAt || 0);
+          if (Date.now() - committedAt >= 6 * 60 * 60 * 1000) runBackgroundRelationshipScan(['following', 'followers']).catch(() => {});
         })
         .catch(async (error) => {
           const current = await libraryContext();
-          await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...current.sync, status: 'failed', error: String(error?.message || error), updatedAt: Date.now() } });
+          if (current.sync?.jobId !== jobId || ['sync_paused', 'sync_superseded'].includes(String(error?.message || error))) return;
+          await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...current.sync, status: 'failed', background: false, error: String(error?.message || error), updatedAt: Date.now() } });
         });
       return { ok: true, background: true, sync: next, operations: selectedTemplates.map((template) => template.operation) };
     }
@@ -493,8 +624,20 @@ async function pauseLibrarySync() {
   const context = await libraryContext();
   const next = { ...context.sync, status: 'paused', updatedAt: Date.now() };
   await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: next });
-  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'pause' });
+  await broadcastLibraryCommand({ type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'pause' }).catch(() => false);
   return { ok: true, sync: next };
+}
+
+async function maybeStartAutoLibrarySync() {
+  const context = await libraryContext();
+  if (!context.boundAccount?.accountId || ['running', 'rate_limited', 'network_retry', 'http_retry'].includes(context.sync?.status)) return { skipped: true };
+  if (Date.now() - Number(context.sync?.lastAutoStartedAt || 0) < 30 * 60 * 1000) return { skipped: true };
+  await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: { ...context.sync, lastAutoStartedAt: Date.now(), updatedAt: Date.now() } });
+  return startLibrarySync({ mode: 'incremental' });
+}
+
+function ensureLibraryAutoSyncAlarm() {
+  try { chrome.alarms?.create?.(LIBRARY_AUTO_SYNC_ALARM, { delayInMinutes: 1, periodInMinutes: 30 }); } catch (_) {}
 }
 
 async function runLibraryXAction(payload = {}) {
@@ -567,7 +710,7 @@ async function handleLibraryRequest(message) {
   }
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS') return relationshipStatus();
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SCAN') {
-    return runBackgroundRelationshipScan(message.payload?.kinds || ['following', 'followers']);
+    return startRelationshipScan(message.payload?.kinds || ['following', 'followers']);
   }
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SYNC') return syncRelationshipCloud();
   if (message.type === 'XVM_LIBRARY_MUTATE') return libraryMutate(message.payload || {});
@@ -994,7 +1137,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const records = (message.records || []).map((record) => ({ ...record, accountId: bound, deviceId }));
       const result = await XvmLibraryDb.putCaptures(records);
       const context = await libraryContext();
-      const sync = { ...context.sync, status: 'idle', lastSyncedAt: Date.now(), updatedAt: Date.now(), lastOperation: message.operation, cursor: message.cursor || context.sync?.cursor || '' };
+      const backgroundRunning = context.sync?.background && ['running', 'rate_limited', 'network_retry', 'http_retry'].includes(context.sync?.status);
+      const sync = {
+        ...context.sync,
+        ...(backgroundRunning ? {} : { status: 'idle', lastSyncedAt: Date.now() }),
+        lastCapturedAt: Date.now(),
+        updatedAt: Date.now(),
+        lastOperation: message.operation,
+      };
       await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
       if (context.sync?.cloudBackup && context.isPro) setTimeout(() => pushLibraryCloud().catch(() => {}), 200);
       sendResponse({ ok: true, ...result });
@@ -1022,6 +1172,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         accountId, authorization, csrfToken, capturedAt: Number(message.auth?.capturedAt || Date.now()),
       } });
       sendResponse({ ok: true });
+      setTimeout(() => maybeStartAutoLibrarySync().catch(() => {}), 250);
     })().catch((error) => sendResponse(libraryError(error)));
     return true;
   }
@@ -1029,12 +1180,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const bound = await ensureLibraryBinding(message.accountId);
       await migrateLegacyBookmarks(bound);
-      const context = await libraryContext();
-      if (Date.now() - Number(context.sync?.lastAutoStartedAt || 0) >= 30 * 60 * 1000) {
-        const sync = { ...context.sync, lastAutoStartedAt: Date.now(), updatedAt: Date.now() };
-        await chrome.storage.local.set({ [LIBRARY_SYNC_KEY]: sync });
-        try { await chrome.tabs.sendMessage(sender.tab.id, { type: 'XVM_LIBRARY_SYNC_COMMAND', command: 'start', mode: 'incremental', templates: await storedLibraryTemplates() }); } catch (_) {}
-      }
+      setTimeout(() => maybeStartAutoLibrarySync().catch(() => {}), 500);
       sendResponse({ ok: true });
     })().catch((error) => sendResponse(libraryError(error)));
     return true;
@@ -1042,6 +1188,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'XVM_LIBRARY_SYNC_PROGRESS' || message.type === 'XVM_LIBRARY_SYNC_COMPLETE' || message.type === 'XVM_LIBRARY_ERROR') {
     (async () => {
       const context = await libraryContext();
+      if (context.sync?.background && context.sync?.jobId) { sendResponse({ ok: true, ignored: 'background_sync_active' }); return; }
       const status = message.type === 'XVM_LIBRARY_SYNC_COMPLETE' ? 'idle' : (message.type === 'XVM_LIBRARY_ERROR' ? 'failed' : message.status || 'running');
       const operation = message.operation || 'all';
       const sync = {
@@ -1120,6 +1267,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+chrome.runtime.onInstalled?.addListener(() => ensureLibraryAutoSyncAlarm());
+chrome.runtime.onStartup?.addListener(() => {
+  ensureLibraryAutoSyncAlarm();
+  maybeStartAutoLibrarySync().catch(() => {});
+});
+chrome.alarms?.onAlarm?.addListener((alarm) => {
+  if (alarm?.name !== LIBRARY_AUTO_SYNC_ALARM) return;
+  maybeStartAutoLibrarySync().catch(() => {});
+});
+ensureLibraryAutoSyncAlarm();
 
 // Only the first-party website may ask this extension to redeem a one-time
 // handoff code. The raw bearer token remains inside the extension worker.

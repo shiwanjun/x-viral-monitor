@@ -28,7 +28,7 @@
     state.connected = false; return { ok: false, error: 'extension_not_connected' };
   }
   function banner(mode, title, copy, action = '重试') { const el = $('#connection-banner'); el.className = `banner ${mode}`; el.querySelector('strong').textContent = title; el.querySelector('small').textContent = copy; $('#banner-action').textContent = action; }
-  function errorText(code) { return ({ unauthorized: '请先登录 X-Tools', membership_required: '此功能需要 Pro 会员', account_mismatch: '检测到 X 账号切换，请切回已绑定账号', x_account_required: '请先打开一次 X 完成账号绑定', x_auth_required: 'X 登录凭证尚未缓存，请打开一次 X 后重试', quota_exceeded: '已达到当前会员额度', rate_limited: 'X 暂时限流，已自动暂停', cursor_conflict: '云端游标冲突，请重新拉取', x_tab_required: '请先打开一个 X 页面', extension_not_connected: '扩展未连接', cloud_sync_disabled: '请先开启关系云同步', missing_query_template: '暂时无法获取该分类的 X 查询模板' })[code] || code || '操作失败'; }
+  function errorText(code) { return ({ unauthorized: '请先登录 X-Tools', membership_required: '此功能需要 Pro 会员', account_mismatch: '检测到 X 账号切换，请切回已绑定账号', x_account_required: '请先打开一次 X 完成账号绑定', x_auth_required: 'X 登录凭证已失效，请打开一次 X 后重试', quota_exceeded: '已达到当前会员额度', rate_limited: 'X 暂时限流，扩展会自动重试', cursor_conflict: '云端游标冲突，请重新拉取', query_template_stale: 'X 查询模板已更新，请重新同步以自动发现最新模板', graphql_error: 'X 返回了 GraphQL 错误，请稍后重试', x_tab_required: '请先打开一个 X 页面', extension_not_connected: '扩展未连接', cloud_sync_disabled: '请先开启关系云同步', missing_query_template: '暂时无法获取该分类的 X 查询模板' })[code] || code || '操作失败'; }
   const isPro = () => state.subscription?.tier === 'pro' || Boolean(state.extensionStatus?.isPro);
 
   function initials(user) { const value = String(user?.name || user?.email || 'XT').trim(); return [...value].slice(0, 2).join('').toUpperCase(); }
@@ -64,7 +64,9 @@
     if (!result.ok) { banner('error', '扩展未连接', '请安装或重新加载最新版 X-Tools，然后刷新此页面。', '重新检测'); renderEmpty(true); return; }
     state.extensionStatus = result; state.counts = result.counts || {}; state.tags = result.tags || []; state.folders = result.folders || []; state.quota = result.quota || state.quota; state.sync = result.sync || {};
     const failed = result.sync?.status === 'failed';
-    banner(result.sync?.status === 'rate_limited' || failed ? 'error' : 'ok', result.sync?.status === 'running' ? '正在同步' : failed ? '同步未完成' : '扩展已连接', result.sync?.status === 'rate_limited' ? 'X 已限流，扩展将指数退避后继续。' : failed ? errorText(result.sync?.error) : `本地数据库可用 · ${result.account?.accountId ? `已绑定 X ID ${result.account.accountId}` : '等待绑定 X 账号'}`, result.sync?.status === 'running' ? '暂停' : '刷新');
+    const active = ['running', 'rate_limited', 'network_retry', 'http_retry'].includes(result.sync?.status);
+    const operation = result.sync?.currentOperation ? ` · ${result.sync.currentOperation}` : '';
+    banner(result.sync?.status === 'rate_limited' || failed ? 'error' : 'ok', active ? '正在同步' : failed ? '同步未完成' : '扩展已连接', result.sync?.status === 'rate_limited' ? `X 已限流，约 ${Math.ceil(Number(result.sync.retryMs || 0) / 1000)} 秒后自动继续${operation}` : active ? `已逐页保存，可安全离开页面${operation}` : failed ? errorText(result.sync?.error) : `本地数据库可用 · ${result.account?.accountId ? `已绑定 X ID ${result.account.accountId}` : '等待绑定 X 账号'}`, active ? '暂停' : '刷新');
     renderAccount();
     $('#cloud-state').textContent = result.cloudBackup ? (result.readOnly ? '只读保留' : '已开启') : '未开启'; $('#cloud-toggle').textContent = result.cloudBackup ? '管理' : '开启';
     const operations = new Set(result.availableOperations || []); $('#full-sync').disabled = !['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies'].some((operation) => operations.has(operation)); $('#full-sync').title = $('#full-sync').disabled ? '首次使用请打开一次 X 完成登录绑定' : '';
@@ -113,10 +115,10 @@
   function renderTable() {
     $('#rows').innerHTML = state.rows.map(({ item, post, tags, folders }, index) => {
       const row = { item, post, tags, folders };
-      return `<tr data-open-post="${esc(item.id)}" tabindex="0"><td><input class="row-check" type="checkbox" data-id="${esc(item.id)}" ${state.selected.has(item.id) ? 'checked' : ''}></td><td class="row-index">${index + 1}</td><td><a class="table-user" data-open-user="${esc(post.authorHandle)}" href="https://x.com/${encodeURIComponent(post.authorHandle)}" target="_blank" rel="noopener"><span class="table-avatar">${avatar(post)}</span><span><strong>${esc(post.authorName || post.authorHandle || 'X 用户')}</strong><small>@${esc(post.authorHandle || 'unknown')}</small></span></a></td><td><div class="table-chips">${chips(row)}</div></td><td><div class="tweet-cell"><div class="tweet-kind">${typePill(item.kind)}${item.sourceRemovedAt ? '<span class="source-removed">来源已删除</span>' : ''}</div><div class="tweet-full-text">${esc(post.text || '无正文')}</div></div></td><td>${mediaPreview(post)}</td><td class="metric-value" data-metric="views">${number(post.metrics?.views)}</td><td class="metric-value" data-metric="reposts">${number(post.metrics?.reposts)}</td><td class="metric-value" data-metric="likes">${number(post.metrics?.likes)}</td><td class="metric-value" data-metric="replies">${number(post.metrics?.replies)}</td><td class="created-at">${fullDate(post.createdAt)}</td><td><button class="row-more" data-row="${esc(item.id)}" aria-label="更多操作">•••</button></td></tr>`;
+      return `<tr data-open-post="${esc(item.id)}" tabindex="0"><td><input class="row-check" type="checkbox" data-id="${esc(item.id)}" ${state.selected.has(item.id) ? 'checked' : ''}></td><td class="row-index">${index + 1}</td><td><a class="table-user" data-open-user="${esc(post.authorHandle)}" href="https://x.com/${encodeURIComponent(post.authorHandle)}" target="_blank" rel="noopener"><span class="table-avatar">${avatar(post)}</span><span><strong>${esc(post.authorName || post.authorHandle || 'X 用户')}</strong><small>@${esc(post.authorHandle || 'unknown')}</small></span></a></td><td><div class="table-chips">${chips(row)}</div></td><td><div class="tweet-cell"><div class="tweet-kind">${typePill(item.kind)}${item.sourceRemovedAt ? '<span class="source-removed">来源已删除</span>' : ''}</div>${post.title ? `<strong class="tweet-title">${esc(post.title)}</strong>` : ''}<div class="tweet-full-text">${esc(post.text || post.title || '无正文')}</div></div></td><td>${mediaPreview(post)}</td><td class="metric-value" data-metric="views">${number(post.metrics?.views)}</td><td class="metric-value" data-metric="reposts">${number(post.metrics?.reposts)}</td><td class="metric-value" data-metric="likes">${number(post.metrics?.likes)}</td><td class="metric-value" data-metric="replies">${number(post.metrics?.replies)}</td><td class="created-at">${fullDate(post.createdAt)}</td><td><button class="row-more" data-row="${esc(item.id)}" aria-label="更多操作">•••</button></td></tr>`;
     }).join('');
   }
-  function renderGallery() { $('#view-gallery').innerHTML = state.rows.map(({ item, post }) => `<article class="gallery-card" data-open-post="${esc(item.id)}" tabindex="0" role="link">${post.media?.[0]?.previewUrl ? `<img src="${esc(post.media[0].previewUrl)}" alt="" loading="lazy">` : '<div class="gallery-placeholder">✎</div>'}<div><span>${typePill(item.kind)}</span><strong>${esc(post.text || '无正文')}</strong><small><a data-open-user="${esc(post.authorHandle)}" href="https://x.com/${encodeURIComponent(post.authorHandle)}" target="_blank" rel="noopener">@${esc(post.authorHandle)}</a> · ${date(post.createdAt)}</small></div></article>`).join(''); }
+  function renderGallery() { $('#view-gallery').innerHTML = state.rows.map(({ item, post }) => `<article class="gallery-card" data-open-post="${esc(item.id)}" tabindex="0" role="link">${post.media?.[0]?.previewUrl ? `<img src="${esc(post.media[0].previewUrl)}" alt="" loading="lazy">` : '<div class="gallery-placeholder">✎</div>'}<div><span>${typePill(item.kind)}</span><strong>${esc(post.title || post.text || '无正文')}</strong>${post.title && post.text ? `<p>${esc(post.text)}</p>` : ''}<small><a data-open-user="${esc(post.authorHandle)}" href="https://x.com/${encodeURIComponent(post.authorHandle)}" target="_blank" rel="noopener">@${esc(post.authorHandle)}</a> · ${date(post.createdAt)}</small></div></article>`).join(''); }
   function renderStats() {
     const colors = ['#654fe8', '#4aa3f4', '#f08d43', '#42ba82']; const entries = ['bookmark', 'like', 'authored_post', 'authored_reply'].map((kind, i) => ({ kind, value: Number(state.counts[kind] || 0), color: colors[i] })); const total = Math.max(1, entries.reduce((sum, item) => sum + item.value, 0)); let cursor = 0;
     $('#kind-chart').style.background = `conic-gradient(${entries.map((item) => { const start = cursor; cursor += item.value / total * 100; return `${item.color} ${start}% ${cursor}%`; }).join(',')})`;
@@ -167,7 +169,7 @@
       let attempts = 0;
       const poll = async () => {
         attempts += 1; await refreshStatus();
-        if (!['running', 'rate_limited'].includes(state.sync.status) || attempts >= 100) { clearSyncPoll(); await query(true); return; }
+        if (!['running', 'rate_limited', 'network_retry', 'http_retry'].includes(state.sync.status) || attempts >= 600) { clearSyncPoll(); await query(true); return; }
         syncPollTimer = setTimeout(poll, 1200);
       };
       syncPollTimer = setTimeout(poll, 1200);
@@ -177,8 +179,21 @@
   async function syncRelationships(section) {
     const button = $(`[data-sync-section="${section}"]`); button?.classList.add('syncing');
     const result = await send({ type: 'XVM_LIBRARY_RELATIONSHIPS_SCAN', payload: { kinds: ['following', 'followers'] } });
-    toast(result.ok ? '关注关系后台扫描完成' : errorText(result.error));
-    setTimeout(async () => { button?.classList.remove('syncing'); await refreshRelationships(); }, result.ok ? 2200 : 0);
+    toast(result.ok ? '关注关系扫描已开始，旧快照会保持到完整扫描成功' : errorText(result.error));
+    if (!result.ok) { button?.classList.remove('syncing'); return; }
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      await refreshRelationships();
+      const status = state.relations.sync?.status;
+      if (!['running', 'rate_limited'].includes(status) || attempts >= 600) {
+        button?.classList.remove('syncing');
+        toast(status === 'failed' ? errorText(state.relations.sync?.error) : '关注关系快照已更新');
+        return;
+      }
+      setTimeout(poll, 1500);
+    };
+    setTimeout(poll, 1000);
   }
 
   function openPostByItemId(itemId) { const row = state.rows.find(({ item }) => item.id === itemId); if (row) window.open(`https://x.com/${encodeURIComponent(row.post.authorHandle)}/status/${encodeURIComponent(row.post.id)}`, '_blank', 'noopener'); }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+const normalizeSource = readFileSync(new URL('../lib/library-normalize.js', import.meta.url), 'utf8');
 const source = readFileSync(new URL('../lib/library-capture.js', import.meta.url), 'utf8');
 
 function tweet(id) {
@@ -29,6 +30,9 @@ function harness(pages, options = {}) {
     postMessage(message) { emitted.push(message); },
   };
   const sandbox = { window, document: { cookie: 'twid=u%3D1; ct0=csrf-token' }, location: { origin: 'https://x.com', href: 'https://x.com/home' }, URL, Date, Promise, Map, Set, WeakSet, Object, Array, String, Number, JSON, RegExp, setTimeout, clearTimeout, console };
+  sandbox.globalThis = sandbox;
+  vm.runInNewContext(normalizeSource, sandbox, { filename: 'library-normalize.js' });
+  window.XvmLibraryNormalize = sandbox.XvmLibraryNormalize;
   vm.runInNewContext(source, sandbox, { filename: 'library-capture.js' });
   return { window, net, emitted, requests, send(data) { listeners.get('message')({ source: window, data: { source: 'x-tools-library-isolated', ...data } }); } };
 }

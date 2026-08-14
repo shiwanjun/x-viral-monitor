@@ -7,6 +7,8 @@ describe('数据中心公共契约', () => {
   it('Manifest 启用 IndexedDB 大容量并同时加载隔离桥与主世界采集器', () => {
     const manifest = JSON.parse(read('../manifest.json'));
     expect(manifest.permissions).toContain('unlimitedStorage');
+    expect(manifest.permissions).toContain('cookies');
+    expect(manifest.permissions).toContain('alarms');
     expect(manifest.content_scripts[0].js).toContain('lib/library-bridge.js');
     expect(manifest.content_scripts[1].js).toContain('lib/library-capture.js');
     expect(manifest.content_scripts[1].js.indexOf('lib/library-normalize.js')).toBeLessThan(manifest.content_scripts[1].js.indexOf('lib/library-capture.js'));
@@ -21,7 +23,7 @@ describe('数据中心公共契约', () => {
 
   it('采集器覆盖四种数据和三种显式 X 写操作', () => {
     const capture = read('../lib/library-capture.js');
-    ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweetsAndReplies', 'DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'].forEach((operation) => expect(capture).toContain(operation));
+    ['Bookmarks', 'BookmarkFoldersSlice', 'BookmarkFolderTimeline', 'Likes', 'UserTweetsAndReplies', 'Following', 'Followers', 'DeleteBookmark', 'UnfavoriteTweet', 'DeleteTweet'].forEach((operation) => expect(capture).toContain(operation));
     expect(capture).toContain('2600');
     expect(capture).toContain('response.status === 429');
     expect(capture).toContain('(event.data.templates || []).forEach(restoreTemplate)');
@@ -31,9 +33,22 @@ describe('数据中心公共契约', () => {
     expect(read('../lib/library-bridge.js')).toContain('XVM_LIBRARY_AI_COMMAND');
     expect(read('../background.js')).toContain('templates: selectedTemplates');
     expect(read('../background.js')).toContain('runBackgroundLibrarySync');
+    expect(read('../background.js')).toContain('XvmLibraryQueryDiscovery');
+    expect(read('../background.js')).toContain('XvmLibrarySyncEngine');
     expect(read('../background.js')).toContain('COMMUNITY_X_CONFIG_URL');
     expect(read('../lib/library-bridge.js')).toContain('XVM_LIBRARY_AUTH');
     expect(read('../background.js')).toContain("throw new Error('missing_query_template')");
+  });
+
+  it('后台同步支持脱离 X 标签页、游标续传与关系快照原子提交', () => {
+    const background = read('../background.js');
+    expect(background).toContain('chrome.cookies.get');
+    expect(background).toContain('LIBRARY_AUTO_SYNC_ALARM');
+    expect(background).toContain('jobId');
+    expect(background).toContain('RELATIONSHIP_COMMITTED_KEY');
+    expect(background).toContain('runBackgroundRelationshipScan');
+    expect(background).toContain('followRadarV1: nextRadar');
+    expect(background).toContain('[RELATIONSHIP_COMMITTED_KEY]: committed');
   });
 
   it('Worker 提供 D1/R2 云同步路由与 30 天清理', () => {

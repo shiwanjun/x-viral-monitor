@@ -90,7 +90,7 @@ describe('官网登录后数据中心浏览器回归', () => {
     page.on('pageerror', (error) => debug.push(`error:${error.message}`));
     await page.addInitScript(() => {
       const rows = [
-        { item: { id: '1:bookmark:101', kind: 'bookmark', sourceFolderName: '灵感' }, post: { id: '101', text: '第一条带图片的书签\n第二行仍需完整展示', authorName: 'Alice', authorHandle: 'alice', authorAvatar: '/x-tools-logo.png', createdAt: Date.UTC(2026, 7, 13, 10, 23), media: [{ type: 'video', url: 'https://example.com/a.mp4', previewUrl: '/x-tools-logo.png' }], metrics: { likes: 12, views: 300, reposts: 7, replies: 3, bookmarks: 2 } }, tags: [{ id: 't1', name: 'AI', color: '#654fe8' }], folders: [] },
+        { item: { id: '1:bookmark:101', kind: 'bookmark', sourceFolderName: '灵感' }, post: { id: '101', title: 'OpenAI 发布全新智能体工作流', text: '第一条带图片的书签\n第二行仍需完整展示', authorName: 'Alice', authorHandle: 'alice', authorAvatar: '/x-tools-logo.png', createdAt: Date.UTC(2026, 7, 13, 10, 23), media: [{ type: 'video', url: 'https://example.com/a.mp4', previewUrl: '/x-tools-logo.png' }], metrics: { likes: 12, views: 300, reposts: 7, replies: 3, bookmarks: 2 } }, tags: [{ id: 't1', name: 'AI', color: '#654fe8' }], folders: [] },
         { item: { id: '1:like:102', kind: 'like' }, post: { id: '102', text: '第二条纯文本点赞', authorName: 'Bob', authorHandle: 'bob', createdAt: Date.UTC(2026, 7, 12, 9, 8), media: [], metrics: { likes: 8, views: 120, reposts: 2, replies: 1, bookmarks: 0 } }, tags: [], folders: [] },
       ];
       Object.defineProperty(window, 'chrome', { configurable: true, value: { runtime: {
@@ -123,6 +123,7 @@ describe('官网登录后数据中心浏览器回归', () => {
     expect(tableHead).toContain('创建时间');
     const firstRow = page.locator('#rows tr').first();
     expect(await firstRow.locator('.table-user strong').textContent()).toBe('Alice');
+    expect(await firstRow.locator('.tweet-title').textContent()).toBe('OpenAI 发布全新智能体工作流');
     expect(await firstRow.locator('.tweet-full-text').textContent()).toBe('第一条带图片的书签\n第二行仍需完整展示');
     expect(await firstRow.locator('[data-metric="views"]').textContent()).toBe('300');
     expect(await firstRow.locator('[data-metric="reposts"]').textContent()).toBe('7');
@@ -134,6 +135,7 @@ describe('官网登录后数据中心浏览器回归', () => {
     await page.locator('[data-view="gallery"]').click();
     expect(await page.locator('#view-gallery').isVisible()).toBe(true);
     expect(await page.locator('#view-gallery .gallery-card').count()).toBe(2);
+    expect(await page.locator('#view-gallery .gallery-card').first().innerText()).toContain('OpenAI 发布全新智能体工作流');
     await page.locator('#view-gallery .gallery-card').first().click();
     expect(await page.evaluate(() => window.__openedUrls.at(-1))).toBe('https://x.com/alice/status/101');
     await page.locator('[data-view="stats"]').click();

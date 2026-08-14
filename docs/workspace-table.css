@@ -180,6 +180,15 @@
   gap: 7px;
 }
 
+.tweet-title {
+  display: block;
+  color: #171927;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .tweet-full-text {
   color: #252838;
   font-size: 13px;
@@ -188,6 +197,17 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   text-wrap: pretty;
+}
+
+.gallery-card p {
+  display: -webkit-box;
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: #62697a;
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .tweet-kind .type-pill {

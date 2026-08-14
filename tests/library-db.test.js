@@ -32,6 +32,21 @@ describe('数据中心 IndexedDB', () => {
     expect(result.rows.map((row) => row.item.kind).sort()).toEqual(['bookmark', 'like']);
   });
 
+  it('较贫乏的后续响应不会清空标题、正文、媒体和互动指标', async () => {
+    const db = loadDb();
+    await db.putCapture({ accountId: '1', kind: 'bookmark', post: { id: 'rich', title: '完整标题', text: '这是一段完整得多的正文', authorName: '作者', authorHandle: 'author', media: [{ type: 'image', url: 'cover.jpg' }], metrics: { views: 1000, likes: 50, reposts: 20, replies: 10 } } });
+    await db.putCapture({ accountId: '1', kind: 'like', post: { id: 'rich', text: '短文', metrics: { views: 0, likes: 1 } } });
+    const result = await db.query({ limit: 50 }, { isPro: true });
+    expect(result.rows).toHaveLength(2);
+    for (const row of result.rows) {
+      expect(row.post.title).toBe('完整标题');
+      expect(row.post.text).toBe('这是一段完整得多的正文');
+      expect(row.post.media[0].url).toBe('cover.jpg');
+      expect(row.post.metrics.views).toBe(1000);
+      expect(row.post.metrics.likes).toBe(50);
+    }
+  });
+
   it('分页强制不超过 50 条并执行 Free 1K 额度', async () => {
     const db = loadDb();
     const now = Date.now();
