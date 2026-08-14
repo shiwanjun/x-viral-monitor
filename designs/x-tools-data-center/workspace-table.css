@@ -17,9 +17,13 @@
 }
 
 #view-table {
-  min-height: 440px;
+  min-height: 52px;
   overflow: auto;
   overscroll-behavior-inline: contain;
+}
+
+#view-table.has-rows {
+  min-height: 440px;
 }
 
 #library-data-table {

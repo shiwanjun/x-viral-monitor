@@ -60,6 +60,10 @@ describe('官网登录后数据中心浏览器回归', () => {
     expect(await page.locator('#auth-button b').textContent()).toBe('Pro 会员');
     expect(await page.locator('#account-tier').textContent()).toContain('PRO · 100K');
     expect(await page.locator('#connection-banner strong').textContent()).toBe('扩展未连接');
+    expect(await page.locator('#view-table').isVisible()).toBe(true);
+    expect(await page.locator('#library-data-table thead').innerText()).toContain('推文');
+    expect(await page.locator('#library-data-table thead').innerText()).toContain('浏览量');
+    expect(await page.locator('#library-data-table thead').evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(0);
     await page.locator('#filter-toggle').click();
     expect(await page.locator('#filter-panel').isVisible()).toBe(true);
     expect(await page.locator('#empty').isVisible()).toBe(true);
