@@ -60,6 +60,7 @@
   const TIMELINE_REFRESH_COOLDOWN_MS = 2500;
   const TIMELINE_REFRESH_BATCH = 30;
   const PROFILE_LOOKUP_COOLDOWN_MS = 5 * 60 * 1000;
+  const PROFILE_LOOKUP_RETRY_MS = 15_000;
   // Toggle verbose console logging from the page console:
   //   localStorage.setItem('xvmFrDebug', '1')
   const FR_DEBUG = (() => { try { return localStorage.getItem('xvmFrDebug') === '1'; } catch (_) { return false; } })();
@@ -84,6 +85,7 @@
   let profileLookupAttemptedAt = new Map();
   let profileLookupInFlight = new Set();
   let profileLookupRetryAt = new Map();
+  let profileLookupRetryTimer = 0;
 
   // ─── i18n (XVM_SETTINGS_UPDATE broadcast, same as starchart.js) ─────
   window.addEventListener('message', (ev) => {
@@ -291,6 +293,7 @@
         authorization: auth, 'x-csrf-token': getCsrf(),
         'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
       } });
+      if (res.status === 429) throw profileRateLimitError(res);
       if (res.ok) {
         const rows = await res.json();
         for (const row of Array.isArray(rows) ? rows : []) {
@@ -300,7 +303,11 @@
           if (profileRowHasCounts(row)) resolved.add(handle);
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      // 批量接口已经明确限频时必须立即停止。旧逻辑继续逐个调用
+      // users/show + UserByScreenName，会把一页回复瞬间放大成几十次请求。
+      if (err?.code === 429) throw err;
+    }
 
     // users/lookup 在部分账号只返回关系字段，不能把这种响应当作计数已完成。
     // 逐个 users/show 是更轻量的第二层兜底，成功后才进入资料查询冷却。
@@ -312,12 +319,15 @@
           authorization: auth, 'x-csrf-token': getCsrf(),
           'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
         } });
+        if (res.status === 429) throw profileRateLimitError(res);
         if (res.ok) {
           const row = await res.json();
           ingestProfileRow(row, handle);
           if (profileRowHasCounts(row)) resolved.add(handle);
         }
-      } catch (_) {}
+      } catch (err) {
+        if (err?.code === 429) throw err;
+      }
       await sleep(80);
     }
 
@@ -331,7 +341,9 @@
         }, template.features);
         ingestProfileRow(json, handle);
         if (profileRowHasCounts(json)) resolved.add(handle);
-      } catch (_) {}
+      } catch (err) {
+        if (err?.code === 429) throw err;
+      }
       await sleep(120);
     }
     schedulePersist();
@@ -620,7 +632,7 @@
       if (!h) continue;
       const rec = state.users[h];
       const lastAttempt = profileLookupAttemptedAt.get(h) || 0;
-      if ((!rec || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd)))
+      if (profileRecordNeedsRefresh(rec)
         && !profileLookupInFlight.has(h)
         && now >= (profileLookupRetryAt.get(h) || 0)
         && now - lastAttempt >= PROFILE_LOOKUP_COOLDOWN_MS) profileLookupPending.add(h);
@@ -638,16 +650,60 @@
           profileLookupAttemptedAt.set(handle, completedAt);
           profileLookupRetryAt.delete(handle);
         } else {
-          // 失败不再伪装成成功冷却五分钟；短暂退避后允许页面继续补查。
-          profileLookupRetryAt.set(handle, completedAt + 15_000);
+          // 资料不完整也要定时重试，不能依赖页面恰好再发生一次 DOM 变化。
+          profileLookupRetryAt.set(handle, completedAt + PROFILE_LOOKUP_RETRY_MS);
         }
       }
-    }).catch(() => {
-      const retryAt = Date.now() + 15_000;
+      armProfileLookupRetry();
+    }).catch((err) => {
+      const retryAt = Date.now() + Math.max(PROFILE_LOOKUP_RETRY_MS, Number(err?.waitMs) || 0);
       batch.forEach((handle) => profileLookupRetryAt.set(handle, retryAt));
+      armProfileLookupRetry();
     }).finally(() => {
       batch.forEach((handle) => profileLookupInFlight.delete(handle));
+      // 一页超过批量上限时继续消费余下句柄；过去只处理首批 30 个。
+      if (profileLookupPending.size) queueMicrotask(() => queueProfileLookup([...profileLookupPending]));
     });
+  }
+
+  function profileRecordNeedsRefresh(rec) {
+    return !rec
+      || !Number.isFinite(Number(rec.fc))
+      || !Number.isFinite(Number(rec.fd))
+      || ![0, 1].includes(rec.f)
+      || ![0, 1].includes(rec.b);
+  }
+
+  function profileRateLimitError(response) {
+    const reset = parseInt(response?.headers?.get?.('x-rate-limit-reset') || '0', 10);
+    const waitMs = reset * 1000 > Date.now()
+      ? reset * 1000 - Date.now()
+      : PROFILE_LOOKUP_RETRY_MS;
+    const err = new Error('profile-rate-limited');
+    err.code = 429;
+    err.waitMs = waitMs;
+    return err;
+  }
+
+  function armProfileLookupRetry() {
+    clearTimeout(profileLookupRetryTimer);
+    const now = Date.now();
+    const waiting = [...profileLookupRetryAt.entries()]
+      .filter(([handle]) => profileRecordNeedsRefresh(state.users[handle]));
+    if (!waiting.length) {
+      profileLookupRetryTimer = 0;
+      return;
+    }
+    const nextAt = Math.min(...waiting.map(([, retryAt]) => retryAt));
+    profileLookupRetryTimer = setTimeout(() => {
+      profileLookupRetryTimer = 0;
+      const readyAt = Date.now();
+      const ready = [...profileLookupRetryAt.entries()]
+        .filter(([handle, retryAt]) => retryAt <= readyAt && profileRecordNeedsRefresh(state.users[handle]))
+        .map(([handle]) => handle);
+      queueProfileLookup(ready);
+      if (!ready.length) armProfileLookupRetry();
+    }, Math.max(0, nextAt - now) + 20);
   }
 
   function ingestProfileRow(row, fallbackHandle = '') {
@@ -722,21 +778,25 @@
     if (!settings.enabled) return;
     for (const h of handles || []) {
       const rec = state.users[L.normalizeHandle(h)];
-      if (!rec || ![0, 1].includes(rec.f) || ![0, 1].includes(rec.b)
-        || !Number.isFinite(Number(rec.fc)) || !Number.isFinite(Number(rec.fd))) {
+      if (profileRecordNeedsRefresh(rec)) {
         timelineRefreshPending.add(h);
       }
     }
     if (!timelineRefreshPending.size || timelineRefreshTimer) return;
     timelineRefreshTimer = setTimeout(() => {
       timelineRefreshTimer = 0;
-      const batch = [...timelineRefreshPending].slice(0, TIMELINE_REFRESH_BATCH);
+      const batch = [...timelineRefreshPending]
+        .filter((handle) => profileRecordNeedsRefresh(state.users[L.normalizeHandle(handle)]))
+        .slice(0, TIMELINE_REFRESH_BATCH);
       if (scanControl.active) {
         scheduleTimelineRefresh([]);
         return;
       }
       batch.forEach((h) => timelineRefreshPending.delete(h));
-      refreshHandles(batch, { automatic: true });
+      // 自动补数统一走批量队列。逐个 UserByScreenName 仅保留给用户显式
+      // 点击“刷新关系”，避免帖子详情的一页回复把限频配额打满。
+      queueProfileLookup(batch);
+      if (timelineRefreshPending.size) scheduleTimelineRefresh([]);
     }, TIMELINE_REFRESH_COOLDOWN_MS);
   }
   function getCsrf() {
@@ -987,6 +1047,11 @@
     element.dataset.xvmFrRender = signature;
     element.replaceChildren();
     if (!data) return;
+    const brand = document.createElement('span');
+    brand.className = 'xvm-fr-brand';
+    brand.textContent = 'XT';
+    brand.setAttribute('aria-hidden', 'true');
+    element.appendChild(brand);
     const label = document.createElement('span');
     label.className = 'xvm-fr-pill-label';
     label.textContent = data.label || '';
@@ -995,13 +1060,21 @@
     tooltip.className = 'xvm-fr-tooltip';
     tooltip.setAttribute('role', 'tooltip');
     const display = (value) => Number.isFinite(Number(value)) ? Number(value).toLocaleString() : '查询中';
+    const relationship = {
+      mutual: tt('frMutual', '互关'),
+      mine: tt('frMine', '我关注了'),
+      theirs: tt('frTheirs', '关注我'),
+      unfollowed: tt('frUnfollowed', '取关了'),
+      none: tt('frNoRelation', '无关系'),
+    }[L.classify(rec)] || tt('frNoRelation', '无关系');
     const rows = [
+      ['关系', relationship],
       ['粉丝', display(rec?.fc)],
       ['关注人数', display(rec?.fd)],
       ['关注率', rate == null ? '查询中' : String(rate)],
       ['对当前用户取关过', rec?.u ? '是' : '否'],
     ];
-    tooltip.innerHTML = `<strong>@${h || ''}</strong>${rows.map(([key, value]) => `<span><b>${key}：</b>${value}</span>`).join('')}`;
+    tooltip.innerHTML = `<strong><b class="xvm-fr-tooltip-logo">XT</b>X-Tools 关系详情</strong><span class="xvm-fr-tooltip-account">@${h || ''}</span>${rows.map(([key, value]) => `<span><b>${key}：</b>${value}</span>`).join('')}`;
     element.appendChild(tooltip);
     element.tabIndex = 0;
     element.setAttribute('aria-label', `${data.label || ''}，查看账号详情`);

@@ -26,7 +26,8 @@ describe('follow-radar logic', () => {
     it('时间线渲染时会将可见作者加入自动刷新队列', () => {
       expect(radarSrc).toContain('scheduleTimelineRefresh(visibleHandles)');
       expect(radarSrc).toContain('const TIMELINE_REFRESH_COOLDOWN_MS');
-      expect(radarSrc).toContain('refreshHandles(batch, { automatic: true })');
+      expect(radarSrc).toContain('queueProfileLookup(batch)');
+      expect(radarSrc).toContain('armProfileLookupRetry()');
       expect(radarSrc).toContain("/i/api/1.1/friendships/lookup.json");
       expect(radarSrc).toContain('queueRelationshipLookup(users)');
       expect(radarSrc).toContain("pill: pillFor(h, 'timeline')");

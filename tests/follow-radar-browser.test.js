@@ -215,6 +215,58 @@ describe('关注雷达浏览器回归', () => {
     await page.close();
   });
 
+  it('帖子详情回复批量查询限频后会自动重试且不会逐条请求形成风暴', async () => {
+    const page = await browser.newPage();
+    let lookupRequests = 0;
+    let showRequests = 0;
+    let graphRequests = 0;
+    await page.route('https://x.com/**', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === '/i/api/1.1/users/lookup.json') {
+        lookupRequests++;
+        if (lookupRequests === 1) {
+          await route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"rate_limited"}' });
+        } else {
+          await route.fulfill({ contentType: 'application/json', body: JSON.stringify([
+            { screen_name: 'alice', followers_count: 200, friends_count: 50, following: true, followed_by: true },
+            { screen_name: 'bob', followers_count: 100, friends_count: 40, following: false, followed_by: false },
+          ]) });
+        }
+        return;
+      }
+      if (url.pathname === '/i/api/1.1/users/show.json') {
+        showRequests++;
+        await route.fulfill({ status: 429, contentType: 'application/json', body: '{}' });
+        return;
+      }
+      if (url.pathname.endsWith('/UserByScreenName')) {
+        graphRequests++;
+        await route.fulfill({ status: 429, contentType: 'application/json', body: '{}' });
+        return;
+      }
+      await route.fulfill({ contentType: 'text/html', body: `
+        <main aria-label="主页时间线"><section aria-label="对话">
+          <article data-testid="tweet"><div style="display:flex"><div data-testid="User-Name"><a role="link" href="/alice"><span>Alice</span><span>@alice</span></a></div><button data-testid="caret">...</button></div></article>
+          <article data-testid="tweet"><div style="display:flex"><div data-testid="User-Name"><a role="link" href="/bob"><span>Bob</span><span>@bob</span></a></div><button data-testid="caret">...</button></div></article>
+        </section></main>` });
+    });
+    await page.goto('https://x.com/alice/status/123');
+    await page.addScriptTag({ content: logicSrc });
+    await page.addScriptTag({ content: radarSrc.replace(
+      'const PROFILE_LOOKUP_RETRY_MS = 15_000;',
+      'const PROFILE_LOOKUP_RETRY_MS = 120;',
+    ) });
+
+    await page.waitForFunction(() => {
+      const labels = [...document.querySelectorAll('.xvm-fr-pill-label')].map((node) => node.textContent);
+      return labels.includes('互关 0.25') && labels.includes('关注率 0.4');
+    }, null, { timeout: 4000 });
+    expect(lookupRequests).toBe(2);
+    expect(showRequests).toBe(0);
+    expect(graphRequests).toBe(0);
+    await page.close();
+  });
+
   it('时间线胶囊固定在三点菜单之后且悬浮显示账号详情', async () => {
     const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
     await page.setContent(`
@@ -248,6 +300,9 @@ describe('关注雷达浏览器回归', () => {
     await page.locator('.xvm-fr-pill').hover();
     await page.locator('.xvm-fr-tooltip').waitFor({ state: 'visible' });
     const tooltip = await page.locator('.xvm-fr-tooltip').innerText();
+    expect(await page.locator('.xvm-fr-brand').innerText()).toBe('XT');
+    expect(tooltip).toContain('X-Tools 关系详情');
+    expect(tooltip).toContain('关系：关注我');
     expect(tooltip).toContain('粉丝：200');
     expect(tooltip).toContain('关注人数：50');
     expect(tooltip).toContain('对当前用户取关过：否');
