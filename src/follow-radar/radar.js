@@ -86,6 +86,9 @@
   let profileLookupInFlight = new Set();
   let profileLookupRetryAt = new Map();
   let profileLookupRetryTimer = 0;
+  let xPageStore = null;
+  let profileTooltipPortal = null;
+  let profileTooltipOwner = null;
 
   // ─── i18n (XVM_SETTINGS_UPDATE broadcast, same as starchart.js) ─────
   window.addEventListener('message', (ev) => {
@@ -277,11 +280,93 @@
     scheduleEmit();
   }
 
-  async function lookupProfileCounts(handles) {
-    const auth = authorizationToken(window.__xvmNet?.getBearer?.() || FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE.authorization);
-    const requested = [...new Set((handles || []).map((handle) => L.normalizeHandle(handle)).filter(Boolean))]
-      .slice(0, TIMELINE_REFRESH_BATCH);
+  function findXPageStore() {
+    if (xPageStore?.getState) return xPageStore;
+    const hosts = document.querySelectorAll(
+      'article[data-testid="tweet"], [data-testid="UserCell"], [data-testid="cellInnerDiv"]',
+    );
+    for (const host of hosts) {
+      const fiberKey = Object.getOwnPropertyNames(host)
+        .find((key) => key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$'));
+      let fiber = fiberKey ? host[fiberKey] : null;
+      for (let depth = 0; fiber && depth < 60; depth += 1, fiber = fiber.return) {
+        const props = [fiber.memoizedProps, fiber.pendingProps];
+        for (const candidate of props) {
+          const store = candidate?.value?.store || candidate?.store || candidate?.context?.store;
+          if (store?.getState) {
+            xPageStore = store;
+            return xPageStore;
+          }
+        }
+        if (fiber.stateNode?.store?.getState) {
+          xPageStore = fiber.stateNode.store;
+          return xPageStore;
+        }
+      }
+    }
+    return null;
+  }
+
+  function pageStateHandle(node) {
+    return L.normalizeHandle(
+      node?.core?.screen_name
+      || node?.legacy?.screen_name
+      || node?.screen_name
+      || node?.username,
+    );
+  }
+
+  function lookupProfilesFromPageStore(handles) {
+    const targets = new Set((handles || []).map((handle) => L.normalizeHandle(handle)).filter(Boolean));
     const resolved = new Set();
+    if (!targets.size) return resolved;
+    const store = findXPageStore();
+    if (!store) return resolved;
+    let root;
+    try { root = store.getState(); } catch (_) { return resolved; }
+    if (!root || typeof root !== 'object') return resolved;
+
+    // X 的 Redux 树较大，只做有目标的有限深度遍历。找到完整资料后立即停止，
+    // 避免依赖易变的 webpack 模块编号，也不会触发任何额外网络请求。
+    const stack = [root];
+    const visited = new WeakSet();
+    let budget = 60000;
+    let changed = false;
+    while (stack.length && budget-- > 0 && resolved.size < targets.size) {
+      const node = stack.pop();
+      if (!node || typeof node !== 'object' || visited.has(node)) continue;
+      visited.add(node);
+      const handle = pageStateHandle(node);
+      if (handle && targets.has(handle)) {
+        if (ingestProfileRow(node, handle)) changed = true;
+        if (hasProfileCount(state.users[handle]?.fc)
+          && hasProfileCount(state.users[handle]?.fd)) resolved.add(handle);
+      }
+      if (Array.isArray(node)) {
+        for (let index = node.length - 1; index >= 0; index -= 1) stack.push(node[index]);
+      } else {
+        for (const value of Object.values(node)) {
+          if (value && typeof value === 'object') stack.push(value);
+        }
+      }
+    }
+    queueRelationshipLookup([...targets].map((handle) => ({
+      handle,
+      id: state.users[handle]?.id,
+    })));
+    if (changed) {
+      schedulePersist();
+      scheduleEmit();
+    }
+    return resolved;
+  }
+
+  async function lookupProfileCounts(handles) {
+    const wanted = [...new Set((handles || []).map((handle) => L.normalizeHandle(handle)).filter(Boolean))]
+      .slice(0, TIMELINE_REFRESH_BATCH);
+    const resolved = lookupProfilesFromPageStore(wanted);
+    const requested = wanted.filter((handle) => !resolved.has(handle));
+    const auth = authorizationToken(window.__xvmNet?.getBearer?.() || FALLBACK_USER_BY_SCREEN_NAME_TEMPLATE.authorization);
     if (!auth || !requested.length) return resolved;
 
     // X 的 v1.1 users/lookup 可一次返回多位用户的粉丝数、关注数与关系字段。
@@ -627,7 +712,11 @@
 
   function queueProfileLookup(handles) {
     const now = Date.now();
-    for (const handle of handles || []) {
+    const normalized = [...new Set((handles || []).map((handle) => L.normalizeHandle(handle)).filter(Boolean))];
+    // React 挂载与 DOM MutationObserver 可能相差一个渲染帧。每次可见列表
+    // 复扫时先读页面 Store，即使上一轮网络请求已被 429 延后，也能马上补数。
+    lookupProfilesFromPageStore(normalized);
+    for (const handle of normalized) {
       const h = L.normalizeHandle(handle);
       if (!h) continue;
       const rec = state.users[h];
@@ -668,10 +757,12 @@
 
   function profileRecordNeedsRefresh(rec) {
     return !rec
-      || !Number.isFinite(Number(rec.fc))
-      || !Number.isFinite(Number(rec.fd))
-      || ![0, 1].includes(rec.f)
-      || ![0, 1].includes(rec.b);
+      || !hasProfileCount(rec.fc)
+      || !hasProfileCount(rec.fd);
+  }
+
+  function hasProfileCount(value) {
+    return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
   }
 
   function profileRateLimitError(response) {
@@ -711,19 +802,24 @@
     const result = row?.data?.user?.result || row?.data?.user_result_by_screen_name?.result || row?.result || row;
     const legacy = result?.legacy || row?.legacy || row;
     const core = result?.core || row?.core || {};
-    const handle = L.normalizeHandle(core?.screen_name || legacy?.screen_name || row?.screen_name || fallbackHandle);
+    const handle = L.normalizeHandle(core?.screen_name || legacy?.screen_name || row?.screen_name || row?.username || fallbackHandle);
     if (!handle) return false;
-    const fc = Number(legacy?.followers_count ?? result?.public_metrics?.followers_count ?? row?.followers_count);
-    const fd = Number(legacy?.friends_count ?? result?.public_metrics?.following_count ?? row?.friends_count);
-    const f = result?.relationship_perspectives?.following ?? legacy?.following ?? row?.following;
-    const b = result?.relationship_perspectives?.followed_by ?? legacy?.followed_by ?? row?.followed_by;
+    const fcRaw = legacy?.followers_count ?? result?.public_metrics?.followers_count
+      ?? result?.publicMetrics?.followersCount ?? row?.followers_count ?? row?.follower_count ?? row?.followersCount;
+    const fdRaw = legacy?.friends_count ?? result?.public_metrics?.following_count
+      ?? result?.publicMetrics?.followingCount ?? row?.friends_count ?? row?.following_count ?? row?.friendsCount;
+    const connections = Array.isArray(row?.connections) ? row.connections.map((item) => String(item).toLowerCase()) : [];
+    const f = result?.relationship_perspectives?.following ?? legacy?.following ?? row?.following
+      ?? row?.is_following ?? (connections.length ? connections.includes('following') : undefined);
+    const b = result?.relationship_perspectives?.followed_by ?? legacy?.followed_by ?? row?.followed_by
+      ?? row?.is_followed_by ?? (connections.length ? connections.includes('followed_by') : undefined);
     return recordUser({
       handle,
       id: result?.rest_id || legacy?.id_str || row?.id_str || row?.id,
       name: core?.name || legacy?.name || row?.name,
       avatar: result?.avatar?.image_url || legacy?.profile_image_url_https || row?.profile_image_url_https,
-      fc: Number.isFinite(fc) ? fc : undefined,
-      fd: Number.isFinite(fd) ? fd : undefined,
+      fc: hasProfileCount(fcRaw) ? Number(fcRaw) : undefined,
+      fd: hasProfileCount(fdRaw) ? Number(fdRaw) : undefined,
       f: typeof f === 'boolean' ? (f ? 1 : 0) : undefined,
       b: typeof b === 'boolean' ? (b ? 1 : 0) : undefined,
     });
@@ -733,9 +829,11 @@
     if (!row || typeof row !== 'object') return false;
     const result = row?.data?.user?.result || row?.data?.user_result_by_screen_name?.result || row?.result || row;
     const legacy = result?.legacy || row?.legacy || row;
-    const fc = Number(legacy?.followers_count ?? result?.public_metrics?.followers_count ?? row?.followers_count);
-    const fd = Number(legacy?.friends_count ?? result?.public_metrics?.following_count ?? row?.friends_count);
-    return Number.isFinite(fc) && Number.isFinite(fd);
+    const fc = legacy?.followers_count ?? result?.public_metrics?.followers_count
+      ?? result?.publicMetrics?.followersCount ?? row?.followers_count ?? row?.follower_count ?? row?.followersCount;
+    const fd = legacy?.friends_count ?? result?.public_metrics?.following_count
+      ?? result?.publicMetrics?.followingCount ?? row?.friends_count ?? row?.following_count ?? row?.friendsCount;
+    return hasProfileCount(fc) && hasProfileCount(fd);
   }
 
   // ─── Active GraphQL calls ───────────────────────────────────────────
@@ -1046,19 +1144,42 @@
       && (!data || element.querySelector('.xvm-fr-pill-label'))) return;
     element.dataset.xvmFrRender = signature;
     element.replaceChildren();
-    if (!data) return;
-    const brand = document.createElement('span');
-    brand.className = 'xvm-fr-brand';
-    brand.textContent = 'XT';
-    brand.setAttribute('aria-hidden', 'true');
-    element.appendChild(brand);
+    if (!data) {
+      if (profileTooltipOwner === element) hideProfileTooltip(element);
+      element.onmouseenter = null;
+      element.onmouseleave = null;
+      element.onfocusin = null;
+      element.onfocusout = null;
+      element.removeAttribute('aria-describedby');
+      return;
+    }
     const label = document.createElement('span');
     label.className = 'xvm-fr-pill-label';
     label.textContent = data.label || '';
     element.appendChild(label);
-    const tooltip = document.createElement('span');
+    element.onmouseenter = () => showProfileTooltip(element, h);
+    element.onmouseleave = () => hideProfileTooltip(element);
+    element.onfocusin = () => showProfileTooltip(element, h);
+    element.onfocusout = () => hideProfileTooltip(element);
+    element.tabIndex = 0;
+    element.setAttribute('aria-describedby', 'xvm-fr-tooltip-portal');
+    element.setAttribute('aria-label', `${data.label || ''}，查看账号详情`);
+  }
+
+  function ensureProfileTooltipPortal() {
+    if (profileTooltipPortal?.isConnected) return profileTooltipPortal;
+    const tooltip = document.createElement('div');
+    tooltip.id = 'xvm-fr-tooltip-portal';
     tooltip.className = 'xvm-fr-tooltip';
     tooltip.setAttribute('role', 'tooltip');
+    (document.body || document.documentElement).appendChild(tooltip);
+    profileTooltipPortal = tooltip;
+    return tooltip;
+  }
+
+  function fillProfileTooltip(tooltip, handle) {
+    const rec = state.users[handle];
+    const rate = L.computeRate(rec);
     const display = (value) => Number.isFinite(Number(value)) ? Number(value).toLocaleString() : '查询中';
     const relationship = {
       mutual: tt('frMutual', '互关'),
@@ -1073,11 +1194,59 @@
       ['关注人数', display(rec?.fd)],
       ['关注率', rate == null ? '查询中' : String(rate)],
       ['对当前用户取关过', rec?.u ? '是' : '否'],
+      ['数据状态', hasProfileCount(rec?.fc) && hasProfileCount(rec?.fd) ? '已同步' : '正在同步'],
     ];
-    tooltip.innerHTML = `<strong><b class="xvm-fr-tooltip-logo">XT</b>X-Tools 关系详情</strong><span class="xvm-fr-tooltip-account">@${h || ''}</span>${rows.map(([key, value]) => `<span><b>${key}：</b>${value}</span>`).join('')}`;
-    element.appendChild(tooltip);
-    element.tabIndex = 0;
-    element.setAttribute('aria-label', `${data.label || ''}，查看账号详情`);
+    const title = document.createElement('strong');
+    title.textContent = 'X-Tools 关系详情';
+    const account = document.createElement('span');
+    account.className = 'xvm-fr-tooltip-account';
+    account.textContent = `@${handle || ''}`;
+    tooltip.replaceChildren(title, account);
+    for (const [key, value] of rows) {
+      const line = document.createElement('span');
+      const label = document.createElement('b');
+      label.textContent = `${key}：`;
+      line.append(label, document.createTextNode(value));
+      tooltip.appendChild(line);
+    }
+  }
+
+  function showProfileTooltip(owner, handle) {
+    if (!owner?.isConnected) return;
+    const tooltip = ensureProfileTooltipPortal();
+    fillProfileTooltip(tooltip, handle);
+    profileTooltipOwner = owner;
+    tooltip.dataset.open = 'true';
+    tooltip.style.display = 'block';
+    tooltip.style.visibility = 'hidden';
+    tooltip.style.left = '0px';
+    tooltip.style.top = '0px';
+    const anchor = owner.getBoundingClientRect();
+    const box = tooltip.getBoundingClientRect();
+    const margin = 8;
+    const gap = 9;
+    const maxLeft = Math.max(margin, window.innerWidth - box.width - margin);
+    const left = Math.min(maxLeft, Math.max(margin, anchor.right - box.width));
+    const below = anchor.bottom + gap;
+    const above = anchor.top - box.height - gap;
+    const placement = below + box.height <= window.innerHeight - margin || above < margin ? 'bottom' : 'top';
+    const top = placement === 'bottom'
+      ? Math.min(window.innerHeight - box.height - margin, Math.max(margin, below))
+      : Math.max(margin, above);
+    tooltip.dataset.placement = placement;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+    tooltip.style.setProperty('--xvm-fr-tooltip-arrow-left', `${Math.min(box.width - 18, Math.max(18, anchor.left + anchor.width / 2 - left))}px`);
+    tooltip.style.visibility = 'visible';
+  }
+
+  function hideProfileTooltip(owner) {
+    if (owner && profileTooltipOwner !== owner) return;
+    if (profileTooltipPortal) {
+      delete profileTooltipPortal.dataset.open;
+      profileTooltipPortal.style.display = 'none';
+    }
+    profileTooltipOwner = null;
   }
 
   function isFollowHistoryMember() {

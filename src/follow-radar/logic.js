@@ -118,7 +118,10 @@
     const seen = new Set();
     const outputByHandle = new Map();
     const visited = new WeakSet();
-    const MAX_DEPTH = 14;
+    // TweetDetail / followers 页面会在 timeline、module、conversation 等多层
+    // wrapper 中嵌套 user result。14 层会直接漏掉回复作者；节点预算已经限制
+    // 总工作量，因此放宽深度而不牺牲安全边界。
+    const MAX_DEPTH = 40;
     const NODE_BUDGET = 200000;
     let budget = NODE_BUDGET;
     function boolField(obj, key) {
@@ -132,6 +135,9 @@
       return undefined;
     }
     function relationshipField(node, legacy, core, key) {
+      const aliases = key === 'following'
+        ? ['following', 'is_following']
+        : ['followed_by', 'followedBy', 'is_followed_by'];
       const candidates = [
         node?.relationship_perspectives,
         node?.relationshipPerspectives,
@@ -141,8 +147,13 @@
         core,
       ];
       for (const candidate of candidates) {
-        const value = boolField(candidate, key);
-        if (value !== undefined) return value;
+        for (const alias of aliases) {
+          const value = boolField(candidate, alias);
+          if (value !== undefined) return value;
+        }
+        const connections = Array.isArray(candidate?.connections) ? candidate.connections : [];
+        const normalized = connections.map((value) => String(value).toLowerCase());
+        if (normalized.includes(key)) return true;
       }
       return undefined;
     }
@@ -161,7 +172,7 @@
       // X 近期的时间线 UserResults 把 screen_name/name 从 legacy 挪到了
       // core，关系字段仍在 result.relationship_perspectives。旧逻辑只认
       // legacy.screen_name，会把整条用户记录跳过，导致时间线没有任何胶囊。
-      const screenName = core?.screen_name || legacy?.screen_name;
+      const screenName = core?.screen_name || legacy?.screen_name || node.screen_name || node.username;
       if (typeof screenName === 'string') {
         const handle = normalizeHandle(screenName);
         if (handle) {
@@ -178,8 +189,8 @@
             id: typeof node.rest_id === 'string' ? node.rest_id
               : (typeof node.id_str === 'string' ? node.id_str
                 : (typeof legacy.id_str === 'string' ? legacy.id_str : undefined)),
-            name: core?.name || legacy.name || '',
-            avatar: node?.avatar?.image_url || legacy?.profile_image_url_https || '',
+            name: core?.name || legacy.name || node.name || '',
+            avatar: node?.avatar?.image_url || legacy?.profile_image_url_https || node.profile_image_url_https || '',
             f: typeof fFinal === 'boolean' ? (fFinal ? 1 : 0) : undefined,
             b: typeof bFinal === 'boolean' ? (bFinal ? 1 : 0) : undefined,
             // Some timeline payloads no longer include public counts.  They
@@ -192,6 +203,7 @@
               node.public_metrics?.followers_count,
               node.publicMetrics?.followersCount,
               node.followers_count,
+              node.follower_count,
               node.followersCount,
             ),
             fd: firstNumber(
@@ -201,6 +213,7 @@
               node.public_metrics?.following_count,
               node.publicMetrics?.followingCount,
               node.friends_count,
+              node.following_count,
               node.friendsCount,
             ),
           };
@@ -214,7 +227,6 @@
             out.push(user);
           }
         }
-        return; // consume the legacy subtree
       }
       for (const k of Object.keys(node)) walk(node[k], depth + 1);
     }

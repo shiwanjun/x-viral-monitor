@@ -288,6 +288,31 @@ describe('follow-radar logic', () => {
       expect(users.map((u) => u.handle)).toEqual(['bob']);
     });
 
+    it('extracts deeply wrapped TweetDetail reply users without a shallow depth cutoff', () => {
+      let wrapped = {
+        result: {
+          core: { screen_name: 'deep_reply', name: 'Deep Reply' },
+          legacy: { followers_count: 500, friends_count: 125 },
+          relationship_perspectives: { following: true, followed_by: false },
+        },
+      };
+      for (let depth = 0; depth < 18; depth++) wrapped = { layer: wrapped };
+      const users = L.extractUsers({ data: { threaded_conversation_with_injections_v2: wrapped } });
+      expect(users).toEqual([expect.objectContaining({
+        handle: 'deep_reply', fc: 500, fd: 125, f: 1, b: 0,
+      })]);
+    });
+
+    it('extracts flat Redux and REST user records used by X page state', () => {
+      const users = L.extractUsers({ entities: { users: { 42: {
+        screen_name: 'store_user', followers_count: 3200, friends_count: 800,
+        following: false, followed_by: true,
+      } } } });
+      expect(users).toEqual([expect.objectContaining({
+        handle: 'store_user', fc: 3200, fd: 800, f: 0, b: 1,
+      })]);
+    });
+
     it('does not fabricate relationship flags from absent fields', () => {
       const users = L.extractUsers({ result: { legacy: legacy({}) } });
       expect(users[0].f).toBeUndefined();

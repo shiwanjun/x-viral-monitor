@@ -2672,28 +2672,8 @@ img.xvm-liv-img {
   cursor: help;
 }
 .xvm-fr-pill-label { display: inline; pointer-events: none; }
-.xvm-fr-brand {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-right: 5px;
-  border-radius: 6px;
-  color: #fff;
-  background: linear-gradient(135deg, #635bff, #2388ff);
-  box-shadow: 0 1px 3px rgba(49, 82, 223, .3);
-  font-size: 8px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -.04em;
-  vertical-align: -1px;
-  pointer-events: none;
-}
 .xvm-fr-tooltip {
-  position: absolute;
-  top: calc(100% + 9px);
-  right: 0;
+  position: fixed;
   z-index: 2147483647;
   display: none;
   min-width: 210px;
@@ -2709,30 +2689,19 @@ img.xvm-liv-img {
   text-align: left;
   letter-spacing: 0;
   white-space: nowrap;
+  pointer-events: none;
 }
-.xvm-fr-tooltip::before { content: ''; position: absolute; right: 18px; top: -6px; width: 10px; height: 10px; border-left: 1px solid rgba(255,255,255,.12); border-top: 1px solid rgba(255,255,255,.12); background: #10161d; transform: rotate(45deg); }
+.xvm-fr-tooltip[data-open="true"] { display: block; }
+.xvm-fr-tooltip::before { content: ''; position: absolute; left: calc(var(--xvm-fr-tooltip-arrow-left, 24px) - 5px); top: -6px; width: 10px; height: 10px; border-left: 1px solid rgba(255,255,255,.12); border-top: 1px solid rgba(255,255,255,.12); background: #10161d; transform: rotate(45deg); }
+.xvm-fr-tooltip[data-placement="top"]::before { top: auto; bottom: -6px; transform: rotate(225deg); }
 .xvm-fr-tooltip strong,.xvm-fr-tooltip span { display: block; }
 .xvm-fr-tooltip strong { margin-bottom: 4px; color: #fff; }
 .xvm-fr-tooltip b { color: #c6d0d9; font-weight: 650; }
-.xvm-fr-tooltip .xvm-fr-tooltip-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  margin-right: 7px;
-  border-radius: 6px;
-  color: #fff;
-  background: linear-gradient(135deg, #635bff, #2388ff);
-  font-size: 9px;
-  font-weight: 900;
-}
 .xvm-fr-tooltip .xvm-fr-tooltip-account {
   margin: 1px 0 6px;
   color: #91a2b2;
   font-size: 12px;
 }
-.xvm-fr-pill:hover .xvm-fr-tooltip,.xvm-fr-pill:focus-visible .xvm-fr-tooltip { display: block; }
 .xvm-fr-mutual     { color: #7a3100; background: #ffd2ad; border-color: #ff9848; }
 .xvm-fr-mine       { color: #073c86; background: #bcd9ff; border-color: #72aef4; }
 .xvm-fr-theirs     { color: #075d56; background: #bdf3ec; border-color: #72d6cb; }

@@ -160,6 +160,40 @@ describe('关注雷达浏览器回归', () => {
     await page.close();
   });
 
+  it('时间线、帖子回复和用户卡片优先复用 X 页面 store 的完整用户资料', async () => {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <div data-testid="cellInnerDiv"><article data-testid="tweet"><div style="display:flex">
+        <div data-testid="User-Name"><a role="link" href="/alice"><span>Alice</span><span>@alice</span></a></div><button data-testid="caret">...</button>
+      </div></article></div>
+      <div data-testid="cellInnerDiv"><article data-testid="tweet"><div style="display:flex">
+        <div data-testid="User-Name"><a role="link" href="/bob"><span>Bob</span><span>@bob</span></a></div><button data-testid="caret">...</button>
+      </div></article></div>
+      <div data-testid="UserCell"><a role="link" href="/carol">Carol</a><button>关注</button></div>`);
+    await page.evaluate(() => {
+      const users = {
+        alice: { screen_name: 'alice', followers_count: 200, friends_count: 50, following: true, followed_by: true },
+        bob: { screen_name: 'bob', followers_count: 100, friends_count: 40, following: false, followed_by: false },
+        carol: { screen_name: 'carol', followers_count: 1000, friends_count: 100, following: false, followed_by: true },
+      };
+      const store = { getState: () => ({ entities: { users } }) };
+      for (const host of document.querySelectorAll('article[data-testid="tweet"], [data-testid="UserCell"]')) {
+        Object.defineProperty(host, '__reactFiber$xvmtest', {
+          configurable: true,
+          value: { tag: 10, memoizedProps: { value: { store } }, return: null },
+        });
+      }
+    });
+    await page.addScriptTag({ content: logicSrc });
+    await page.addScriptTag({ content: radarSrc });
+
+    await page.waitForFunction(() => {
+      const labels = [...document.querySelectorAll('.xvm-fr-pill-label')].map((node) => node.textContent);
+      return labels.includes('互关 0.25') && labels.includes('关注率 0.4') && labels.includes('关注我 0.1');
+    }, null, { timeout: 3000 });
+    await page.close();
+  });
+
   it('关系接口缺少计数时不会误判完成，并会继续查询资料计数', async () => {
     const page = await browser.newPage();
     let lookupRequests = 0;
@@ -168,7 +202,10 @@ describe('关注雷达浏览器回归', () => {
       const url = new URL(route.request().url());
       if (url.pathname === '/i/api/1.1/users/lookup.json') {
         lookupRequests++;
-        await route.fulfill({ contentType: 'application/json', body: JSON.stringify([{ screen_name: 'alice', following: false, followed_by: true }]) });
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify([{
+          screen_name: 'alice', followers_count: null, friends_count: null,
+          following: false, followed_by: true,
+        }]) });
         return;
       }
       if (url.pathname === '/i/api/1.1/users/show.json') {
@@ -300,12 +337,52 @@ describe('关注雷达浏览器回归', () => {
     await page.locator('.xvm-fr-pill').hover();
     await page.locator('.xvm-fr-tooltip').waitFor({ state: 'visible' });
     const tooltip = await page.locator('.xvm-fr-tooltip').innerText();
-    expect(await page.locator('.xvm-fr-brand').innerText()).toBe('XT');
+    expect(await page.locator('.xvm-fr-brand').count()).toBe(0);
     expect(tooltip).toContain('X-Tools 关系详情');
     expect(tooltip).toContain('关系：关注我');
     expect(tooltip).toContain('粉丝：200');
     expect(tooltip).toContain('关注人数：50');
     expect(tooltip).toContain('对当前用户取关过：否');
+    await page.close();
+  });
+
+  it('悬浮详情挂载到页面顶层并避开推文裁剪与视口边缘', async () => {
+    const page = await browser.newPage({ viewport: { width: 520, height: 300 } });
+    await page.setContent(`
+      <div class="clip" style="position:absolute;left:30px;right:30px;bottom:8px;height:76px;overflow:hidden">
+        <article data-testid="tweet">
+          <div style="display:flex;align-items:center">
+            <div data-testid="User-Name" style="flex:1"><a role="link" href="/alice"><span>Alice</span><span>@alice</span></a></div>
+            <button data-testid="caret">...</button>
+          </div>
+        </article>
+      </div>`);
+    await page.addScriptTag({ content: logicSrc });
+    await page.addScriptTag({ content: radarSrc });
+    await page.addStyleTag({ content: stylesSrc });
+    await page.waitForTimeout(800);
+    await page.evaluate(() => window.__xvmFollowRadar.ingestProfileRow({
+      screen_name: 'alice', followers_count: 33210, friends_count: 10634,
+      following: false, followed_by: false,
+    }, 'alice'));
+    await page.waitForTimeout(800);
+    await page.locator('.xvm-fr-pill').hover();
+    await page.locator('.xvm-fr-tooltip').waitFor({ state: 'visible' });
+
+    const layout = await page.locator('.xvm-fr-tooltip').evaluate((tooltip) => {
+      const box = tooltip.getBoundingClientRect();
+      return {
+        parentIsBody: tooltip.parentElement === document.body,
+        fullyInViewport: box.top >= 8 && box.bottom <= window.innerHeight - 8
+          && box.left >= 8 && box.right <= window.innerWidth - 8,
+        text: tooltip.innerText,
+      };
+    });
+    expect(layout.parentIsBody).toBe(true);
+    expect(layout.fullyInViewport).toBe(true);
+    expect(layout.text).toContain('粉丝：33,210');
+    expect(layout.text).toContain('关注人数：10,634');
+    expect(layout.text).toContain('关注率：0.32');
     await page.close();
   });
 });
