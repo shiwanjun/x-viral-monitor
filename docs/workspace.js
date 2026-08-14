@@ -6,6 +6,11 @@
   const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   const number = (value) => new Intl.NumberFormat('zh-CN', { notation: Number(value) > 9999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(Number(value) || 0);
   const date = (value) => value ? new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—';
+  const fullDate = (value) => {
+    if (!value) return '—';
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(value)).map((item) => [item.type, item.value]));
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour === '24' ? '00' : parts.hour}:${parts.minute}`;
+  };
   const kindName = { all: '全部内容', bookmark: '书签', like: '点赞', authored_post: '我的推文', authored_reply: '我的回复' };
   const kindOperations = { all: ['Bookmarks', 'BookmarkFolderTimeline', 'Likes', 'UserTweets', 'UserTweetsAndReplies'], bookmark: ['Bookmarks', 'BookmarkFolderTimeline'], like: ['Likes'], authored_post: ['UserTweets', 'UserTweetsAndReplies'], authored_reply: ['UserTweetsAndReplies'] };
   let toastTimer;
@@ -99,10 +104,16 @@
   }
   function typePill(kind) { return `<span class="type-pill">${esc(kindName[kind] || kind)}</span>`; }
   function chips(row) { const tags = (row.tags || []).map((item) => `<span class="chip"># ${esc(item.name)}</span>`); const folders = (row.folders || []).map((item) => `<span class="chip">▱ ${esc(item.name)}</span>`); if (row.item.sourceFolderName) folders.push(`<span class="chip">X · ${esc(row.item.sourceFolderName)}</span>`); return [...tags, ...folders].join('') || '<span class="chip">未整理</span>'; }
+  function avatar(post) { return post.authorAvatar ? `<img src="${esc(post.authorAvatar)}" alt="" loading="lazy">` : `<span>${esc((post.authorName || post.authorHandle || 'X').slice(0, 1).toUpperCase())}</span>`; }
+  function mediaPreview(post) {
+    const media = (post.media || []).filter((item) => item?.previewUrl || item?.url).slice(0, 3);
+    if (!media.length) return '<span class="media-empty">—</span>';
+    return `<div class="media-preview">${media.map((item, index) => `<a href="${esc(item.url || item.previewUrl)}" target="_blank" rel="noopener" class="media-tile" aria-label="打开第 ${index + 1} 个媒体文件"><img src="${esc(item.previewUrl || item.url)}" alt="" loading="lazy">${item.type === 'video' || item.type === 'animated_gif' ? '<span class="media-play">▶</span>' : ''}</a>`).join('')}</div>`;
+  }
   function renderTable() {
-    $('#rows').innerHTML = state.rows.map(({ item, post, tags, folders }) => {
-      const row = { item, post, tags, folders }; const image = post.media?.[0]?.previewUrl || post.authorAvatar;
-      return `<tr data-open-post="${esc(item.id)}" tabindex="0"><td><input class="row-check" type="checkbox" data-id="${esc(item.id)}" ${state.selected.has(item.id) ? 'checked' : ''}></td><td><div class="post">${image ? `<img class="thumb" src="${esc(image)}" alt="" loading="lazy">` : '<span class="thumb"></span>'}<div class="post-body"><div class="post-copy">${esc(post.text || '无正文')}</div><div class="post-meta"><a data-open-user="${esc(post.authorHandle)}" href="https://x.com/${encodeURIComponent(post.authorHandle)}" target="_blank" rel="noopener">${esc(post.authorName)} · @${esc(post.authorHandle)}</a>${item.sourceRemovedAt ? ' · <b>来源已删除</b>' : ''}</div></div></div></td><td>${typePill(item.kind)}</td><td>${chips(row)}</td><td><div class="metric"><b>♥ ${number(post.metrics?.likes)}</b><small>◉ ${number(post.metrics?.views)}</small></div></td><td>${date(post.createdAt)}</td><td><button class="row-more" data-row="${esc(item.id)}">•••</button></td></tr>`;
+    $('#rows').innerHTML = state.rows.map(({ item, post, tags, folders }, index) => {
+      const row = { item, post, tags, folders };
+      return `<tr data-open-post="${esc(item.id)}" tabindex="0"><td><input class="row-check" type="checkbox" data-id="${esc(item.id)}" ${state.selected.has(item.id) ? 'checked' : ''}></td><td class="row-index">${index + 1}</td><td><a class="table-user" data-open-user="${esc(post.authorHandle)}" href="https://x.com/${encodeURIComponent(post.authorHandle)}" target="_blank" rel="noopener"><span class="table-avatar">${avatar(post)}</span><span><strong>${esc(post.authorName || post.authorHandle || 'X 用户')}</strong><small>@${esc(post.authorHandle || 'unknown')}</small></span></a></td><td><div class="table-chips">${chips(row)}</div></td><td><div class="tweet-cell"><div class="tweet-kind">${typePill(item.kind)}${item.sourceRemovedAt ? '<span class="source-removed">来源已删除</span>' : ''}</div><div class="tweet-full-text">${esc(post.text || '无正文')}</div></div></td><td>${mediaPreview(post)}</td><td class="metric-value" data-metric="views">${number(post.metrics?.views)}</td><td class="metric-value" data-metric="reposts">${number(post.metrics?.reposts)}</td><td class="metric-value" data-metric="likes">${number(post.metrics?.likes)}</td><td class="metric-value" data-metric="replies">${number(post.metrics?.replies)}</td><td class="created-at">${fullDate(post.createdAt)}</td><td><button class="row-more" data-row="${esc(item.id)}" aria-label="更多操作">•••</button></td></tr>`;
     }).join('');
   }
   function renderGallery() { $('#view-gallery').innerHTML = state.rows.map(({ item, post }) => `<article class="gallery-card" data-open-post="${esc(item.id)}" tabindex="0" role="link">${post.media?.[0]?.previewUrl ? `<img src="${esc(post.media[0].previewUrl)}" alt="" loading="lazy">` : '<div class="gallery-placeholder">✎</div>'}<div><span>${typePill(item.kind)}</span><strong>${esc(post.text || '无正文')}</strong><small><a data-open-user="${esc(post.authorHandle)}" href="https://x.com/${encodeURIComponent(post.authorHandle)}" target="_blank" rel="noopener">@${esc(post.authorHandle)}</a> · ${date(post.createdAt)}</small></div></article>`).join(''); }

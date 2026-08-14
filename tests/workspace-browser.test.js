@@ -86,8 +86,8 @@ describe('官网登录后数据中心浏览器回归', () => {
     page.on('pageerror', (error) => debug.push(`error:${error.message}`));
     await page.addInitScript(() => {
       const rows = [
-        { item: { id: '1:bookmark:101', kind: 'bookmark', sourceFolderName: '灵感' }, post: { id: '101', text: '第一条带图片的书签', authorName: 'Alice', authorHandle: 'alice', createdAt: 1000, media: [{ type: 'image', url: 'https://example.com/a.jpg', previewUrl: 'https://example.com/a.jpg' }], metrics: { likes: 12, views: 300 } }, tags: [{ id: 't1', name: 'AI', color: '#654fe8' }], folders: [] },
-        { item: { id: '1:like:102', kind: 'like' }, post: { id: '102', text: '第二条纯文本点赞', authorName: 'Bob', authorHandle: 'bob', createdAt: 2000, media: [], metrics: { likes: 8, views: 120 } }, tags: [], folders: [] },
+        { item: { id: '1:bookmark:101', kind: 'bookmark', sourceFolderName: '灵感' }, post: { id: '101', text: '第一条带图片的书签\n第二行仍需完整展示', authorName: 'Alice', authorHandle: 'alice', authorAvatar: '/x-tools-logo.png', createdAt: Date.UTC(2026, 7, 13, 10, 23), media: [{ type: 'video', url: 'https://example.com/a.mp4', previewUrl: '/x-tools-logo.png' }], metrics: { likes: 12, views: 300, reposts: 7, replies: 3, bookmarks: 2 } }, tags: [{ id: 't1', name: 'AI', color: '#654fe8' }], folders: [] },
+        { item: { id: '1:like:102', kind: 'like' }, post: { id: '102', text: '第二条纯文本点赞', authorName: 'Bob', authorHandle: 'bob', createdAt: Date.UTC(2026, 7, 12, 9, 8), media: [], metrics: { likes: 8, views: 120, reposts: 2, replies: 1, bookmarks: 0 } }, tags: [], folders: [] },
       ];
       Object.defineProperty(window, 'chrome', { configurable: true, value: { runtime: {
         lastError: null,
@@ -107,6 +107,26 @@ describe('官网登录后数据中心浏览器回归', () => {
     await page.goto(`${origin}/workspace`);
     try { await page.waitForFunction(() => document.querySelectorAll('#rows tr').length === 2, null, { timeout: 3000 }); }
     catch (error) { throw new Error(`${error.message}\n${debug.join('\n')}\nchrome=${await page.evaluate(() => window.__auditChrome)} runtime=${await page.evaluate(() => typeof window.chrome?.runtime?.sendMessage)}\n${await page.locator('#connection-banner').innerText()}`); }
+    const tableHead = await page.locator('#library-data-table thead').innerText();
+    expect(tableHead).toContain('用户');
+    expect(tableHead).toContain('文件夹 / 标签');
+    expect(tableHead).toContain('推文');
+    expect(tableHead).toContain('媒体文件');
+    expect(tableHead).toContain('浏览量');
+    expect(tableHead).toContain('转发数');
+    expect(tableHead).toContain('点赞数');
+    expect(tableHead).toContain('回复数');
+    expect(tableHead).toContain('创建时间');
+    const firstRow = page.locator('#rows tr').first();
+    expect(await firstRow.locator('.table-user strong').textContent()).toBe('Alice');
+    expect(await firstRow.locator('.tweet-full-text').textContent()).toBe('第一条带图片的书签\n第二行仍需完整展示');
+    expect(await firstRow.locator('[data-metric="views"]').textContent()).toBe('300');
+    expect(await firstRow.locator('[data-metric="reposts"]').textContent()).toBe('7');
+    expect(await firstRow.locator('[data-metric="likes"]').textContent()).toBe('12');
+    expect(await firstRow.locator('[data-metric="replies"]').textContent()).toBe('3');
+    expect(await firstRow.locator('.created-at').textContent()).toMatch(/^2026-08-13 \d{2}:23$/);
+    expect(await firstRow.locator('.media-tile').count()).toBe(1);
+    expect(await firstRow.locator('.media-play').count()).toBe(1);
     await page.locator('[data-view="gallery"]').click();
     expect(await page.locator('#view-gallery').isVisible()).toBe(true);
     expect(await page.locator('#view-gallery .gallery-card').count()).toBe(2);
