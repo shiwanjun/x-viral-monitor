@@ -818,6 +818,22 @@
       id: result?.rest_id || legacy?.id_str || row?.id_str || row?.id,
       name: core?.name || legacy?.name || row?.name,
       avatar: result?.avatar?.image_url || legacy?.profile_image_url_https || row?.profile_image_url_https,
+      bio: legacy?.description || row?.description || '',
+      location: legacy?.location || row?.location || '',
+      url: legacy?.entities?.url?.urls?.[0]?.expanded_url || legacy?.url || row?.url || '',
+      joinedAt: (() => {
+        const value = core?.created_at || legacy?.created_at || row?.created_at;
+        const parsed = typeof value === 'number' ? value : Date.parse(value || '');
+        return Number.isFinite(parsed) ? parsed : undefined;
+      })(),
+      verified: typeof legacy?.verified === 'boolean' ? legacy.verified : (typeof row?.verified === 'boolean' ? row.verified : undefined),
+      blueVerified: typeof result?.is_blue_verified === 'boolean' ? result.is_blue_verified : (typeof row?.is_blue_verified === 'boolean' ? row.is_blue_verified : undefined),
+      verifiedType: result?.verification?.verified_type || row?.verification?.verified_type || '',
+      protected: typeof legacy?.protected === 'boolean' ? legacy.protected : (typeof row?.protected === 'boolean' ? row.protected : undefined),
+      statusesCount: hasProfileCount(legacy?.statuses_count ?? row?.statuses_count) ? Number(legacy?.statuses_count ?? row?.statuses_count) : undefined,
+      mediaCount: hasProfileCount(legacy?.media_count ?? row?.media_count) ? Number(legacy?.media_count ?? row?.media_count) : undefined,
+      favouritesCount: hasProfileCount(legacy?.favourites_count ?? row?.favourites_count) ? Number(legacy?.favourites_count ?? row?.favourites_count) : undefined,
+      listedCount: hasProfileCount(legacy?.listed_count ?? row?.listed_count) ? Number(legacy?.listed_count ?? row?.listed_count) : undefined,
       fc: hasProfileCount(fcRaw) ? Number(fcRaw) : undefined,
       fd: hasProfileCount(fdRaw) ? Number(fdRaw) : undefined,
       f: typeof f === 'boolean' ? (f ? 1 : 0) : undefined,

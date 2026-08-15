@@ -32,6 +32,72 @@ describe('数据中心 IndexedDB', () => {
     expect(result.rows.map((row) => row.item.kind).sort()).toEqual(['bookmark', 'like']);
   });
 
+  it('关系用户按 X 账号隔离保存且完整资料不会被贫乏响应覆盖', async () => {
+    const db = loadDb();
+    await db.upsertRelationships('account-a', [{
+      id: '42', handle: 'Alice', n: 'Alice', a: 'avatar.jpg', bio: '产品经理',
+      location: '上海', url: 'https://alice.example', verified: true, blueVerified: true, protected: false,
+      created_at: 'Wed Oct 10 20:19:24 +0000 2018',
+      fc: 200, fd: 50, statusesCount: 321, mediaCount: 12, favouritesCount: 88,
+      f: 1, b: 1, t: 2_000,
+    }], { source: 'page_store' });
+    await db.upsertRelationships('account-a', [{ handle: 'alice', f: 1, b: 1, t: 3_000 }], { source: 'timeline' });
+    await db.upsertRelationships('account-b', [{ handle: 'alice', n: '另一个账号视角', f: 0, b: 0, fc: 10, fd: 20 }]);
+
+    const first = await db.getRelationships('account-a');
+    const second = await db.getRelationships('account-b');
+    expect(first.users).toHaveLength(1);
+    expect(first.users[0]).toMatchObject({
+      handle: 'alice', userId: '42', n: 'Alice', a: 'avatar.jpg', bio: '产品经理',
+      location: '上海', url: 'https://alice.example', verified: true, blueVerified: true,
+      joinedAt: Date.parse('Wed Oct 10 20:19:24 +0000 2018'),
+      fc: 200, fd: 50, statusesCount: 321, mediaCount: 12, favouritesCount: 88,
+      f: 1, b: 1, source: 'timeline', t: 3_000,
+    });
+    expect(second.users).toHaveLength(1);
+    expect(second.users[0]).toMatchObject({ handle: 'alice', n: '另一个账号视角', f: 0, b: 0 });
+  });
+
+  it('完整关系快照替换前自动备份并可一键回滚', async () => {
+    const db = loadDb();
+    await db.putRelationshipSnapshot('account-a', {
+      users: { alice: { n: 'Alice', f: 1, b: 1, fc: 200, fd: 50, t: 1_000 } },
+      events: [{ id: 'unfollowed_me:alice:900', h: 'alice', type: 'unfollowed_me', ts: 900 }],
+      snap: { following: { alice: 1 }, followers: { alice: 1 }, ts: 1_000 },
+      meta: { committedAt: 1_000 },
+    }, { replace: true, skipBackup: true });
+
+    const changed = await db.putRelationshipSnapshot('account-a', {
+      users: { bob: { n: 'Bob', f: 1, b: 0, fc: 300, fd: 60, t: 2_000 } },
+      events: [], snap: { following: { bob: 1 }, followers: {}, ts: 2_000 },
+      meta: { committedAt: 2_000 },
+    }, { replace: true, backupLabel: '完整扫描前' });
+    expect(changed.backupId).toBeTruthy();
+    expect((await db.getRelationships('account-a')).users.map((user) => user.handle)).toEqual(['bob']);
+
+    const exported = await db.exportRelationshipBackup('account-a');
+    expect(exported).toMatchObject({ schema: 'x-tools-relationships', version: 1, accountId: 'account-a' });
+    expect(exported.data.users[0].handle).toBe('bob');
+
+    await db.restoreRelationshipBackup('account-a', changed.backupId);
+    const restored = await db.getRelationships('account-a');
+    expect(restored.users.map((user) => user.handle)).toEqual(['alice']);
+    expect(restored.events[0]).toMatchObject({ h: 'alice', type: 'unfollowed_me', ts: 900 });
+    expect(restored.snap.following.alice).toBe(1);
+  });
+
+  it('完整扫描后仍保留已取关互关用户的完整资料和历史状态', async () => {
+    const db = loadDb();
+    const users = db.reconcileRelationshipSnapshot({
+      alice: { handle: 'alice', n: 'Alice', bio: '历史完整简介', fc: 200, fd: 50, f: 1, b: 1, t: 1_000 },
+    }, { following: { alice: 1 }, followers: { alice: 1 } }, {
+      bob: { handle: 'bob', n: 'Bob', fc: 300, fd: 60 },
+    }, { following: { bob: 1 }, followers: {} }, 2_000);
+
+    expect(users.alice).toMatchObject({ n: 'Alice', bio: '历史完整简介', fc: 200, fd: 50, f: 0, b: 0, u: 2_000, i: 2_000, m: 2_000 });
+    expect(users.bob).toMatchObject({ n: 'Bob', f: 1, b: 0, t: 2_000 });
+  });
+
   it('较贫乏的后续响应不会清空标题、正文、媒体和互动指标', async () => {
     const db = loadDb();
     await db.putCapture({ accountId: '1', kind: 'bookmark', post: { id: 'rich', title: '完整标题', text: '这是一段完整得多的正文', authorName: '作者', authorHandle: 'author', media: [{ type: 'image', url: 'cover.jpg' }], metrics: { views: 1000, likes: 50, reposts: 20, replies: 10 } } });

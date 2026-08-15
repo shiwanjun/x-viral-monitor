@@ -94,6 +94,7 @@ const LIBRARY_AUTH_KEY = 'xvm_library_x_auth_v1';
 const LIBRARY_QUERY_DISCOVERY_KEY = 'xvm_library_query_discovery_v1';
 const RELATIONSHIP_COMMITTED_KEY = 'xvm_relationship_committed_v1';
 const RELATIONSHIP_SYNC_KEY = 'xvm_relationship_sync_v1';
+const RELATIONSHIP_MIGRATED_KEY = 'xvm_relationship_indexeddb_migrated_v1';
 const LIBRARY_AUTO_SYNC_ALARM = 'xvm-library-auto-sync';
 const COMMUNITY_X_CONFIG_URL = 'https://raw.githubusercontent.com/fa0311/twitter-openapi/refs/heads/main/src/config/placeholder.json';
 const pendingLibraryActions = new Map();
@@ -241,6 +242,19 @@ function libraryError(error, fallback = 'library_error') {
   return { ok: false, error: code };
 }
 
+// MV3 service workers get killed mid-sync (30s of idleness during a
+// rate-limit backoff is enough), leaving the sync status stuck in a "busy"
+// state forever — auto-sync then skips forever. A busy status whose
+// updatedAt is older than the longest possible backoff (15 min rate-limit
+// wait) + margin is a dead task, not a running one: take it over.
+const SYNC_STALE_MS = 20 * 60 * 1000;
+const SYNC_BUSY_STATUSES = ['running', 'rate_limited', 'network_retry', 'http_retry'];
+function syncStatusBusy(sync) {
+  if (!sync || !SYNC_BUSY_STATUSES.includes(sync.status)) return false;
+  const updatedAt = Number(sync.updatedAt || sync.startedAt || 0);
+  return Date.now() - updatedAt <= SYNC_STALE_MS;
+}
+
 function subscriptionIsPro(subscription) {
   const plan = subscription?.tier || subscription?.plan;
   const status = String(subscription?.status || 'active');
@@ -309,35 +323,95 @@ async function libraryStatus() {
   };
 }
 
-async function relationshipStatus() {
-  const values = await chrome.storage.local.get(['followRadarV1', 'followRadarCloudSync', RELATIONSHIP_COMMITTED_KEY, RELATIONSHIP_SYNC_KEY]);
+function legacyRelationshipPayload(values = {}) {
   const radar = values?.followRadarV1 || {};
-  let committed = values?.[RELATIONSHIP_COMMITTED_KEY] || {};
-  // 旧版本只保存 followRadarV1。升级后先把最后一份完整快照迁移为
-  // committed，再启动新扫描；这样工作台首屏不会从已有的几百条跳成 0。
-  if (!Object.keys(committed.users || {}).length && Object.keys(radar.users || {}).length) {
-    const snap = radar.snap || { following: {}, followers: {} };
-    const users = {};
-    Object.entries(radar.users || {}).forEach(([handle, record]) => {
-      const inFollowing = Boolean(snap.following?.[handle]);
-      const inFollowers = Boolean(snap.followers?.[handle]);
-      if (!inFollowing && !inFollowers && !record?.f && !record?.b && !record?.u && !record?.i) return;
-      users[handle] = {
-        ...record,
-        f: Object.keys(snap.following || {}).length ? Number(inFollowing) : Number(Boolean(record?.f)),
-        b: Object.keys(snap.followers || {}).length ? Number(inFollowers) : Number(Boolean(record?.b)),
+  const committed = values?.[RELATIONSHIP_COMMITTED_KEY] || {};
+  const handles = new Set([...Object.keys(radar.users || {}), ...Object.keys(committed.users || {})]);
+  const users = {};
+  handles.forEach((handle) => {
+    users[handle] = { ...(radar.users?.[handle] || {}), ...(committed.users?.[handle] || {}) };
+  });
+  return {
+    accountId: committed.accountId || radar.meta?.accountId || radar.meta?.myUserId || '',
+    users,
+    events: Array.isArray(radar.events) ? radar.events : [],
+    snap: committed.snap || radar.snap || null,
+    meta: { ...(radar.meta || {}), ...(committed.meta || {}), storage: 'legacy' },
+  };
+}
+
+async function relationshipAccountId(preferred = '') {
+  const context = await libraryContext();
+  const id = String(preferred || context.boundAccount?.accountId || '').trim();
+  if (!id) throw new Error('x_account_required');
+  if (context.boundAccount?.accountId && context.boundAccount.accountId !== id) throw new Error('account_mismatch');
+  return id;
+}
+
+async function migrateLegacyRelationships(accountId, providedValues = null) {
+  const values = providedValues || await chrome.storage.local.get([
+    'followRadarV1', RELATIONSHIP_COMMITTED_KEY, RELATIONSHIP_MIGRATED_KEY,
+  ]);
+  const legacy = legacyRelationshipPayload(values);
+  const marker = values?.[RELATIONSHIP_MIGRATED_KEY];
+  const current = await XvmLibraryDb.getRelationships(accountId);
+  if (marker?.accountId === accountId && (current.users.length || !Object.keys(legacy.users).length)) return current;
+  if (!Object.keys(legacy.users).length && !legacy.events.length) return current;
+  await XvmLibraryDb.putRelationshipSnapshot(accountId, legacy, {
+    replace: false, skipBackup: true, source: 'legacy_migration',
+  });
+  const migrated = await XvmLibraryDb.getRelationships(accountId);
+  const backup = await XvmLibraryDb.createRelationshipBackup(accountId, '旧版关系数据迁移备份');
+  await chrome.storage.local.set({
+    [RELATIONSHIP_MIGRATED_KEY]: {
+      accountId, migratedAt: Date.now(), users: migrated.users.length,
+      events: migrated.events.length, backupId: backup?.id || null,
+      legacyBackupAvailable: true,
+    },
+  });
+  return migrated;
+}
+
+async function loadRelationshipState() {
+  const values = await chrome.storage.local.get([
+    'followRadarV1', 'followRadarCloudSync', RELATIONSHIP_COMMITTED_KEY,
+    RELATIONSHIP_SYNC_KEY, RELATIONSHIP_MIGRATED_KEY, LIBRARY_BINDING_KEY,
+  ]);
+  const legacy = legacyRelationshipPayload(values);
+  const accountId = String(values?.[LIBRARY_BINDING_KEY]?.accountId || legacy.accountId || '').trim();
+  if (accountId) {
+    try {
+      await migrateLegacyRelationships(accountId);
+      const indexed = await XvmLibraryDb.getRelationships(accountId);
+      return {
+        ...indexed,
+        cloudSync: Boolean(values?.followRadarCloudSync),
+        sync: values?.[RELATIONSHIP_SYNC_KEY] || { status: 'idle' },
+        backups: await XvmLibraryDb.listRelationshipBackups(accountId),
+        storage: 'indexeddb', fallback: false,
       };
-    });
-    committed = {
-      accountId: radar.meta?.accountId || '',
-      users,
-      snap,
-      meta: { migratedAt: Date.now(), committedAt: Number(radar.meta?.backgroundScannedAt || radar.meta?.lastScanAt || Date.now()) },
-    };
-    await chrome.storage.local.set({ [RELATIONSHIP_COMMITTED_KEY]: committed });
+    } catch (error) {
+      return {
+        ...legacy,
+        cloudSync: Boolean(values?.followRadarCloudSync),
+        sync: values?.[RELATIONSHIP_SYNC_KEY] || { status: 'idle' },
+        backups: [], storage: 'legacy', fallback: true,
+        storageError: String(error?.message || error),
+      };
+    }
   }
-  const users = Object.entries(committed.users || {}).map(([handle, record]) => ({ handle, ...record }));
-  const events = (Array.isArray(radar.events) ? radar.events : []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+  return {
+    ...legacy,
+    cloudSync: Boolean(values?.followRadarCloudSync),
+    sync: values?.[RELATIONSHIP_SYNC_KEY] || { status: 'idle' },
+    backups: [], storage: 'legacy', fallback: true,
+  };
+}
+
+async function relationshipStatus() {
+  const state = await loadRelationshipState();
+  const users = Array.isArray(state.users) ? state.users : Object.entries(state.users || {}).map(([handle, record]) => ({ handle, ...record }));
+  const events = (Array.isArray(state.events) ? state.events : []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
   const counts = users.reduce((result, user) => {
     const key = user.f && user.b ? 'mutual' : user.m ? 'unfollowed' : user.f ? 'mine' : user.b ? 'theirs' : (user.u || user.i) ? 'unfollowed' : 'none';
     result[key] = (result[key] || 0) + 1; return result;
@@ -347,10 +421,61 @@ async function relationshipStatus() {
     users,
     events,
     counts,
-    cloudSync: Boolean(values?.followRadarCloudSync),
-    meta: { ...(radar.meta || {}), ...(committed.meta || {}) },
-    sync: values?.[RELATIONSHIP_SYNC_KEY] || { status: 'idle' },
+    cloudSync: state.cloudSync,
+    meta: state.meta || {},
+    sync: state.sync || { status: 'idle' },
+    backups: state.backups || [],
+    storage: state.storage,
+    fallback: Boolean(state.fallback),
+    storageError: state.storageError || null,
   };
+}
+
+async function writeRelationshipLegacyFallback(accountId, state) {
+  const values = await chrome.storage.local.get(['followRadarV1', RELATIONSHIP_COMMITTED_KEY]);
+  const users = Object.fromEntries((state.users || []).map((user) => {
+    const { key, accountId: ignoredAccount, ...record } = user;
+    return [user.handle, record];
+  }));
+  const radar = values.followRadarV1 || {};
+  const nextRadar = {
+    ...radar,
+    users,
+    events: (state.events || []).map(({ key, accountId: ignoredAccount, ...event }) => event).slice(-1000),
+    snap: state.snap || null,
+    meta: { ...(radar.meta || {}), ...(state.meta || {}), accountId, restoredAt: Date.now() },
+  };
+  await chrome.storage.local.set({
+    followRadarV1: nextRadar,
+    [RELATIONSHIP_COMMITTED_KEY]: {
+      accountId, users, snap: state.snap || null,
+      meta: { ...(state.meta || {}), committedAt: Date.now(), restoredAt: Date.now() },
+    },
+  });
+}
+
+async function relationshipBackupAction(type, payload = {}) {
+  const accountId = await relationshipAccountId(payload.accountId);
+  if (type === 'XVM_LIBRARY_RELATIONSHIPS_BACKUPS') {
+    return { ok: true, backups: await XvmLibraryDb.listRelationshipBackups(accountId) };
+  }
+  if (type === 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_EXPORT') {
+    return { ok: true, backup: await XvmLibraryDb.exportRelationshipBackup(accountId) };
+  }
+  if (type === 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_IMPORT') {
+    const result = await XvmLibraryDb.importRelationshipBackup(accountId, payload.backup, { replace: true });
+    await writeRelationshipLegacyFallback(accountId, await XvmLibraryDb.getRelationships(accountId));
+    return { ok: true, ...result };
+  }
+  if (type === 'XVM_LIBRARY_RELATIONSHIPS_ROLLBACK') {
+    const backups = await XvmLibraryDb.listRelationshipBackups(accountId);
+    const backupId = payload.backupId || backups[0]?.id;
+    if (!backupId) throw new Error('relationship_backup_not_found');
+    const result = await XvmLibraryDb.restoreRelationshipBackup(accountId, backupId);
+    await writeRelationshipLegacyFallback(accountId, await XvmLibraryDb.getRelationships(accountId));
+    return { ok: true, backupId, ...result };
+  }
+  throw new Error('unsupported_message');
 }
 
 async function runBackgroundRelationshipScan(kinds = ['following', 'followers']) {
@@ -409,12 +534,14 @@ async function runBackgroundRelationshipScan(kinds = ['following', 'followers'])
     }
 
     const now = Date.now();
-    const handles = new Set([...Object.keys(snapshot.following), ...Object.keys(snapshot.followers)]);
-    const users = {};
-    handles.forEach((handle) => {
-      const record = observed[handle] || radar.users?.[handle] || previousCommitted.users?.[handle] || {};
-      users[handle] = { ...record, f: snapshot.following[handle] ? 1 : 0, b: snapshot.followers[handle] ? 1 : 0, t: now };
+    // 当前列表里消失的用户不能直接删掉：这恰好是“曾经互关/后来取关”
+    // 最重要的历史证据。只保留旧快照中确实存在过关系的用户，避免把
+    // 普通时间线作者混入关系中心，同时保留其头像、简介和完整指标。
+    const previousRelated = {};
+    new Set([...Object.keys(previousSnap.following || {}), ...Object.keys(previousSnap.followers || {})]).forEach((handle) => {
+      previousRelated[handle] = previousCommitted.users?.[handle] || radar.users?.[handle] || { handle };
     });
+    const users = XvmLibraryDb.reconcileRelationshipSnapshot(previousRelated, previousSnap, observed, snapshot, now);
     const events = new Map((radar.events || []).map((event) => [event.id || `${event.type}:${event.h}:${event.ts}`, event]));
     if (kinds.includes('followers')) Object.keys(previousSnap.followers || {}).forEach((handle) => {
       if (snapshot.followers[handle]) return;
@@ -428,8 +555,21 @@ async function runBackgroundRelationshipScan(kinds = ['following', 'followers'])
       const item = { id: `i_unfollowed:${handle}:${now}`, h: handle, n: record.n || '', type: 'i_unfollowed', ts: now, fc: record.fc ?? null, fd: record.fd ?? null };
       events.set(item.id, item);
     });
-    const nextRadar = { ...radar, users: { ...(radar.users || {}), ...users }, snap: snapshot, events: [...events.values()].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-1000), meta: { ...(radar.meta || {}), backgroundScannedAt: now } };
-    const committed = { accountId, users, snap: snapshot, meta: { committedAt: now, pages: totalPages, scanId } };
+    const relationshipEvents = [...events.values()].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+    let indexedDbError = null;
+    try {
+      await migrateLegacyRelationships(accountId);
+      await XvmLibraryDb.putRelationshipSnapshot(accountId, {
+        users, events: relationshipEvents, snap: snapshot,
+        meta: { committedAt: now, pages: totalPages, scanId, source: 'background_scan' },
+      }, { replace: true, backupLabel: '完整关系扫描前', source: 'background_scan' });
+    } catch (error) {
+      // 回退方案：IndexedDB 异常不能破坏已经成功获取的完整扫描结果，
+      // 继续提交旧版快照，下一次加载会明确标记 fallback 并再次尝试迁移。
+      indexedDbError = String(error?.message || error);
+    }
+    const nextRadar = { ...radar, users: { ...(radar.users || {}), ...users }, snap: snapshot, events: relationshipEvents.slice(-1000), meta: { ...(radar.meta || {}), accountId, backgroundScannedAt: now, indexedDbError } };
+    const committed = { accountId, users, snap: snapshot, meta: { committedAt: now, pages: totalPages, scanId, indexedDbError } };
     await chrome.storage.local.set({
       followRadarV1: nextRadar,
       [RELATIONSHIP_COMMITTED_KEY]: committed,
@@ -445,7 +585,14 @@ async function runBackgroundRelationshipScan(kinds = ['following', 'followers'])
 async function startRelationshipScan(kinds = ['following', 'followers']) {
   const values = await chrome.storage.local.get(RELATIONSHIP_SYNC_KEY);
   const current = values?.[RELATIONSHIP_SYNC_KEY];
-  if (['running', 'rate_limited'].includes(current?.status)) return { ok: true, background: true, alreadyRunning: true, sync: current };
+  // Same stale-takeover rule as library sync: a "running" scan whose
+  // updatedAt is long dead was killed with the service worker.
+  if (current && SYNC_BUSY_STATUSES.slice(0, 2).includes(current.status)) {
+    const updatedAt = Number(current.updatedAt || current.startedAt || 0);
+    if (Date.now() - updatedAt <= SYNC_STALE_MS) {
+      return { ok: true, background: true, alreadyRunning: true, sync: current };
+    }
+  }
   runBackgroundRelationshipScan(kinds).catch(() => {});
   return { ok: true, background: true, sync: { status: 'running', kinds, startedAt: Date.now() } };
 }
@@ -713,6 +860,10 @@ async function handleLibraryRequest(message) {
     return startRelationshipScan(message.payload?.kinds || ['following', 'followers']);
   }
   if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_SYNC') return syncRelationshipCloud();
+  if (['XVM_LIBRARY_RELATIONSHIPS_BACKUPS', 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_EXPORT',
+    'XVM_LIBRARY_RELATIONSHIPS_BACKUP_IMPORT', 'XVM_LIBRARY_RELATIONSHIPS_ROLLBACK'].includes(message.type)) {
+    return relationshipBackupAction(message.type, message.payload || {});
+  }
   if (message.type === 'XVM_LIBRARY_MUTATE') return libraryMutate(message.payload || {});
   if (message.type === 'XVM_LIBRARY_SYNC_START') return startLibrarySync(message.payload || {});
   if (message.type === 'XVM_LIBRARY_SYNC_PAUSE') return pauseLibrarySync();
@@ -1128,6 +1279,28 @@ async function testOpenAICompatible(config) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== 'string') return false;
+
+  if (message.type === 'XVM_RELATIONSHIP_LOAD') {
+    loadRelationshipState().then((state) => {
+      const users = Array.isArray(state.users)
+        ? Object.fromEntries(state.users.map((user) => [user.handle, user]))
+        : (state.users || {});
+      sendResponse({ ok: true, data: { users, events: state.events || [], snap: state.snap || null, meta: { ...(state.meta || {}), storage: state.storage, fallback: Boolean(state.fallback) } } });
+    }).catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
+  if (message.type === 'XVM_RELATIONSHIP_UPSERT') {
+    (async () => {
+      const payload = message.payload || {};
+      const accountId = await relationshipAccountId(payload.accountId || payload.meta?.accountId || payload.meta?.myUserId);
+      await migrateLegacyRelationships(accountId);
+      const result = await XvmLibraryDb.putRelationshipSnapshot(accountId, payload, {
+        replace: false, source: payload.source || 'page_store',
+      });
+      sendResponse({ ok: true, ...result });
+    })().catch((error) => sendResponse(libraryError(error)));
+    return true;
+  }
 
   if (message.type === 'XVM_LIBRARY_CAPTURE_BATCH') {
     (async () => {

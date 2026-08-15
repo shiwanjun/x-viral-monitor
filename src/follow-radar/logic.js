@@ -61,6 +61,10 @@
     const wasMutual = (next.f === 1 || next.f === true) && (next.b === 1 || next.b === true);
     if (u.name) next.n = u.name;
     if (u.avatar) next.a = u.avatar;
+    const textProfile = { bio: 'bio', location: 'location', url: 'url', verifiedType: 'verifiedType' };
+    Object.entries(textProfile).forEach(([source, target]) => { if (u[source]) next[target] = u[source]; });
+    ['joinedAt', 'verified', 'blueVerified', 'protected', 'statusesCount', 'mediaCount', 'favouritesCount', 'listedCount']
+      .forEach((key) => { if (u[key] !== undefined) next[key] = u[key]; });
     if (typeof u.f === 'boolean' || u.f === 0 || u.f === 1) {
       const f = u.f === 1 || u.f === true;
       if (f) {
@@ -191,6 +195,22 @@
                 : (typeof legacy.id_str === 'string' ? legacy.id_str : undefined)),
             name: core?.name || legacy.name || node.name || '',
             avatar: node?.avatar?.image_url || legacy?.profile_image_url_https || node.profile_image_url_https || '',
+            bio: legacy.description || node.description || '',
+            location: legacy.location || node.location || '',
+            url: legacy.entities?.url?.urls?.[0]?.expanded_url || legacy.url || node.url || '',
+            joinedAt: (() => {
+              const value = core?.created_at || legacy.created_at || node.created_at;
+              const parsed = typeof value === 'number' ? value : Date.parse(value || '');
+              return Number.isFinite(parsed) ? parsed : undefined;
+            })(),
+            verified: typeof legacy.verified === 'boolean' ? legacy.verified : (typeof node.verified === 'boolean' ? node.verified : undefined),
+            blueVerified: typeof node.is_blue_verified === 'boolean' ? node.is_blue_verified : undefined,
+            verifiedType: node.verification?.verified_type || node.verification_info?.reason?.description?.text || '',
+            protected: typeof legacy.protected === 'boolean' ? legacy.protected : (typeof node.protected === 'boolean' ? node.protected : undefined),
+            statusesCount: firstNumber(legacy.statuses_count, node.statuses_count, node.statusesCount),
+            mediaCount: firstNumber(legacy.media_count, node.media_count, node.mediaCount),
+            favouritesCount: firstNumber(legacy.favourites_count, node.favourites_count, node.favouritesCount),
+            listedCount: firstNumber(legacy.listed_count, node.listed_count, node.listedCount),
             f: typeof fFinal === 'boolean' ? (fFinal ? 1 : 0) : undefined,
             b: typeof bFinal === 'boolean' ? (bFinal ? 1 : 0) : undefined,
             // Some timeline payloads no longer include public counts.  They
@@ -219,8 +239,10 @@
           };
           const prior = outputByHandle.get(handle);
           if (prior) {
-            for (const key of ['id', 'name', 'f', 'b', 'fc', 'fd']) {
-              if (user[key] !== undefined) prior[key] = user[key];
+            for (const key of ['id', 'name', 'avatar', 'bio', 'location', 'url', 'joinedAt', 'verified',
+              'blueVerified', 'verifiedType', 'protected', 'statusesCount', 'mediaCount', 'favouritesCount',
+              'listedCount', 'f', 'b', 'fc', 'fd']) {
+              if (user[key] !== undefined && (typeof user[key] !== 'string' || user[key])) prior[key] = user[key];
             }
           } else {
             outputByHandle.set(handle, user);

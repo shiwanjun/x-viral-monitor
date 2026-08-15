@@ -1339,11 +1339,25 @@ window.addEventListener('message', (event) => {
 
   if (type === 'XVM_FOLLOW_RADAR_LOAD') {
     safeChromeCall(() => {
-      chrome.storage.local.get({ followRadarV1: null }, (items) => {
-        window.postMessage({
-          type: 'XVM_FOLLOW_RADAR_LOADED',
-          data: items.followRadarV1 || null,
-        }, '*');
+      let settled = false;
+      let fallbackTimer = 0;
+      const loadLegacy = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(fallbackTimer);
+        chrome.storage.local.get({ followRadarV1: null }, (items) => {
+          window.postMessage({ type: 'XVM_FOLLOW_RADAR_LOADED', data: items.followRadarV1 || null }, '*');
+        });
+      };
+      // 首次迁移大量旧关系时 IndexedDB 可能超过页面雷达的等待时间；
+      // 先让页面在 650ms 后使用兼容快照，迁移会继续在后台完成。
+      fallbackTimer = setTimeout(loadLegacy, 650);
+      chrome.runtime.sendMessage({ type: 'XVM_RELATIONSHIP_LOAD' }, (result) => {
+        if (settled) return;
+        if (chrome.runtime.lastError || !result?.ok || !result?.data) { loadLegacy(); return; }
+        settled = true;
+        clearTimeout(fallbackTimer);
+        window.postMessage({ type: 'XVM_FOLLOW_RADAR_LOADED', data: result.data }, '*');
       });
     });
     return;
@@ -1357,14 +1371,19 @@ window.addEventListener('message', (event) => {
         const previous = items.followRadarV1 || {};
         const incoming = event.data.data || {};
         const users = { ...(previous.users || {}) };
+        const changedUsers = {};
         Object.entries(incoming.users || {}).forEach(([handle, record]) => {
           const old = users[handle] || {};
           const newer = Number(record?.t || 0) >= Number(old?.t || 0);
-          users[handle] = newer
+          const merged = newer
             ? { ...old, ...Object.fromEntries(Object.entries(record || {}).filter(([, value]) => value !== undefined)) }
             : { ...record, ...old };
+          users[handle] = merged;
+          if (JSON.stringify(old) !== JSON.stringify(merged)) changedUsers[handle] = merged;
         });
         const events = new Map();
+        const previousEventIds = new Set();
+        (previous.events || []).forEach((item) => previousEventIds.add(item?.id || `${item?.type}:${item?.h}:${item?.ts}`));
         [...(previous.events || []), ...(incoming.events || [])].forEach((item) => {
           const id = item?.id || `${item?.type}:${item?.h}:${item?.ts}`;
           if (id) events.set(id, item);
@@ -1375,7 +1394,21 @@ window.addEventListener('message', (event) => {
           events: [...events.values()].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-1000),
           meta: { ...(previous.meta || {}), ...(incoming.meta || {}) },
         };
-        chrome.storage.local.set({ followRadarV1: next });
+        chrome.storage.local.set({ followRadarV1: next }, () => {
+          const newEvents = (incoming.events || []).filter((item) => !previousEventIds.has(item?.id || `${item?.type}:${item?.h}:${item?.ts}`));
+          if (!Object.keys(changedUsers).length && !newEvents.length && !incoming.snap) return;
+          chrome.runtime.sendMessage({
+            type: 'XVM_RELATIONSHIP_UPSERT',
+            payload: {
+              accountId: incoming.meta?.accountId || incoming.meta?.myUserId || '',
+              users: changedUsers,
+              events: newEvents,
+              ...(incoming.snap ? { snap: incoming.snap } : {}),
+              meta: incoming.meta || {},
+              source: 'page_store',
+            },
+          }, () => { void chrome.runtime.lastError; });
+        });
       });
     });
     return;

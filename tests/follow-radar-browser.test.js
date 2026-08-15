@@ -172,7 +172,9 @@ describe('关注雷达浏览器回归', () => {
       <div data-testid="UserCell"><a role="link" href="/carol">Carol</a><button>关注</button></div>`);
     await page.evaluate(() => {
       const users = {
-        alice: { screen_name: 'alice', followers_count: 200, friends_count: 50, following: true, followed_by: true },
+        alice: { screen_name: 'alice', name: 'Alice', description: '产品经理', location: '上海',
+          verified: true, statuses_count: 321, followers_count: 200, friends_count: 50,
+          following: true, followed_by: true },
         bob: { screen_name: 'bob', followers_count: 100, friends_count: 40, following: false, followed_by: false },
         carol: { screen_name: 'carol', followers_count: 1000, friends_count: 100, following: false, followed_by: true },
       };
@@ -191,6 +193,9 @@ describe('关注雷达浏览器回归', () => {
       const labels = [...document.querySelectorAll('.xvm-fr-pill-label')].map((node) => node.textContent);
       return labels.includes('互关 0.25') && labels.includes('关注率 0.4') && labels.includes('关注我 0.1');
     }, null, { timeout: 3000 });
+    expect(await page.evaluate(() => window.__xvmFollowRadar.debug('alice').record)).toMatchObject({
+      n: 'Alice', bio: '产品经理', location: '上海', verified: true, statusesCount: 321,
+    });
     await page.close();
   });
 

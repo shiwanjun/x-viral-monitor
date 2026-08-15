@@ -142,8 +142,40 @@
     $('#unfollow-gate').hidden = isPro(); $('#unfollow-content').hidden = !isPro();
     $('#relationship-cloud').textContent = state.relations.cloudSync ? '云同步已开启' : '云同步 PRO';
     $('#relationship-sync').disabled = !state.relations.cloudSync;
+    const storage = $('#relationship-storage');
+    if (storage) {
+      const backupCount = Number(state.relations.backups?.length || 0);
+      storage.textContent = state.relations.storage === 'indexeddb'
+        ? `IndexedDB 本地库 · ${number(state.relations.users.length)} 位用户 · ${backupCount} 份快照`
+        : `兼容快照回退 · ${number(state.relations.users.length)} 位用户${state.relations.storageError ? ' · 本地库待修复' : ''}`;
+      storage.title = state.relations.storageError || '';
+    }
   }
   async function refreshRelationships() { const result = await send({ type: 'XVM_LIBRARY_RELATIONSHIPS' }); if (result.ok) state.relations = result; renderRelationships(); if (!result.ok) toast(errorText(result.error)); }
+  async function exportRelationshipBackup() {
+    const result = await send({ type: 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_EXPORT' });
+    if (!result.ok || !result.backup) return toast(errorText(result.error));
+    download(JSON.stringify(result.backup, null, 2), 'application/json', 'relationships.json');
+    toast(`已导出 ${result.backup.data?.users?.length || 0} 位用户的本地备份`);
+  }
+  async function importRelationshipBackup(file) {
+    if (!file) return;
+    let backup;
+    try { backup = JSON.parse(await file.text()); }
+    catch (_) { toast('备份文件格式无效或内容损坏'); return; }
+    if (!confirm('导入将先自动备份当前关系数据，再替换为所选快照。确认继续？')) return;
+    const result = await send({ type: 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_IMPORT', payload: { backup } });
+    toast(result.ok ? `已恢复 ${result.users || backup.data?.users?.length || 0} 位用户` : errorText(result.error));
+    if (result.ok) await refreshRelationships();
+  }
+  async function rollbackRelationshipBackup() {
+    const latest = state.relations.backups?.[0];
+    if (!latest) return toast('没有可回滚的本地关系快照');
+    if (!confirm(`将回滚到 ${new Date(latest.createdAt).toLocaleString('zh-CN')} 的快照；当前数据会先自动备份。确认继续？`)) return;
+    const result = await send({ type: 'XVM_LIBRARY_RELATIONSHIPS_ROLLBACK', payload: { backupId: latest.id } });
+    toast(result.ok ? '关系数据已回滚，当前版本也已留存' : errorText(result.error));
+    if (result.ok) await refreshRelationships();
+  }
   function showSection(section) {
     state.section = section; $('#library-screen').hidden = section !== 'library'; $('#relations-screen').hidden = section !== 'relations'; $('#unfollow-screen').hidden = section !== 'unfollow';
     $$('#kind-nav .nav-item').forEach((item) => item.classList.toggle('active', item.dataset.section === section || (section === 'library' && item.dataset.kind === state.kind)));
@@ -226,6 +258,10 @@
   $$('#relations-screen [data-relation-filter]').forEach((button) => button.onclick = () => { state.relationFilter = button.dataset.relationFilter; $$('#relations-screen [data-relation-filter]').forEach((item) => item.classList.toggle('active', item === button)); renderRelationships(); });
   $$('#unfollow-screen [data-unfollow-filter]').forEach((button) => button.onclick = () => { state.unfollowFilter = button.dataset.unfollowFilter; $$('#unfollow-screen [data-unfollow-filter]').forEach((item) => item.classList.toggle('active', item === button)); renderRelationships(); });
   $('#relationship-cloud').onclick = async () => { if (!isPro()) return toast('关系云同步需要 Pro 会员'); const enabled = !state.relations.cloudSync; const result = await send({ type: 'XVM_LIBRARY_MUTATE', payload: { action: 'set_relationship_cloud', enabled } }); toast(result.ok ? (enabled ? '关系云同步已开启' : '关系云同步已关闭') : errorText(result.error)); if (result.ok) refreshRelationships(); };
+  $('#relationship-backup').onclick = exportRelationshipBackup;
+  $('#relationship-import').onclick = () => $('#relationship-import-file').click();
+  $('#relationship-import-file').onchange = async (event) => { const [file] = event.target.files || []; await importRelationshipBackup(file); event.target.value = ''; };
+  $('#relationship-rollback').onclick = rollbackRelationshipBackup;
   $('#relationship-sync').onclick = async () => { const result = await send({ type: 'XVM_LIBRARY_RELATIONSHIPS_SYNC' }); toast(result.ok ? `关系历史同步完成，共 ${result.events || 0} 条` : errorText(result.error)); if (result.ok) refreshRelationships(); };
   $$('[data-open-x]').forEach((button) => button.onclick = () => window.open(`https://x.com/${button.dataset.openX}`, '_blank', 'noopener'));
   Promise.allSettled([refreshSiteSession(), refreshStatus()]).then(() => showSection(new URLSearchParams(location.search).get('section') || 'library'));

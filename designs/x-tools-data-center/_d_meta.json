@@ -22,7 +22,7 @@
           "path": "workspace.html",
           "createdAt": "2026-08-14T01:27:24.373Z",
           "status": "needs-review",
-          "subtitle": "完整推文数据表、画廊、统计与关系管理",
+          "subtitle": "关系用户 IndexedDB、本地备份导入与安全回滚",
           "viewport": {
             "width": 1440,
             "height": 900
@@ -32,5 +32,5 @@
     }
   },
   "createdAt": "2026-08-13T10:28:33.709Z",
-  "updatedAt": "2026-08-14T02:25:25.979Z"
+  "updatedAt": "2026-08-15T09:33:46.267Z"
 }

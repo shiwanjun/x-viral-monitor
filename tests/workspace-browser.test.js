@@ -100,7 +100,9 @@ describe('官网登录后数据中心浏览器回归', () => {
           if (message.type === 'XVM_LIBRARY_STATUS') callback({ ok: true, signedIn: true, isPro: true, account: { accountId: '1' }, counts: { bookmark: 1, like: 1, authored_post: 0, authored_reply: 0 }, tags: [{ id: 't1', name: 'AI', color: '#654fe8' }], folders: [], quota: { tier: 'pro', used: 2, limit: 100000, locked: 0 }, sync: { status: 'idle' } });
           else if (message.type === 'XVM_LIBRARY_QUERY') callback({ ok: true, rows: rows.filter((row) => (!message.query.search || row.post.text.includes(message.query.search)) && (!message.query.kind || message.query.kind === 'all' || row.item.kind === message.query.kind)), cursor: null, quota: { tier: 'pro', used: 2, limit: 100000, locked: 0 } });
           else if (message.type === 'XVM_LIBRARY_MUTATE' && message.payload.action === 'list_filters') callback({ ok: true, items: [{ id: 'sf1', name: 'AI 灵感', query: { kind: 'bookmark', search: '第一条' } }] });
-          else if (message.type === 'XVM_LIBRARY_RELATIONSHIPS') callback({ ok: true, users: [{ handle: 'alice', n: 'Alice', f: 1, b: 1, fc: 100, fd: 80 }], events: [{ id: 'unfollowed_me:bob:1000', h: 'bob', n: 'Bob', type: 'unfollowed_me', ts: 1000, fc: 200, fd: 40 }], counts: { mutual: 1, mine: 0, theirs: 0, unfollowed: 1 }, cloudSync: true });
+          else if (message.type === 'XVM_LIBRARY_RELATIONSHIPS') callback({ ok: true, users: [{ handle: 'alice', n: 'Alice', f: 1, b: 1, fc: 100, fd: 80 }], events: [{ id: 'unfollowed_me:bob:1000', h: 'bob', n: 'Bob', type: 'unfollowed_me', ts: 1000, fc: 200, fd: 40 }], counts: { mutual: 1, mine: 0, theirs: 0, unfollowed: 1 }, cloudSync: true, storage: 'indexeddb', backups: [{ id: 'backup-1', createdAt: 1, users: 1 }] });
+          else if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_EXPORT') callback({ ok: true, backup: { schema: 'x-tools-relationships', version: 1, accountId: '1', data: { users: [] } } });
+          else if (message.type === 'XVM_LIBRARY_RELATIONSHIPS_ROLLBACK') callback({ ok: true, backupId: 'backup-1' });
           else callback({ ok: true });
         },
       } } });
@@ -165,6 +167,12 @@ describe('官网登录后数据中心浏览器回归', () => {
     await page.locator('[data-section="relations"]').click();
     expect(await page.locator('#relation-list').innerText()).toContain('互关');
     expect(await page.locator('#relation-list').innerText()).toContain('0.80');
+    expect(await page.locator('#relationship-storage').innerText()).toContain('IndexedDB');
+    await page.locator('#relationship-backup').click();
+    await page.waitForFunction(() => window.__libraryMessages.some((message) => message.type === 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_EXPORT'));
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('#relationship-rollback').click();
+    await page.waitForFunction(() => window.__libraryMessages.some((message) => message.type === 'XVM_LIBRARY_RELATIONSHIPS_ROLLBACK'));
     await page.locator('#relation-list .relation-row').click();
     expect(await page.evaluate(() => window.__openedUrls.at(-1))).toBe('https://x.com/alice');
     await page.locator('[data-section="unfollow"]').click();

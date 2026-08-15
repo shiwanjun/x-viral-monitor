@@ -32,4 +32,24 @@ describe('X 数据标准化', () => {
     expect(api.extractUsers(payload)[0]).toMatchObject({ handle: 'alice', fc: 100, fd: 25 });
     expect(api.cursorFrom(payload)).toBe('next-page');
   });
+
+  it('关系扫描保留用户公开资料与账号指标', () => {
+    const api = parser();
+    const users = api.extractUsers({ result: {
+      rest_id: '2', is_blue_verified: true,
+      core: { name: 'Alice', screen_name: 'alice', created_at: '2020-01-02T03:04:05.000Z' },
+      legacy: {
+        description: '产品经理', location: '上海', url: 'https://alice.example',
+        verified: true, protected: false, followers_count: 100, friends_count: 25,
+        statuses_count: 300, media_count: 20, favourites_count: 90, listed_count: 8,
+      },
+      relationship_perspectives: { following: true, followed_by: false },
+    } });
+    expect(users[0]).toMatchObject({
+      handle: 'alice', id: '2', n: 'Alice', bio: '产品经理', location: '上海',
+      url: 'https://alice.example', verified: true, blueVerified: true, protected: false,
+      statusesCount: 300, mediaCount: 20, favouritesCount: 90, listedCount: 8,
+      f: 1, b: 0,
+    });
+  });
 });

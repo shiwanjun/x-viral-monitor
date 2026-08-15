@@ -17,7 +17,7 @@ describe('数据中心公共契约', () => {
 
   it('扩展暴露完整分页消息且单页最多 50 条', () => {
     const background = read('../background.js');
-    ['XVM_LIBRARY_STATUS', 'XVM_LIBRARY_QUERY', 'XVM_LIBRARY_FACETS', 'XVM_LIBRARY_MUTATE', 'XVM_LIBRARY_SYNC_START', 'XVM_LIBRARY_SYNC_PAUSE', 'XVM_LIBRARY_EXPORT', 'XVM_LIBRARY_X_ACTION', 'XVM_LIBRARY_AI_CLASSIFY', 'XVM_LIBRARY_AI_COMMAND', 'XVM_LIBRARY_RELATIONSHIPS', 'XVM_LIBRARY_RELATIONSHIPS_SCAN', 'XVM_LIBRARY_CLOUD_DELETE'].forEach((type) => expect(background).toContain(type));
+    ['XVM_LIBRARY_STATUS', 'XVM_LIBRARY_QUERY', 'XVM_LIBRARY_FACETS', 'XVM_LIBRARY_MUTATE', 'XVM_LIBRARY_SYNC_START', 'XVM_LIBRARY_SYNC_PAUSE', 'XVM_LIBRARY_EXPORT', 'XVM_LIBRARY_X_ACTION', 'XVM_LIBRARY_AI_CLASSIFY', 'XVM_LIBRARY_AI_COMMAND', 'XVM_LIBRARY_RELATIONSHIPS', 'XVM_LIBRARY_RELATIONSHIPS_SCAN', 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_EXPORT', 'XVM_LIBRARY_RELATIONSHIPS_BACKUP_IMPORT', 'XVM_LIBRARY_RELATIONSHIPS_ROLLBACK', 'XVM_LIBRARY_CLOUD_DELETE'].forEach((type) => expect(background).toContain(type));
     expect(background).toMatch(/Math\.min\(50,/);
   });
 
@@ -49,6 +49,14 @@ describe('数据中心公共契约', () => {
     expect(background).toContain('runBackgroundRelationshipScan');
     expect(background).toContain('followRadarV1: nextRadar');
     expect(background).toContain('[RELATIONSHIP_COMMITTED_KEY]: committed');
+    expect(background).toContain("backupLabel: '完整关系扫描前'");
+    expect(background).toContain("source: 'legacy_migration'");
+    expect(background).toContain('reconcileRelationshipSnapshot');
+    const database = read('../lib/library-db.js');
+    ['relationshipUsers', 'relationshipEvents', 'relationshipBackups', 'exportRelationshipBackup', 'importRelationshipBackup', 'restoreRelationshipBackup'].forEach((value) => expect(database).toContain(value));
+    const bridge = read('../bridge.js');
+    expect(bridge).toContain('XVM_RELATIONSHIP_UPSERT');
+    expect(bridge).toContain('setTimeout(loadLegacy, 650)');
   });
 
   it('Worker 提供 D1/R2 云同步路由与 30 天清理', () => {
@@ -61,7 +69,11 @@ describe('数据中心公共契约', () => {
 
   it('工作台包含三视图、额度墙和降级状态', () => {
     const html = read('../docs/workspace.html');
-    ['表格', '画廊', '统计', 'quota-wall', '正在连接扩展', '云备份', '关注关系', '取关历史', 'saved-filters'].forEach((label) => expect(html).toContain(label));
-    expect(read('../docs/workspace.js')).toContain("limit: 50");
+    ['表格', '画廊', '统计', 'quota-wall', '正在连接扩展', '云备份', '关注关系', '取关历史', 'saved-filters', 'relationship-backup', 'relationship-import', 'relationship-rollback'].forEach((label) => expect(html).toContain(label));
+    const workspace = read('../docs/workspace.js');
+    expect(workspace).toContain("limit: 50");
+    expect(workspace).toContain('XVM_LIBRARY_RELATIONSHIPS_BACKUP_EXPORT');
+    expect(workspace).toContain('XVM_LIBRARY_RELATIONSHIPS_BACKUP_IMPORT');
+    expect(workspace).toContain('XVM_LIBRARY_RELATIONSHIPS_ROLLBACK');
   });
 });

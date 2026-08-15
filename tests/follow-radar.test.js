@@ -313,6 +313,24 @@ describe('follow-radar logic', () => {
       })]);
     });
 
+    it('保存关系时提取用户公开资料和完整指标', () => {
+      const users = L.extractUsers({ result: {
+        rest_id: '42', is_blue_verified: true,
+        core: { screen_name: 'alice', name: 'Alice', created_at: '2020-01-02T03:04:05.000Z' },
+        legacy: {
+          description: '产品经理', location: '上海', url: 'https://t.co/home',
+          protected: false, verified: true, followers_count: 200, friends_count: 50,
+          statuses_count: 321, media_count: 12, favourites_count: 88, listed_count: 9,
+        },
+      } });
+      expect(users[0]).toMatchObject({
+        id: '42', handle: 'alice', name: 'Alice', bio: '产品经理', location: '上海',
+        url: 'https://t.co/home', verified: true, blueVerified: true, protected: false,
+        statusesCount: 321, mediaCount: 12, favouritesCount: 88, listedCount: 9,
+      });
+      expect(users[0].joinedAt).toBe(Date.parse('2020-01-02T03:04:05.000Z'));
+    });
+
     it('does not fabricate relationship flags from absent fields', () => {
       const users = L.extractUsers({ result: { legacy: legacy({}) } });
       expect(users[0].f).toBeUndefined();
